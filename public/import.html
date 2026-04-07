@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RxCMS Import — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>RxCMS Import</h2>
+        <p>Export a case report from RxCMS, then upload the CSV here. Admin only.</p>
+      </div>
+    </div>
+
+    <!-- Upload zone -->
+    <div class="card" id="uploadCard">
+      <div class="import-zone" id="dropZone">
+        <p style="font-size:1.1rem;margin-bottom:0.5rem;">Drop CSV file here</p>
+        <p style="font-size:0.875rem;margin-bottom:1rem;">or</p>
+        <label for="csvInput" class="btn btn-primary" style="cursor:pointer;">Choose File</label>
+        <input type="file" id="csvInput" accept=".csv,text/csv">
+        <p id="fileNameLabel" class="mt-1" style="font-size:0.8125rem;"></p>
+      </div>
+    </div>
+
+    <!-- Preview table (hidden until CSV is parsed) -->
+    <div id="previewSection" class="hidden mt-2">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:1rem 1.25rem;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <strong id="previewTitle">Preview</strong>
+            <span id="previewMeta" class="text-muted" style="font-size:0.8125rem;margin-left:0.75rem;"></span>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <button id="confirmImport" class="btn btn-success">Import Selected</button>
+            <button id="cancelImport"  class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+        <div class="table-wrapper" style="max-height:60vh;overflow-y:auto;">
+          <table class="import-preview">
+            <thead>
+              <tr>
+                <th>Case No.</th>
+                <th>Client Name</th>
+                <th>Date</th>
+                <th>Counselor</th>
+                <th>Type</th>
+                <th>AMI</th>
+                <th>R&amp;E Code</th>
+                <th>Notes</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Post-import summary -->
+    <div id="summarySection" class="hidden mt-2">
+      <div class="summary-box">
+        <strong>Import Complete</strong>
+        <p id="summaryText" style="margin-top:0.35rem;font-size:0.875rem;"></p>
+      </div>
+      <div class="mt-1">
+        <button id="importAgain" class="btn btn-secondary btn-sm">Import Another File</button>
+        <a href="log.html" class="btn btn-primary btn-sm" style="margin-left:0.5rem;">View Log</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script type="module" src="js/import.js"></script>
+</body>
+</html>

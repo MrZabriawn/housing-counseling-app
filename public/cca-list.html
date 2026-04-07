@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCA List — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Closing Cost Assistance List</h2>
+        <p>Pre-purchase clients eligible for closing cost assistance.</p>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="form-group">
+        <label>Status</label>
+        <select id="filterStatus">
+          <option value="">All Statuses</option>
+          <option value="eligible">Eligible</option>
+          <option value="applied">Applied</option>
+          <option value="approved">Approved</option>
+          <option value="funded">Funded</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Search</label>
+        <input type="text" id="filterSearch" placeholder="Client name or counselor…">
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Counselor</th>
+            <th>AMI</th>
+            <th>Closing Date</th>
+            <th>CCA Amount</th>
+            <th>Status</th>
+            <th>Drive Folder</th>
+            <th>Enrolled</th>
+          </tr>
+        </thead>
+        <tbody id="ccaBody">
+          <tr><td colspan="8" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Edit Modal -->
+  <div id="ccaEditModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3 id="ccaEditTitle">Edit CCA Entry</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="editClosingDate">Closing Date</label>
+          <input type="date" id="editClosingDate">
+        </div>
+        <div class="form-group">
+          <label for="editCcaAmount">CCA Amount ($)</label>
+          <input type="number" id="editCcaAmount" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label for="editCcaStatus">Status</label>
+          <select id="editCcaStatus">
+            <option value="eligible">Eligible</option>
+            <option value="applied">Applied</option>
+            <option value="approved">Approved</option>
+            <option value="funded">Funded</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label for="editCcaNotes">Notes</label>
+          <textarea id="editCcaNotes" rows="3"></textarea>
+        </div>
+      </div>
+      <p id="ccaEditError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="ccaEditSave" class="btn btn-primary">Save</button>
+        <button id="ccaEditCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/cca-list.js"></script>
+</body>
+</html>

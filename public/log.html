@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counseling Log — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Counseling Log</h2>
+        <p>Click any row to open the record. Counselors may edit their own entries; admins may edit or delete any entry.</p>
+      </div>
+      <div style="display:flex;gap:0.5rem;">
+        <button id="printReportBtn" class="btn btn-secondary btn-sm">Print Report</button>
+        <a href="new-entry.html" class="btn btn-primary btn-sm">+ New Entry</a>
+      </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Unique Households</div>
+        <div class="stat-value" id="statHouseholds">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Sessions</div>
+        <div class="stat-value" id="statSessions">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Outcome Value</div>
+        <div class="stat-value" id="statDollars">—</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <form id="filterForm" style="display:contents;">
+        <div class="form-group">
+          <label>Counselor</label>
+          <input type="text" id="fCounselor" placeholder="Name…">
+        </div>
+        <div class="form-group">
+          <label>Date From</label>
+          <input type="date" id="fStart">
+        </div>
+        <div class="form-group">
+          <label>Date To</label>
+          <input type="date" id="fEnd">
+        </div>
+        <div class="form-group">
+          <label>Month</label>
+          <select id="fMonth">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Counseling Type</label>
+          <select id="fType">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>AMI Level</label>
+          <select id="fAmi">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>R&amp;E Code</label>
+          <select id="fRe">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Case Status</label>
+          <input type="text" id="fStatus" placeholder="Status…">
+        </div>
+        <div class="form-group">
+          <label>Amount</label>
+          <select id="fHasAmount">
+            <option value="">All</option>
+            <option value="yes">Has Amount</option>
+            <option value="no">No Amount</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-self:flex-end;">
+          <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+          <button type="button" id="clearFilters" class="btn btn-secondary btn-sm">Clear</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Case No.</th>
+              <th>Date</th>
+              <th>Counselor</th>
+              <th>Client Name</th>
+              <th>Type</th>
+              <th>AMI</th>
+              <th>R&amp;E Code</th>
+              <th>Hours</th>
+              <th>Amount</th>
+              <th>Outcome</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p id="rowCount" class="text-muted mt-1" style="font-size:0.8125rem;"></p>
+
+    <!-- Breakdown tables -->
+    <div class="breakdown-grid" style="margin-top:1.5rem;">
+      <div class="breakdown-card">
+        <h4>Households by AMI Level</h4>
+        <table id="amiTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Households by Race &amp; Ethnicity</h4>
+        <table id="reTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Counseling Type</h4>
+        <table id="typeTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Counselor</h4>
+        <table id="counselorTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Outcome Type</h4>
+        <table id="outcomeTypeTable"><tbody></tbody></table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/log.js"></script>
+</body>
+</html>

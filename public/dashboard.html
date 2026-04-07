@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Dashboard</h2>
+        <p>Program summary by month. Household counts reflect unique clients.</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <form id="filterForm" style="display:contents;">
+        <div class="form-group">
+          <label>Month</label>
+          <select id="filterMonth">
+            <option value="">All Months</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Date From</label>
+          <input type="date" id="filterDateStart">
+        </div>
+        <div class="form-group">
+          <label>Date To</label>
+          <input type="date" id="filterDateEnd">
+        </div>
+        <div style="display:flex;gap:0.5rem;align-self:flex-end;">
+          <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+          <button type="button" id="clearFilters" class="btn btn-secondary btn-sm">Clear</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Primary stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Unique Households</div>
+        <div class="stat-value" id="statHouseholds">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Sessions</div>
+        <div class="stat-value" id="statSessions">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Dollars Awarded</div>
+        <div class="stat-value" id="statDollars">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Female-Headed HH</div>
+        <div class="stat-value" id="statFemale">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Hispanic HH</div>
+        <div class="stat-value" id="statHispanic">—</div>
+      </div>
+    </div>
+
+    <!-- Breakdown tables -->
+    <div class="breakdown-grid">
+      <div class="breakdown-card">
+        <h4>Households by AMI Level</h4>
+        <table id="amiTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Households by Race &amp; Ethnicity</h4>
+        <table id="reTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Counseling Type</h4>
+        <table id="typeTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Counselor</h4>
+        <table id="counselorTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

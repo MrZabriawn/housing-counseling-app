@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>CDBG Report Generator</h2>
+        <p>Select a month, customize header fields, then download the .docx forms.</p>
+      </div>
+    </div>
+
+    <!-- Month selector -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));">
+        <div class="form-group">
+          <label for="reportMonth">Report Month *</label>
+          <select id="reportMonth">
+            <option value="">— Select Month —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="reportYear">Year *</label>
+          <input type="number" id="reportYear" min="2000" max="2100" style="max-width:120px;">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;flex-wrap:wrap;" id="reportCards">
+
+      <!-- Report 1: Income -->
+      <div class="card">
+        <h3 style="font-size:0.95rem;margin-bottom:1rem;color:var(--primary);">
+          Report 1 — CDBG Direct Benefit Report: Income (Owner Households)
+        </h3>
+        <div style="display:grid;gap:0.75rem;">
+          <div class="form-group">
+            <label>Project Name</label>
+            <input type="text" id="r1ProjectName" value="BC Home Stabilization">
+          </div>
+          <div class="form-group">
+            <label>Project Number</label>
+            <input type="text" id="r1ProjectNumber" value="CD255505 2419-PRO-SUBR">
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="text" id="r1Date" readonly>
+          </div>
+          <div class="form-group">
+            <label>Person Completing Form</label>
+            <input type="text" id="r1Person">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="downloadR1" class="btn btn-primary" disabled>Download Report 1 (.docx)</button>
+        </div>
+        <div id="r1Preview" class="mt-2" style="display:none;">
+          <p class="text-muted" style="font-size:0.8rem;margin-bottom:0.5rem;">Preview counts:</p>
+          <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
+            <thead>
+              <tr>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:80px;">Count</th>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">AMI Category</th>
+              </tr>
+            </thead>
+            <tbody id="r1PreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Report 2: Race & Ethnicity -->
+      <div class="card">
+        <h3 style="font-size:0.95rem;margin-bottom:1rem;color:var(--primary);">
+          Report 2 — CDBG Direct Benefit Report: Race &amp; Ethnicity (Owner Households)
+        </h3>
+        <div style="display:grid;gap:0.75rem;">
+          <div class="form-group">
+            <label>Project Name</label>
+            <input type="text" id="r2ProjectName" value="Home Stabilization Program">
+          </div>
+          <div class="form-group">
+            <label>Project Number</label>
+            <input type="text" id="r2ProjectNumber" value="CD255505 2419-PRO">
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="text" id="r2Date" readonly>
+          </div>
+          <div class="form-group">
+            <label>Person Completing Form</label>
+            <input type="text" id="r2Person">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="downloadR2" class="btn btn-primary" disabled>Download Report 2 (.docx)</button>
+        </div>
+        <div id="r2Preview" class="mt-2" style="display:none;">
+          <p class="text-muted" style="font-size:0.8rem;margin-bottom:0.5rem;">Preview counts:</p>
+          <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
+            <thead>
+              <tr>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:60px;">Count</th>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">Race / Ethnicity</th>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:80px;">Hispanic</th>
+              </tr>
+            </thead>
+            <tbody id="r2PreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+    <p id="reportStatus" class="text-muted mt-2" style="font-size:0.8125rem;"></p>
+  </main>
+
+  <!-- docx UMD bundle — exposes window.docx -->
+  <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+  <script type="module" src="js/reports.js"></script>
+</body>
+</html>

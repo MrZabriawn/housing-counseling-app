@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Settings</h2>
+        <p>Executive Director access only.</p>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:640px;">
+      <div class="section-title" style="padding:1rem 1.25rem 0;">HIG Waitlist Priority Weights</div>
+      <p style="padding:0.5rem 1.25rem 0; color:var(--text-muted); font-size:0.8125rem;">
+        Adjust how much each factor influences a client's position on the waitlist.
+        Higher number = more influence. Values don't need to add to 100.
+      </p>
+
+      <div style="padding:1.25rem; display:flex; flex-direction:column; gap:1.5rem;">
+
+        <div class="weight-row">
+          <div class="weight-label">
+            <span>AMI Level</span>
+            <span class="weight-desc">Lower income = higher priority</span>
+          </div>
+          <div class="weight-control">
+            <input type="range" id="wAmi" min="0" max="100" step="1" class="weight-slider">
+            <span id="wAmiVal" class="weight-val">50</span>
+          </div>
+        </div>
+
+        <div class="weight-row">
+          <div class="weight-label">
+            <span>Estimated Budget</span>
+            <span class="weight-desc">Smaller project scope = slightly higher priority</span>
+          </div>
+          <div class="weight-control">
+            <input type="range" id="wBudget" min="0" max="100" step="1" class="weight-slider">
+            <span id="wBudgetVal" class="weight-val">15</span>
+          </div>
+        </div>
+
+        <div class="weight-row">
+          <div class="weight-label">
+            <span>Time to Completion</span>
+            <span class="weight-desc">Shorter project = slightly higher priority</span>
+          </div>
+          <div class="weight-control">
+            <input type="range" id="wTime" min="0" max="100" step="1" class="weight-slider">
+            <span id="wTimeVal" class="weight-val">15</span>
+          </div>
+        </div>
+
+        <div class="weight-row">
+          <div class="weight-label">
+            <span>Wait Time</span>
+            <span class="weight-desc">Longer on the waitlist = higher priority</span>
+          </div>
+          <div class="weight-control">
+            <input type="range" id="wWait" min="0" max="100" step="1" class="weight-slider">
+            <span id="wWaitVal" class="weight-val">20</span>
+          </div>
+        </div>
+
+      </div>
+
+      <p id="settingsMsg" class="hidden" style="padding:0 1.25rem 0.5rem;font-size:0.8125rem;"></p>
+      <div class="form-actions" style="padding:0 1.25rem 1.25rem;">
+        <button id="saveWeights" class="btn btn-primary">Save Weights</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/settings.js"></script>
+</body>
+</html>

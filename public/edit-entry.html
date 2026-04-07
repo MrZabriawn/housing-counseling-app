@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Entry — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Edit Counseling Entry</h2>
+        <p id="metaLine" class="metadata-row"></p>
+      </div>
+      <button id="deleteBtn" class="btn btn-danger btn-sm admin-only hidden">Delete Record</button>
+    </div>
+
+    <div class="card">
+      <form id="entryForm">
+        <div class="form-grid">
+
+          <div class="section-title">Case &amp; Client Information</div>
+
+          <div class="form-group">
+            <label for="caseNo">Case No. *</label>
+            <input type="text" id="caseNo" required>
+          </div>
+          <div class="form-group">
+            <label for="clientName">Client Name *</label>
+            <input type="text" id="clientName" required>
+          </div>
+          <div class="form-group">
+            <label for="counselingDate">Counseling Date *</label>
+            <input type="date" id="counselingDate" required>
+          </div>
+          <div class="form-group">
+            <label for="counselor">Counselor *</label>
+            <input type="text" id="counselor" required>
+          </div>
+          <div class="form-group">
+            <label for="guarantor">Guarantor</label>
+            <input type="text" id="guarantor">
+          </div>
+          <div class="form-group">
+            <label for="zipCode">Zip Code</label>
+            <input type="text" id="zipCode" maxlength="10">
+          </div>
+
+          <div class="section-title">Counseling Details</div>
+
+          <div class="form-group">
+            <label for="counselingType">Counseling Type *</label>
+            <select id="counselingType" required>
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sourceMonth">Month *</label>
+            <select id="sourceMonth" required>
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="caseStatus">Case Status</label>
+            <input type="text" id="caseStatus">
+          </div>
+          <div class="form-group">
+            <label for="outcome">Outcome</label>
+            <input type="text" id="outcome">
+          </div>
+
+          <div class="section-title">Demographics</div>
+
+          <div class="form-group">
+            <label for="amiPercent">AMI Level *</label>
+            <select id="amiPercent" required>
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="reCode">Race &amp; Ethnicity Code *</label>
+            <select id="reCode" required>
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="hispanic">
+            <label for="hispanic">Hispanic / Latino</label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="femaleHeaded">
+            <label for="femaleHeaded">Female-Headed Household</label>
+          </div>
+
+          <div class="section-title">Financial</div>
+
+          <div class="form-group">
+            <label for="hours">Hours *</label>
+            <input type="number" id="hours" min="0" step="0.25" required>
+          </div>
+          <div class="form-group">
+            <label for="ratePerHour">Rate per Hour ($)</label>
+            <input type="number" id="ratePerHour" min="0" step="0.01">
+          </div>
+          <div class="form-group">
+            <label for="dollarsAwarded">Outcome Value ($, computed)</label>
+            <input type="number" id="dollarsAwarded" readonly>
+          </div>
+          <div class="form-group">
+            <label for="awardType">Outcome Type</label>
+            <select id="awardType">
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="dollarsFor">Dollars For</label>
+            <input type="text" id="dollarsFor">
+          </div>
+
+          <div class="section-title">Client Documents</div>
+
+          <div class="form-group full-width">
+            <label>Google Drive Folder</label>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+              <button type="button" id="linkFolderBtn" class="btn btn-secondary btn-sm">Link Drive Folder</button>
+              <a id="driveFolderLink" href="#" target="_blank" class="hidden" style="font-size:0.875rem;">Open folder</a>
+              <span id="driveFolderName" class="text-muted hidden" style="font-size:0.8125rem;"></span>
+              <button type="button" id="unlinkFolderBtn" class="btn btn-secondary btn-sm hidden">Unlink</button>
+            </div>
+          </div>
+
+          <div class="section-title">Notes</div>
+
+          <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" rows="4"></textarea>
+          </div>
+
+        </div>
+
+        <p id="formError" class="error-msg hidden"></p>
+        <div class="form-actions">
+          <button type="submit" id="submitBtn" class="btn btn-primary">Save Changes</button>
+          <a href="log.html" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- Program Enrollment (shown based on counseling type) -->
+    <div id="enrollSection" class="card hidden" style="margin-top:1rem;">
+      <div class="section-title" style="padding:1rem 1.25rem 0;">Program Eligibility</div>
+      <div style="padding:1rem 1.25rem 1.25rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+        <button id="enrollCcaBtn"  class="btn btn-secondary hidden">Add to CCA List</button>
+        <button id="enrollHigBtn"  class="btn btn-secondary hidden">Add to HIG Waitlist</button>
+        <span id="enrolledCcaBadge"  class="badge badge-green hidden">✓ On CCA List</span>
+        <span id="enrolledHigBadge"  class="badge badge-green hidden">✓ On HIG Waitlist</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- CCA Enrollment Modal -->
+  <div id="ccaModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Add to Closing Cost Assistance List</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="ccaClosingDate">Closing Date</label>
+          <input type="date" id="ccaClosingDate">
+        </div>
+        <div class="form-group">
+          <label for="ccaAmount">CCA Amount ($)</label>
+          <input type="number" id="ccaAmount" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group full-width">
+          <label for="ccaNotes">Notes</label>
+          <textarea id="ccaNotes" rows="3"></textarea>
+        </div>
+      </div>
+      <p id="ccaModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="ccaModalSave" class="btn btn-primary">Add to CCA List</button>
+        <button id="ccaModalCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HIG Enrollment Modal -->
+  <div id="higModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Add to Home Improvement Grant Waitlist</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group full-width">
+          <label for="higScope">Scope of Work</label>
+          <textarea id="higScope" rows="3" placeholder="Describe the project scope…"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="higBudget">Estimated Budget ($)</label>
+          <input type="number" id="higBudget" min="0" step="1" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="higDays">Estimated Time to Completion (days)</label>
+          <input type="number" id="higDays" min="1" step="1" placeholder="e.g. 90">
+        </div>
+        <div class="form-group full-width">
+          <label>Scope of Work Document (Google Drive)</label>
+          <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <button type="button" id="higPickFileBtn" class="btn btn-secondary btn-sm">Pick from Drive</button>
+            <span id="higFileName" class="text-muted" style="font-size:0.8125rem;">No file selected</span>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label for="higNotes">Notes</label>
+          <textarea id="higNotes" rows="2"></textarea>
+        </div>
+      </div>
+      <p id="higModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="higModalSave" class="btn btn-primary">Add to HIG Waitlist</button>
+        <button id="higModalCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/edit-entry.js"></script>
+</body>
+</html>
