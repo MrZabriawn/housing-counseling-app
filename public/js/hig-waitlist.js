@@ -133,7 +133,7 @@ function render() {
 
     return `<tr class="clickable-row" data-id="${r.id}">
       <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
-      <td>${esc(r.clientName)}</td>
+      <td>${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(r.amiPercent)}</td>
       <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
       <td>${r.estimatedBudget ? '$' + Number(r.estimatedBudget).toLocaleString() : '—'}</td>
@@ -158,7 +158,7 @@ function openEditModal(id) {
   if (!r) return;
   editingId = id;
 
-  document.getElementById('higEditTitle').textContent  = r.clientName;
+  document.getElementById('higEditTitle').textContent  = toTitleCase(r.clientName);
   document.getElementById('editHigScope').value        = r.scopeOfWork    || '';
   document.getElementById('editHigBudget').value       = r.estimatedBudget || '';
   document.getElementById('editHigDays').value         = r.estimatedDays   || '';
@@ -231,4 +231,9 @@ async function saveEdit() {
 
 function esc(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }

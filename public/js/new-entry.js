@@ -2,24 +2,46 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate } from './data.js';
 import {
-  collection, addDoc, serverTimestamp
+  collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-requireAuth((user, profile) => {
+requireAuth(async (user, profile) => {
   setupNav(profile, 'new-entry');
-  buildSelects();
-  prefillCounselor(profile);
+  await buildSelects(profile);
   setupAutoCalc();
 
   document.getElementById('entryForm').addEventListener('submit', (e) => handleSubmit(e, profile));
 });
 
-function buildSelects() {
+async function buildSelects(profile) {
   appendOptions('counselingType', COUNSELING_TYPES);
   appendOptions('sourceMonth',    MONTHS);
   appendOptions('amiPercent',     AMI_LEVELS);
   appendOptions('reCode',         RE_CODES);
   appendOptions('awardType',      AWARD_TYPES);
+
+  // Load counselors from Firestore and pre-select current user
+  const sel = document.getElementById('counselor');
+  try {
+    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    snap.docs
+      .filter(d => d.data().active !== false)
+      .forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.data().name;
+        o.textContent = d.data().name;
+        sel.appendChild(o);
+      });
+    // Pre-select if the logged-in user's name matches a counselor
+    if (profile.name) sel.value = profile.name;
+  } catch (_) {
+    // counselors collection may not exist yet
+  }
+}
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function appendOptions(id, list) {
@@ -29,11 +51,6 @@ function appendOptions(id, list) {
     o.value = v; o.textContent = v;
     sel.appendChild(o);
   });
-}
-
-function prefillCounselor(profile) {
-  const field = document.getElementById('counselor');
-  field.value = profile.name || '';
 }
 
 function setupAutoCalc() {
@@ -91,8 +108,8 @@ function readForm() {
     ? MONTHS[new Date(dateVal + 'T12:00:00').getMonth()]
     : document.getElementById('sourceMonth').value;
   return {
-    caseNo:          document.getElementById('caseNo').value.trim(),
-    clientName:      document.getElementById('clientName').value.trim(),
+    rxNumber:          document.getElementById('rxNumber').value.trim(),
+    clientName:      toTitleCase(document.getElementById('clientName').value.trim()),
     counselingDate:  dateVal ? new Date(dateVal + 'T12:00:00') : null,
     counselor:       document.getElementById('counselor').value.trim(),
     guarantor:       document.getElementById('guarantor').value.trim(),

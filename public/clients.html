@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counseling Log — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Counseling Log</h2>
+        <p id="rowCount" class="metadata-row"></p>
+      </div>
+      <div style="display:flex;gap:0.5rem;">
+        <button id="printReportBtn" class="btn btn-secondary btn-sm">Print Report</button>
+        <a href="new-client.html" class="btn btn-primary btn-sm">+ New Client</a>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Active Clients</div>
+        <div class="stat-value" id="statClients">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Sessions</div>
+        <div class="stat-value" id="statSessions">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Outcome Value</div>
+        <div class="stat-value" id="statDollars">—</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <form id="filterForm" class="filter-bar">
+      <div class="form-group">
+        <label>Search Name</label>
+        <input type="text" id="fName" placeholder="Client name…">
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="fType">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Counselor</label>
+        <select id="fCounselor">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>AMI</label>
+        <select id="fAmi">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="fStatus">
+          <option value="">All</option>
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-self:flex-end;">
+        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+        <button type="button" id="clearFilters" class="btn btn-secondary btn-sm">Clear</button>
+      </div>
+    </form>
+
+    <!-- Table -->
+    <div class="card" style="padding:0;">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Client Name</th>
+              <th>Type</th>
+              <th>Counselor</th>
+              <th>AMI</th>
+              <th style="text-align:center">Sessions</th>
+              <th>Last Visit</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Breakdowns -->
+    <div class="breakdown-grid" id="breakdownGrid">
+      <div class="breakdown-card">
+        <h4>Clients by AMI Level</h4>
+        <table id="amiTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Clients by Race &amp; Ethnicity</h4>
+        <table id="reTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Clients by Counseling Type</h4>
+        <table id="typeTable"><tbody></tbody></table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Counselor</h4>
+        <table id="counselorTable"><tbody></tbody></table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/clients.js"></script>
+</body>
+</html>

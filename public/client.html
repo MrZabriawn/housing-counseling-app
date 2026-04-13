@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Profile — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .chip-list { display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.4rem; }
+    .chip {
+      display:inline-flex; align-items:center; gap:0.3rem;
+      background:var(--primary-light); color:var(--primary);
+      border-radius:20px; padding:0.2rem 0.65rem;
+      font-size:0.8rem; font-weight:600;
+    }
+    .chip-remove { background:none; border:none; cursor:pointer; color:var(--primary); font-size:1rem; line-height:1; padding:0; }
+    .session-notes { max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .closed-banner {
+      background:#fff3e0; border-left:4px solid #e65100;
+      padding:0.75rem 1.25rem; border-radius:var(--radius);
+      margin-bottom:1rem; font-size:0.875rem;
+    }
+    /* Tag input */
+    .tag-input-box {
+      display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center;
+      border:1px solid var(--border); border-radius:var(--radius);
+      padding:0.4rem 0.5rem; background:#fff; cursor:text; min-height:2.6rem;
+    }
+    .tag-input-box:focus-within { border-color:var(--primary); outline: 2px solid color-mix(in srgb, var(--primary) 20%, transparent); }
+    .tag-input-box .chip { margin:0; }
+    .tag-input-box input {
+      border:none; outline:none; padding:0.15rem 0.25rem;
+      font-size:0.875rem; flex:1; min-width:120px; background:transparent;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2 id="pageTitle">Client Profile</h2>
+        <p id="metaLine" class="metadata-row"></p>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button id="closeFileBtn"  class="btn btn-secondary btn-sm">Close File</button>
+        <button id="reopenFileBtn" class="btn btn-secondary btn-sm hidden">Reopen File</button>
+        <a href="clients.html" class="btn btn-secondary btn-sm">← Back to Clients</a>
+      </div>
+    </div>
+
+    <div id="closedBanner" class="closed-banner hidden"></div>
+
+    <!-- Client Info -->
+    <div class="card">
+      <div class="card-title">Client Information</div>
+      <div class="form-grid">
+
+        <div class="section-title">Identity</div>
+
+        <div class="form-group">
+          <label for="clientName">Client Name *</label>
+          <input type="text" id="clientName" required>
+        </div>
+        <div class="form-group">
+          <label for="counselingType">Counseling Type *</label>
+          <select id="counselingType" required>
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="counselor">Counselor *</label>
+          <select id="counselor" required>
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="guarantor">Guarantor</label>
+          <input type="text" id="guarantor">
+        </div>
+        <div class="form-group">
+          <label for="zipCode">Zip Code</label>
+          <input type="text" id="zipCode" maxlength="10">
+        </div>
+
+        <div class="section-title">Demographics</div>
+
+        <div class="form-group">
+          <label for="amiPercent">AMI Level *</label>
+          <select id="amiPercent" required>
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="reCode">Race &amp; Ethnicity *</label>
+          <select id="reCode" required>
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="hispanic">
+          <label for="hispanic">Hispanic / Latino</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="femaleHeaded">
+          <label for="femaleHeaded">Female-Headed Household</label>
+        </div>
+
+        <div class="section-title">Rx Numbers</div>
+
+        <div class="form-group full-width">
+          <label>Rx Numbers on File</label>
+          <div id="rxChips" class="chip-list"></div>
+          <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+            <input type="text" id="rxInput" placeholder="Add Rx number…" style="max-width:200px;">
+            <button type="button" id="addRxBtn" class="btn btn-secondary btn-sm">Add</button>
+          </div>
+        </div>
+
+        <!-- PRE only -->
+        <div id="areasSection" class="full-width hidden">
+          <div class="section-title" style="grid-column:1/-1;">Areas of Interest</div>
+          <div class="form-group full-width">
+            <label>Where are you looking to buy a home?</label>
+            <div class="tag-input-box" id="areaTagBox">
+              <input type="text" id="areaInput" placeholder="Type a county or area and press Enter…">
+            </div>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem;">Press Enter or comma to add each area.</p>
+          </div>
+        </div>
+
+        <div class="section-title">Client Documents</div>
+
+        <div class="form-group full-width">
+          <label>Google Drive Folder</label>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <button type="button" id="linkFolderBtn" class="btn btn-secondary btn-sm">Link Drive Folder</button>
+            <a id="driveFolderLink" href="#" target="_blank" class="hidden" style="font-size:0.875rem;">Open folder</a>
+            <button type="button" id="unlinkFolderBtn" class="btn btn-secondary btn-sm hidden">Unlink</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button id="saveClientBtn" class="btn btn-primary">Save Changes</button>
+        <p id="clientSaveMsg" class="hidden" style="margin:0;font-size:0.8125rem;"></p>
+      </div>
+    </div>
+
+    <!-- Sessions -->
+    <div class="card" style="margin-top:1.25rem;padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+        <span class="card-title" style="margin:0;border:none;padding:0;">Session History</span>
+        <button id="addSessionBtn" class="btn btn-primary btn-sm">+ Add Session</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Counselor</th>
+              <th>Rx No.</th>
+              <th style="text-align:right">Hours</th>
+              <th>Status</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sessionsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Session Modal -->
+  <div id="sessionModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3 id="sessionModalTitle">Add Session</h3>
+      <div class="form-grid" style="margin-top:0;">
+        <div class="form-group">
+          <label for="sDate">Date *</label>
+          <input type="date" id="sDate" required>
+        </div>
+        <div class="form-group">
+          <label for="sCounselor">Counselor</label>
+          <select id="sCounselor">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="sRxNumber">Rx Number</label>
+          <input type="text" id="sRxNumber">
+        </div>
+        <div class="form-group">
+          <label for="sHours">Hours</label>
+          <input type="number" id="sHours" min="0" step="0.25">
+        </div>
+        <div class="form-group">
+          <label for="sDollarsFor">Dollars For</label>
+          <input type="text" id="sDollarsFor">
+        </div>
+        <div class="form-group">
+          <label for="sCaseStatus">Case Status</label>
+          <input type="text" id="sCaseStatus">
+        </div>
+        <div class="form-group">
+          <label for="sOutcome">Outcome</label>
+          <input type="text" id="sOutcome">
+        </div>
+        <div class="form-group full-width">
+          <label for="sNotes">Notes</label>
+          <textarea id="sNotes" rows="3"></textarea>
+        </div>
+      </div>
+      <p id="sessionModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="sessionModalSave" class="btn btn-primary">Save Session</button>
+        <button id="sessionModalCancel" class="btn btn-secondary">Cancel</button>
+        <button id="sessionModalDelete" class="btn btn-danger btn-sm hidden" style="margin-left:auto;">Delete Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Close File Modal -->
+  <div id="closeFileModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3>Close Client File</h3>
+      <div class="form-grid" style="margin-top:0;">
+        <div class="form-group">
+          <label for="closureDate">Closure Date</label>
+          <input type="date" id="closureDate">
+        </div>
+        <div class="form-group">
+          <label for="closureOutcomeValue">Outcome Value ($)</label>
+          <input type="number" id="closureOutcomeValue" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group full-width">
+          <label for="closureAwardType">Outcome Type</label>
+          <select id="closureAwardType">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+
+        <!-- CCA section — shown for PRE clients only -->
+        <div id="closureCcaSection" class="hidden" style="display:contents;">
+          <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:1rem;margin-top:0.25rem;">
+            <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.75rem;">Closing Cost Assistance</p>
+          </div>
+          <div class="form-group">
+            <label for="closureTotalDownPayment">Total Down Payment ($)</label>
+            <input type="number" id="closureTotalDownPayment" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="closureCcaAmount">CCA Amount Provided ($)</label>
+            <input type="number" id="closureCcaAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Coverage %</label>
+            <input type="text" id="closureCcaPercent" readonly style="background:var(--bg);">
+          </div>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="closureOutcome">Notes</label>
+          <textarea id="closureOutcome" rows="3" placeholder="Describe the final outcome…"></textarea>
+        </div>
+      </div>
+      <p id="closeFileError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="closeFileConfirm" class="btn btn-danger">Close File</button>
+        <button id="closeFileCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/client.js"></script>
+</body>
+</html>

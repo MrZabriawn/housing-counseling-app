@@ -71,7 +71,7 @@ function render() {
       ? `<a href="${r.driveFolderUrl}" target="_blank" style="font-size:0.8rem;">📁 ${r.driveFolderName || 'Folder'}</a>`
       : '<span class="text-muted">—</span>';
     return `<tr class="clickable-row" data-id="${r.id}">
-      <td>${esc(r.clientName)}</td>
+      <td>${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(r.counselor)}</td>
       <td>${esc(r.amiPercent)}</td>
       <td${urgent}>${closing || '—'}</td>
@@ -105,7 +105,7 @@ function openEditModal(id) {
   if (!r) return;
   editingId = id;
 
-  document.getElementById('ccaEditTitle').textContent = r.clientName;
+  document.getElementById('ccaEditTitle').textContent = toTitleCase(r.clientName);
   document.getElementById('editClosingDate').value = toDateInput(r.closingDate);
   document.getElementById('editCcaAmount').value   = r.ccaAmount || '';
   document.getElementById('editCcaStatus').value   = r.status || 'eligible';
@@ -167,4 +167,9 @@ function fmtDate(ts) {
 
 function esc(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }

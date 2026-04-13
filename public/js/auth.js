@@ -51,12 +51,13 @@ export function setupNav(profile, activePage) {
   const nav = document.querySelector('nav.nav');
   if (nav) {
     nav.innerHTML = `
-      <a class="nav-brand" href="log.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
+      <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
       <div class="nav-links">
-        <a href="log.html"         data-page="log">Counseling Log</a>
-        <a href="new-entry.html"   data-page="new-entry">New Entry</a>
-        <a href="cca-list.html"    data-page="cca-list">CCA List</a>
+        <a href="clients.html"     data-page="clients">Counseling Log</a>
+        <a href="new-client.html"  data-page="new-client">New Client</a>
+        <a href="cca-list.html"    data-page="cca-list">Buyer Ready</a>
         <a href="hig-waitlist.html" data-page="hig-waitlist">HIG Waitlist</a>
+        <a href="operations.html"  data-page="operations">Operations</a>
         <a href="reports.html"     data-page="reports">Reports</a>
         <a href="import.html"      data-page="import" class="admin-only hidden">Import</a>
         <a href="settings.html"    data-page="settings" class="admin-only hidden">Settings</a>

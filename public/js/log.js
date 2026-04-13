@@ -93,6 +93,23 @@ function populateFilters() {
   appendOptions('fRe',    RE_CODES);
 }
 
+function populateCounselorFilter() {
+  const sel = document.getElementById('fCounselor');
+  // Collect unique counselor values from all records, sorted
+  const names = [...new Set(
+    allRows.map(r => (r.counselor || '').trim()).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+
+  // Remove any previously added options (keep "All" at index 0)
+  while (sel.options.length > 1) sel.remove(1);
+
+  names.forEach(name => {
+    const o = document.createElement('option');
+    o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  });
+}
+
 function appendOptions(id, list) {
   const sel = document.getElementById(id);
   list.forEach(v => {
@@ -108,14 +125,14 @@ async function loadLog() {
   // No orderBy — avoids Firestore excluding records where counselingDate is null
   const snap = await getDocs(collection(db, 'counselingLog'));
   allRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  // Sort client-side: most recent first, nulls at bottom
   allRows.sort((a, b) => toDate(b.counselingDate) - toDate(a.counselingDate));
+  populateCounselorFilter();
   applyFilters();
 }
 
 function applyFilters() {
   const v = {
-    counselor: document.getElementById('fCounselor').value.trim().toLowerCase(),
+    counselor: document.getElementById('fCounselor').value,
     start:     document.getElementById('fStart').value,
     end:       document.getElementById('fEnd').value,
     ami:       document.getElementById('fAmi').value,
@@ -127,7 +144,7 @@ function applyFilters() {
   };
 
   let rows = allRows;
-  if (v.counselor) rows = rows.filter(r => (r.counselor || '').toLowerCase().includes(v.counselor));
+  if (v.counselor) rows = rows.filter(r => r.counselor === v.counselor);
   if (v.start)     rows = rows.filter(r => toDate(r.counselingDate) >= new Date(v.start));
   if (v.end)       rows = rows.filter(r => toDate(r.counselingDate) <= new Date(v.end + 'T23:59:59'));
   if (v.ami)       rows = rows.filter(r => r.amiPercent === v.ami);
@@ -155,7 +172,7 @@ function toDate(ts) {
 function uniqueHouseholds(rows) {
   const seen = new Set();
   return rows.filter(r => {
-    const key = (r.caseNo || '').trim() || (r.clientName || '').trim().toLowerCase();
+    const key = (r.rxNumber || '').trim() || (r.clientName || '').trim().toLowerCase();
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -232,7 +249,7 @@ function renderTable(rows) {
     ].join('');
 
     return `<tr class="clickable-row" data-id="${r.id}">
-      <td>${r.caseNo || '—'}</td>
+      <td>${r.rxNumber || '—'}</td>
       <td style="white-space:nowrap">${date}</td>
       <td>${r.counselor || '—'}</td>
       <td>${r.clientName || '—'}</td>

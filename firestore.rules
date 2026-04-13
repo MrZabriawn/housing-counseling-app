@@ -22,5 +22,15 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSignedIn();
     }
+    match /counselors/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+    match /clients/{clientId} {
+      allow read, write: if isSignedIn();
+      match /sessions/{sessionId} {
+        allow read, write: if isSignedIn();
+      }
+    }
   }
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Entry — Home Stabilization Program</title>
+  <title>New Client — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -12,28 +12,28 @@
   <main class="page">
     <div class="page-header">
       <div class="page-header-text">
-        <h2>New Counseling Entry</h2>
-        <p>All fields marked with * are required.</p>
+        <h2>New Client</h2>
+        <p>Create a client profile and log the first session.</p>
       </div>
     </div>
 
-    <div class="card">
-      <form id="entryForm">
+    <form id="newClientForm">
+      <!-- Client Info -->
+      <div class="card">
+        <div class="card-title">Client Information</div>
         <div class="form-grid">
 
-          <div class="section-title">Case &amp; Client Information</div>
+          <div class="section-title">Identity</div>
 
-          <div class="form-group">
-            <label for="caseNo">Rx Number</label>
-            <input type="text" id="rxNumber" required>
-          </div>
           <div class="form-group">
             <label for="clientName">Client Name *</label>
             <input type="text" id="clientName" required>
           </div>
           <div class="form-group">
-            <label for="counselingDate">Counseling Date *</label>
-            <input type="date" id="counselingDate" required>
+            <label for="counselingType">Counseling Type *</label>
+            <select id="counselingType" required>
+              <option value="">— Select —</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="counselor">Counselor *</label>
@@ -49,24 +49,9 @@
             <label for="zipCode">Zip Code</label>
             <input type="text" id="zipCode" maxlength="10">
           </div>
-
-          <div class="section-title">Counseling Details</div>
-
           <div class="form-group">
-            <label for="counselingType">Counseling Type *</label>
-            <select id="counselingType" required>
-              <option value="">— Select —</option>
-            </select>
-          </div>
-          <!-- sourceMonth is derived from counselingDate automatically -->
-          <select id="sourceMonth" class="hidden"></select>
-          <div class="form-group">
-            <label for="caseStatus">Case Status</label>
-            <input type="text" id="caseStatus">
-          </div>
-          <div class="form-group">
-            <label for="outcome">Outcome</label>
-            <input type="text" id="outcome">
+            <label for="rxNumber">Rx Number</label>
+            <input type="text" id="rxNumber">
           </div>
 
           <div class="section-title">Demographics</div>
@@ -78,7 +63,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="reCode">Race &amp; Ethnicity Code *</label>
+            <label for="reCode">Race &amp; Ethnicity *</label>
             <select id="reCode" required>
               <option value="">— Select —</option>
             </select>
@@ -91,20 +76,24 @@
             <input type="checkbox" id="femaleHeaded">
             <label for="femaleHeaded">Female-Headed Household</label>
           </div>
+        </div>
+      </div>
 
-          <div class="section-title">Financial</div>
-
+      <!-- First Session -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-title">First Session</div>
+        <div class="form-grid">
           <div class="form-group">
-            <label for="hours">Hours *</label>
-            <input type="number" id="hours" min="0" step="0.25" required>
+            <label for="sessionDate">Date *</label>
+            <input type="date" id="sessionDate" required>
           </div>
           <div class="form-group">
-            <label for="ratePerHour">Rate per Hour ($)</label>
-            <input type="number" id="ratePerHour" min="0" step="0.01">
+            <label for="hours">Hours</label>
+            <input type="number" id="hours" min="0" step="0.25">
           </div>
           <div class="form-group">
-            <label for="dollarsAwarded">Outcome Value ($, computed)</label>
-            <input type="number" id="dollarsAwarded" readonly>
+            <label for="dollarsAwarded">Outcome Value ($)</label>
+            <input type="number" id="dollarsAwarded" min="0" step="0.01">
           </div>
           <div class="form-group">
             <label for="awardType">Outcome Type</label>
@@ -113,28 +102,28 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="dollarsFor">Dollars For</label>
-            <input type="text" id="dollarsFor">
+            <label for="caseStatus">Case Status</label>
+            <input type="text" id="caseStatus">
           </div>
-
-          <div class="section-title">Notes</div>
-
+          <div class="form-group">
+            <label for="outcome">Outcome</label>
+            <input type="text" id="outcome">
+          </div>
           <div class="form-group full-width">
             <label for="notes">Notes</label>
-            <textarea id="notes" rows="4"></textarea>
+            <textarea id="notes" rows="3"></textarea>
           </div>
-
         </div>
+      </div>
 
-        <p id="formError" class="error-msg hidden"></p>
-        <div class="form-actions">
-          <button type="submit" id="submitBtn" class="btn btn-primary">Save Entry</button>
-          <a href="log.html" class="btn btn-secondary">Cancel</a>
-        </div>
-      </form>
-    </div>
+      <p id="formError" class="error-msg hidden" style="margin-top:1rem;"></p>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button type="submit" id="submitBtn" class="btn btn-primary">Create Client</button>
+        <a href="clients.html" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
   </main>
 
-  <script type="module" src="js/new-entry.js"></script>
+  <script type="module" src="js/new-client.js"></script>
 </body>
 </html>

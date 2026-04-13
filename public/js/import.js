@@ -9,9 +9,12 @@ import {
 
 // CSV column → app field (loose, case-insensitive)
 const COLUMN_MAP = {
-  'case number':     'caseNo',
-  'case no':         'caseNo',
-  'case no.':        'caseNo',
+  'case number':     'rxNumber',
+  'case no':         'rxNumber',
+  'case no.':        'rxNumber',
+  'rx number':       'rxNumber',
+  'rx no':           'rxNumber',
+  'rx no.':          'rxNumber',
   'client name':     'clientName',
   'client':          'clientName',
   'ami':             'amiPercent',
@@ -40,10 +43,10 @@ let existingCaseNos = new Set();
 requireAdmin(async (user, profile) => {
   setupNav(profile, 'import');
 
-  // Load existing caseNos for duplicate detection
+  // Load existing rxNumbers for duplicate detection
   const snap = await getDocs(query(collection(db, 'counselingLog')));
   snap.docs.forEach(d => {
-    const cn = (d.data().caseNo || '').trim();
+    const cn = (d.data().rxNumber || '').trim();
     if (cn) existingCaseNos.set ? existingCaseNos.add(cn) : (existingCaseNos = new Set([...existingCaseNos, cn]));
   });
 
@@ -111,7 +114,7 @@ function processCSV(rawData, rawHeaders) {
     const m = mapColumns(raw, rawHeaders);
     return {
       _rowIndex:     i,
-      caseNo:        m.caseNo        || '',
+      rxNumber:        m.rxNumber        || '',
       clientName:    m.clientName    || '',
       counselingDate: m.counselingDate || '',
       counselor:     m.counselor     || '',
@@ -119,8 +122,8 @@ function processCSV(rawData, rawHeaders) {
       amiPercent:    normalizeAmi(m.amiPercent),
       reCode:        normalizeReCode(m.reCode),
       notes:         m.notes         || '',
-      _isDuplicate:  !!(m.caseNo && existingCaseNos.has(m.caseNo.trim())),
-      _action:       (m.caseNo && existingCaseNos.has(m.caseNo.trim())) ? 'skip' : 'add',
+      _isDuplicate:  !!(m.rxNumber && existingCaseNos.has(m.rxNumber.trim())),
+      _action:       (m.rxNumber && existingCaseNos.has(m.rxNumber.trim())) ? 'skip' : 'add',
     };
   });
 
@@ -151,7 +154,7 @@ function renderPreview() {
       : '<span class="text-muted" style="font-size:0.8rem;">—</span>';
 
     return `<tr class="${dupClass}">
-      <td>${r.caseNo || '—'}</td>
+      <td>${r.rxNumber || '—'}</td>
       <td>${r.clientName || '—'}</td>
       <td>${r.counselingDate || '—'}</td>
       <td>${r.counselor || '—'}</td>
@@ -181,12 +184,12 @@ async function runImport() {
   let updated = 0;
   let skipped = 0;
 
-  // Build a map of existing caseNo → doc ID for updates
+  // Build a map of existing rxNumber → doc ID for updates
   const snap = await getDocs(query(collection(db, 'counselingLog')));
-  const caseNoToId = {};
+  const rxNumberToId = {};
   snap.docs.forEach(d => {
-    const cn = (d.data().caseNo || '').trim();
-    if (cn) caseNoToId[cn] = d.id;
+    const cn = (d.data().rxNumber || '').trim();
+    if (cn) rxNumberToId[cn] = d.id;
   });
 
   for (const row of parsedRows) {
@@ -198,7 +201,7 @@ async function runImport() {
     const data = buildRecord(row);
 
     if (row._isDuplicate && row._action === 'update') {
-      const docId = caseNoToId[row.caseNo.trim()];
+      const docId = rxNumberToId[row.rxNumber.trim()];
       if (docId) {
         await updateDoc(doc(db, 'counselingLog', docId), { ...data, updatedAt: serverTimestamp() });
         updated++;
@@ -227,7 +230,7 @@ function buildRecord(r) {
     if (!isNaN(parsed)) counselingDate = parsed;
   }
   return {
-    caseNo:         r.caseNo,
+    rxNumber:         r.rxNumber,
     clientName:     r.clientName,
     counselingDate: counselingDate,
     counselor:      r.counselor,

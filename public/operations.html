@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operations Guidance — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .ops-section { margin-bottom: 1.5rem; }
+    .ops-step {
+      display: flex;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .ops-step:last-child { border-bottom: none; }
+    .step-badge {
+      flex-shrink: 0;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      letter-spacing: 0.04em;
+      min-width: 36px;
+      text-align: center;
+      margin-top: 0.1rem;
+    }
+    .step-badge.sub { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+    .step-text { font-size: 0.875rem; line-height: 1.55; }
+    .ops-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .ops-tab {
+      padding: 0.4rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .ops-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .ops-panel { display: none; }
+    .ops-panel.active { display: block; }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Operations Guidance</h2>
+        <p>Step-by-step process reference for counselors.</p>
+      </div>
+    </div>
+
+    <div class="ops-tabs">
+      <button class="ops-tab active" data-panel="pre">Pre-Purchase</button>
+      <button class="ops-tab" data-panel="post">Post-Purchase</button>
+      <button class="ops-tab" data-panel="outstanding">Outstanding</button>
+    </div>
+
+    <!-- PRE-PURCHASE -->
+    <div id="panel-pre" class="ops-panel active">
+      <div class="card">
+        <div class="card-title">Pre-Purchase Counseling — Buying Power</div>
+
+        <div style="background:#f0f4ff;border-left:4px solid var(--primary);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1.25rem;font-size:0.875rem;line-height:1.65;">
+          <p style="margin:0 0 0.6rem;"><strong>Buying Power</strong> is a buyer-advocacy approach to pre-purchase counseling. Its purpose is to help buyers win — not just learn. It does two things: make buyers objectively closing-ready based on real lender underwriting standards, and coordinate all eligible assistance — internal and external — so cash-to-close is minimized and deals don't fail late.</p>
+          <p style="margin:0 0 0.6rem;">It is not referrals. It is not a preferred lender list. It is not generic education. It is <strong>transaction readiness plus capital coordination</strong>.</p>
+          <p style="margin:0 0 0.75rem;"><strong>What makes it different:</strong> Most organizations stop at education. Buying Power engineers outcomes — pressure-testing readiness before clients shop, identifying deal killers early, and coordinating all assistance upfront so underwriting sees a clean file. We operate across all five phases of a purchase: Financial Reality, Lender Readiness, Offer Competitiveness, Underwriting Survival, and Closing Execution.</p>
+          <p style="margin:0 0 0.75rem;"><strong>Where buyers lose:</strong> Pre-approval mistaken for readiness. Assistance discovered too late. Missing or inconsistent documents during underwriting. Unexpected cash-to-close at the table. Every one of these failure points is preventable.</p>
+          <p style="margin:0;color:var(--primary);font-style:italic;">"We are not here to send you somewhere. We are here to make you ready, funded, and hard to derail. That is how buyers win. That is all we are optimizing for."</p>
+        </div>
+
+        <div class="ops-step">
+          <span class="step-badge">1a</span>
+          <div class="step-text">Complete Intake &bull; 3-in-1 Credit Report &bull; New Rx Case &bull; Monthly Budget &bull; Assess client's current situation &bull; Action Plan &bull; Scan and Upload Docs (2 copies)</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">1b</span>
+          <div class="step-text">Anti-Predatory Credit Counseling <strong>(4 hours)</strong></div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2a</span>
+          <div class="step-text">First 4 Modules of Counselors Corner Homebuyer Education Presentation</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2b</span>
+          <div class="step-text">Anti-Predatory Credit Counseling <strong>(4 hours)</strong> &bull; Update Action Plan</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3a</span>
+          <div class="step-text">Copy credit counseling Rx case and convert to Pre-Purchase Rx case &bull; CHCI Pre-Purchase <strong>(4 hours)</strong> — if credit score is above 580</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3b</span>
+          <div class="step-text">Last 4 Modules of Counselors Corner Homebuyer Education Presentation</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3c</span>
+          <div class="step-text">PHFA Pre-Purchase Certificate awarded &bull; Update Action Plan</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge" style="background:var(--accent);">4+</span>
+          <div class="step-text">NOFA Billing for further Face-to-Face or Case Management activity</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-PURCHASE -->
+    <div id="panel-post" class="ops-panel">
+      <div class="card">
+        <div class="card-title">Post-Purchase Counseling</div>
+
+        <div class="ops-step">
+          <span class="step-badge">1a</span>
+          <div class="step-text">Complete Intake &bull; Scan and Upload Docs &bull; New Rx Case &bull; 3-in-1 Credit Report &bull; Monthly Budget &bull; Assess client's current situation &bull; Action Plan (2 copies)</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">1b</span>
+          <div class="step-text">Anti-Predatory Credit Counseling <strong>(4 hours)</strong></div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2a</span>
+          <div class="step-text">First Priorities of a Homeowner &bull; Financial Emergencies &bull; Money Management</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2b</span>
+          <div class="step-text">Anti-Predatory Credit Counseling <strong>(4 hours)</strong> &bull; Update Action Plan</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3a</span>
+          <div class="step-text">Home Repair and Maintenance &bull; Budgeting and Money Management &bull; Predatory Lending Practices</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3b</span>
+          <div class="step-text">CHCI Post-Purchase <strong>(4 hours)</strong></div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3c</span>
+          <div class="step-text">Comparison shopping for a HELOC or Home Improvement Loans &bull; Discussion of HOI Grant Repair Process &bull; Post-Purchase Certificate awarded &bull; Update Action Plan</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge" style="background:var(--accent);">4+</span>
+          <div class="step-text">NOFA Billing for further Face-to-Face or Case Management activity</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OUTSTANDING / DEFAULT -->
+    <div id="panel-outstanding" class="ops-panel">
+      <div class="card">
+        <div class="card-title">Outstanding</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Anti-Predatory Default and Delinquency — <strong>8 hours total</strong></p>
+
+        <div class="ops-step">
+          <span class="step-badge">1a</span>
+          <div class="step-text">
+            Complete Intake &bull; Scan and Upload Docs &bull; New Rx Case &bull; 3-in-1 Credit Report &bull; Monthly Budget &bull; Assess client's current situation &bull; Action Plan (2 copies)
+            <br><br>
+            Establish contact with Mortgage Company for Loss Mitigation options. Complete and submit application for assistance to the mortgage company on 1st appointment <strong>(4 hours)</strong> or 2nd appointment <strong>(4 hours)</strong> &bull; Update Action Plan.
+            <br><br>
+            Determine HEMAP eligibility: Act 91 Notice — <em>HEMAP not available for FHA insured mortgages</em>
+          </div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">1b</span>
+          <div class="step-text">Copy the D&amp;D NOFA Rx case &bull; Change guarantor to HEMAP</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">1c</span>
+          <div class="step-text">HEMAP appointment &bull; HEMAP guarantor if client qualifies <strong>(5 hours total)</strong> &bull; Update Action Plan</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge" style="background:var(--accent);">4+</span>
+          <div class="step-text">NOFA Billing for further Face-to-Face or Case Management activity</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module" src="js/auth.js"></script>
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    requireAuth((user, profile) => {
+      setupNav(profile, 'operations');
+    });
+
+    document.querySelectorAll('.ops-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.ops-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.ops-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

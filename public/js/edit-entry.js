@@ -17,7 +17,7 @@ function setSelectValue(id, val) {
 }
 import { openDrivePicker } from './picker.js';
 import {
-  doc, getDoc, addDoc, updateDoc, deleteDoc, collection, query, where, getDocs, serverTimestamp
+  doc, getDoc, addDoc, updateDoc, deleteDoc, collection, query, where, getDocs, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -72,12 +72,30 @@ requireAuth(async (user, profile) => {
   setupEnrollment(record, user, profile);
 });
 
-function buildSelects() {
+async function buildSelects() {
   appendOptions('counselingType', COUNSELING_TYPES);
   appendOptions('sourceMonth',    MONTHS);
   appendOptions('amiPercent',     AMI_LEVELS);
   appendOptions('reCode',         RE_CODES);
   appendOptions('awardType',      AWARD_TYPES);
+  await loadCounselorOptions('counselor');
+}
+
+async function loadCounselorOptions(selectId) {
+  try {
+    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const sel  = document.getElementById(selectId);
+    snap.docs
+      .filter(d => d.data().active !== false)
+      .forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.data().name;
+        o.textContent = d.data().name;
+        sel.appendChild(o);
+      });
+  } catch (_) {
+    // counselors collection may not exist yet — leave select empty, field still works
+  }
 }
 
 // Show/hide sourceMonth based on whether counselingDate has a value.
@@ -137,10 +155,10 @@ function toDateInputValue(ts) {
 }
 
 function populateForm(r) {
-  setValue('caseNo',         r.caseNo);
+  setValue('rxNumber',         r.rxNumber);
   setValue('clientName',     r.clientName);
   setValue('counselingDate', toDateInputValue(r.counselingDate));
-  setValue('counselor',      r.counselor);
+  setSelectValue('counselor', r.counselor);
   setValue('guarantor',      r.guarantor);
   setValue('zipCode',        r.zipCode);
   setSelectValue('counselingType', r.counselingType);
@@ -166,6 +184,11 @@ function populateForm(r) {
 function setValue(id, val) {
   const el = document.getElementById(id);
   if (el && val != null) el.value = val;
+}
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function renderMeta(r) {
@@ -240,10 +263,10 @@ function readForm() {
     : selectVal('sourceMonth', 'sourceMonth');
 
   return {
-    caseNo:         document.getElementById('caseNo').value.trim(),
-    clientName:     document.getElementById('clientName').value.trim(),
+    rxNumber:         document.getElementById('rxNumber').value.trim(),
+    clientName:     toTitleCase(document.getElementById('clientName').value.trim()),
     counselingDate: dateVal ? new Date(dateVal + 'T12:00:00') : (_originalRecord?.counselingDate ?? null),
-    counselor:      document.getElementById('counselor').value.trim(),
+    counselor:      selectVal('counselor', 'counselor'),
     guarantor:      document.getElementById('guarantor').value.trim(),
     zipCode:        document.getElementById('zipCode').value.trim(),
     counselingType: selectVal('counselingType', 'counselingType'),
