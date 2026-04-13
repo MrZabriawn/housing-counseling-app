@@ -55,6 +55,7 @@ export function setupNav(profile, activePage) {
       <div class="nav-links">
         <a href="clients.html"     data-page="clients">Counseling Log</a>
         <a href="new-client.html"  data-page="new-client">New Client</a>
+        <a href="cmc-log.html"     data-page="cmc-log">CMC Letters</a>
         <a href="cca-list.html"    data-page="cca-list">Buyer Ready</a>
         <a href="hig-waitlist.html" data-page="hig-waitlist">HIG Waitlist</a>
         <a href="operations.html"  data-page="operations">Operations</a>

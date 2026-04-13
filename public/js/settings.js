@@ -45,6 +45,9 @@ requireED(async (user, profile) => {
   document.getElementById('mergeCancelBtn').addEventListener('click', () => {
     document.getElementById('mergeModal').classList.add('hidden');
   });
+
+  // CMC link tool
+  document.getElementById('loadCmcLinkBtn').addEventListener('click', loadCmcLinkTool);
 });
 
 // ── Counselors ────────────────────────────────────────────────────────────────
@@ -759,6 +762,14 @@ async function performMerge() {
     const firstSessionDate = dated.length ? dated[0] : (toDate(keep.firstSessionDate) || toDate(drop.firstSessionDate));
     const lastSessionDate  = dated.length ? dated[dated.length - 1] : (toDate(keep.lastSessionDate) || toDate(drop.lastSessionDate));
 
+    // Use the counseling type from whichever record had the more recent activity.
+    // e.g. workshop → PRE: the PRE record has a later lastSessionDate, so PRE wins.
+    const keepLast = toDate(keep.lastSessionDate);
+    const dropLast = toDate(drop.lastSessionDate);
+    const activeCounselingType = (dropLast && (!keepLast || dropLast > keepLast))
+      ? (drop.counselingType || keep.counselingType)
+      : (keep.counselingType || drop.counselingType);
+
     // Update keep doc
     await updateDoc(doc(db, 'clients', keepId), {
       rxNumbers:         mergedRx,
@@ -767,6 +778,7 @@ async function performMerge() {
       totalOutcomeValue,
       firstSessionDate:  firstSessionDate || null,
       lastSessionDate:   lastSessionDate  || null,
+      counselingType:    activeCounselingType,
       // Prefer non-empty fields from either record
       guarantor:         keep.guarantor  || drop.guarantor  || '',
       zipCode:           keep.zipCode    || drop.zipCode    || '',
@@ -792,6 +804,145 @@ async function performMerge() {
     errorEl.classList.remove('hidden');
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Merge';
+  }
+}
+
+// ── CMC Letter Linking ────────────────────────────────────────────────────────
+
+// Holds all clients for search — loaded once when the tool opens
+let _cmcClients = [];
+
+async function loadCmcLinkTool() {
+  const container = document.getElementById('cmcLinkResult');
+  const btn       = document.getElementById('loadCmcLinkBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Loading…';
+  container.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
+
+  try {
+    // Load all unlinked CMC records (no linkedClientId set)
+    const cmcSnap = await getDocs(query(collection(db, 'cmcLog'), orderBy('dateSent', 'desc')));
+    const allCmc  = cmcSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const unlinked = allCmc.filter(r => !r.linkedClientId);
+
+    // Load clients once for search — only need id + name
+    const cliSnap = await getDocs(collection(db, 'clients'));
+    _cmcClients = cliSnap.docs.map(d => ({ id: d.id, clientName: d.data().clientName || '' }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+
+    if (!unlinked.length) {
+      container.innerHTML = '<p style="color:var(--accent);">All CMC letters are already linked to clients.</p>';
+      return;
+    }
+
+    container.innerHTML = `
+      <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+        ${unlinked.length} unlinked letter${unlinked.length !== 1 ? 's' : ''}. Search for a client to link each one.
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
+        <thead>
+          <tr style="background:#f8f9fb;">
+            <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Date Sent</th>
+            <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Recipient</th>
+            <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor</th>
+            <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Link to Client</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
+          </tr>
+        </thead>
+        <tbody id="cmcLinkBody">
+          ${unlinked.map(r => {
+            const dateStr = r.dateSent
+              ? (r.dateSent.toDate ? r.dateSent.toDate() : new Date(r.dateSent)).toLocaleDateString('en-US', { timeZone: 'UTC' })
+              : '—';
+            return `<tr data-cmc-id="${escAttr(r.id)}" data-cmc-name="${escAttr(r.recipientName || '')}">
+              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);white-space:nowrap;">${escHtml(dateStr)}</td>
+              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);">${escHtml(r.recipientName || '—')}</td>
+              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);">${escHtml(r.counselor || '—')}</td>
+              <td style="padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);">
+                <input type="text" class="cmc-search"
+                  placeholder="Type client name…"
+                  style="width:100%;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem;">
+                <div class="cmc-suggestions" style="position:relative;"></div>
+              </td>
+              <td style="padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);white-space:nowrap;">
+                <button class="btn btn-sm btn-primary cmc-link-btn" disabled
+                  style="font-size:0.75rem;">Link</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+    // Wire search inputs — filter _cmcClients on input, show dropdown suggestions
+    container.querySelectorAll('tr[data-cmc-id]').forEach(row => {
+      const input    = row.querySelector('.cmc-search');
+      const dropdown = row.querySelector('.cmc-suggestions');
+      const linkBtn  = row.querySelector('.cmc-link-btn');
+      let _selectedClientId   = null;
+      let _selectedClientName = null;
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        _selectedClientId = null;
+        _selectedClientName = null;
+        linkBtn.disabled = true;
+
+        if (!q) { dropdown.innerHTML = ''; return; }
+
+        const matches = _cmcClients.filter(c => c.clientName.toLowerCase().includes(q)).slice(0, 8);
+        if (!matches.length) {
+          dropdown.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted);padding:0.35rem 0.5rem;">No clients found</div>';
+          return;
+        }
+        dropdown.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius);background:#fff;position:absolute;z-index:100;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+          ${matches.map(c => `<div class="cmc-suggestion-item"
+            data-id="${escAttr(c.id)}" data-name="${escAttr(c.clientName)}"
+            style="padding:0.4rem 0.75rem;cursor:pointer;font-size:0.875rem;"
+            onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+            ${escHtml(c.clientName)}
+          </div>`).join('')}
+        </div>`;
+
+        dropdown.querySelectorAll('.cmc-suggestion-item').forEach(item => {
+          item.addEventListener('click', () => {
+            _selectedClientId   = item.dataset.id;
+            _selectedClientName = item.dataset.name;
+            input.value         = item.dataset.name;
+            dropdown.innerHTML  = '';
+            linkBtn.disabled    = false;
+          });
+        });
+      });
+
+      linkBtn.addEventListener('click', async () => {
+        if (!_selectedClientId) return;
+        linkBtn.disabled = true;
+        linkBtn.textContent = '…';
+        try {
+          await updateDoc(doc(db, 'cmcLog', row.dataset.cmcId), {
+            linkedClientId:   _selectedClientId,
+            linkedClientName: _selectedClientName,
+            updatedAt:        serverTimestamp(),
+          });
+          // Fade the row out and show success
+          row.style.opacity = '0.4';
+          row.querySelector('td:last-child').innerHTML =
+            `<span style="font-size:0.8rem;color:var(--accent);font-weight:600;">Linked ✓</span>`;
+          showMsg(document.getElementById('cmcLinkMsg'),
+            `Linked "${row.dataset.cmcName}" to "${_selectedClientName}".`, true);
+        } catch (err) {
+          alert('Link failed: ' + err.message);
+          linkBtn.disabled = false;
+          linkBtn.textContent = 'Link';
+        }
+      });
+    });
+
+  } catch (err) {
+    container.innerHTML = `<p class="error-msg">Failed to load: ${err.message}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load Unlinked Letters';
   }
 }
 

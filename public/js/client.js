@@ -4,7 +4,7 @@ import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
-  query, orderBy, serverTimestamp
+  query, orderBy, where, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const params   = new URLSearchParams(window.location.search);
@@ -30,7 +30,7 @@ requireAuth(async (user, profile) => {
   ]);
 
   await loadClient();
-  await loadSessions();
+  await Promise.all([loadSessions(), loadCmcLink()]);
 
   wireClientForm();
   wireSessionModal();
@@ -58,6 +58,32 @@ async function loadSessions() {
   );
   _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderSessionsTable(_sessions);
+}
+
+// Check cmcLog for any letter linked to this client and show the banner
+async function loadCmcLink() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'cmcLog'), where('linkedClientId', '==', clientId))
+    );
+    const banner = document.getElementById('cmcBanner');
+    if (snap.empty) return;
+
+    // Build one line per linked CMC letter (usually just one, but handle multiples)
+    const lines = snap.docs.map(d => {
+      const r = d.data();
+      const dateStr = r.dateSent
+        ? (r.dateSent.toDate ? r.dateSent.toDate() : new Date(r.dateSent))
+            .toLocaleDateString('en-US', { timeZone: 'UTC' })
+        : '';
+      return `CMC letter sent${dateStr ? ' ' + dateStr : ''}${r.counselor ? ' by ' + r.counselor : ''}`;
+    });
+
+    banner.innerHTML = '&#9993; ' + lines.join(' &nbsp;·&nbsp; ');
+    banner.classList.remove('hidden');
+  } catch (_) {
+    // cmcLog collection may not exist yet — silently ignore
+  }
 }
 
 // ── Build selects ─────────────────────────────────────────────────────────────
