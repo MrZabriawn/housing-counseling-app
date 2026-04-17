@@ -763,10 +763,11 @@ async function performMerge() {
     const lastSessionDate  = dated.length ? dated[dated.length - 1] : (toDate(keep.lastSessionDate) || toDate(drop.lastSessionDate));
 
     // Use the counseling type from whichever record had the more recent activity.
-    // e.g. workshop → PRE: the PRE record has a later lastSessionDate, so PRE wins.
-    const keepLast = toDate(keep.lastSessionDate);
-    const dropLast = toDate(drop.lastSessionDate);
-    const activeCounselingType = (dropLast && (!keepLast || dropLast > keepLast))
+    // null lastSessionDate becomes epoch (Jan 1 1970) so a record with sessions
+    // always beats one without, and the more recent record wins on ties.
+    const keepDate = keep.lastSessionDate ? toDate(keep.lastSessionDate).getTime() : 0;
+    const dropDate = drop.lastSessionDate ? toDate(drop.lastSessionDate).getTime() : 0;
+    const activeCounselingType = dropDate > keepDate
       ? (drop.counselingType || keep.counselingType)
       : (keep.counselingType || drop.counselingType);
 
