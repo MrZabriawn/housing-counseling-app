@@ -56,35 +56,46 @@ function loadPicker() {
   });
 }
 
-export function openDrivePicker() {
-  return new Promise(async (resolve, reject) => {
+function buildPicker(token, view) {
+  return new Promise((resolve, reject) => {
     try {
-      await loadGapi();
-      await loadPicker();
-      const token = await getFreshToken();
-      if (!token) throw new Error('Could not obtain Drive access token.');
-
       const picker = new google.picker.PickerBuilder()
-        .addView(google.picker.ViewId.DOCS)
+        .addView(view)
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
         .setCallback((data) => {
           if (data.action === google.picker.Action.PICKED) {
-            const doc = data.docs[0];
-            resolve({
-              id:   doc.id,
-              name: doc.name,
-              url:  doc.url,
-            });
+            const item = data.docs[0];
+            resolve({ id: item.id, name: item.name, url: item.url });
           } else if (data.action === google.picker.Action.CANCEL) {
             resolve(null);
           }
         })
         .build();
-
       picker.setVisible(true);
     } catch (err) {
       reject(err);
     }
   });
+}
+
+// Pick any file from Drive
+export async function openDrivePicker() {
+  await loadGapi();
+  await loadPicker();
+  const token = await getFreshToken();
+  if (!token) throw new Error('Could not obtain Drive access token.');
+  return buildPicker(token, new google.picker.View(google.picker.ViewId.DOCS));
+}
+
+// Pick a folder from Drive
+export async function openDriveFolderPicker() {
+  await loadGapi();
+  await loadPicker();
+  const token = await getFreshToken();
+  if (!token) throw new Error('Could not obtain Drive access token.');
+  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setSelectFolderEnabled(true)
+    .setMimeTypes('application/vnd.google-apps.folder');
+  return buildPicker(token, view);
 }

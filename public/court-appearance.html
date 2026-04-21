@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Court Appearance — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .court-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .court-layout { grid-template-columns: 1fr; }
+    }
+
+    /* Client search results */
+    .client-results {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-height: 340px;
+      overflow-y: auto;
+      margin-top: 0.6rem;
+    }
+    .client-result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.55rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background 0.1s;
+    }
+    .client-result-item:last-child { border-bottom: none; }
+    .client-result-item:hover { background: var(--primary-light, #e8f0fe); }
+    .client-result-item.already-added { opacity: 0.45; cursor: default; pointer-events: none; }
+    .cri-name  { font-weight: 600; }
+    .cri-meta  { font-size: 0.77rem; color: var(--text-muted); }
+
+    /* Selected clients */
+    .selected-panel {
+      position: sticky;
+      top: 1rem;
+    }
+    .selected-client-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 0.6rem;
+      background: #fff;
+    }
+    .selected-client-card .sc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.4rem;
+    }
+    .selected-client-card .sc-name { font-weight: 600; font-size: 0.9rem; }
+    .selected-client-card .sc-meta { font-size: 0.77rem; color: var(--text-muted); }
+    .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--danger, #dc2626);
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0 0.2rem;
+      flex-shrink: 0;
+    }
+    .remove-btn:hover { color: #991b1b; }
+
+    .empty-state {
+      padding: 2rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    /* Step indicators */
+    .step-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--primary);
+      margin-bottom: 0.35rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Court Appearance</h2>
+        <p>Log a batch of foreclosure court sessions for multiple clients at once.</p>
+      </div>
+      <a href="clients.html" class="btn btn-secondary btn-sm">← Back to Counseling Log</a>
+    </div>
+
+    <!-- Step 1: Court details (full width) -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div class="step-label">Step 1 — Court Details</div>
+      <div class="form-grid" style="margin-top:0;">
+        <div class="form-group">
+          <label for="courtCounty">County *</label>
+          <select id="courtCounty" required>
+            <option value="">— Select county —</option>
+            <option value="Beaver County">Beaver County</option>
+            <option value="Lawrence County">Lawrence County</option>
+            <option value="Mercer County">Mercer County</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="courtDate">Court Date *</label>
+          <input type="date" id="courtDate" required>
+        </div>
+        <div class="form-group">
+          <label for="courtHours">Hours (applied to each session)</label>
+          <input type="number" id="courtHours" value="2" min="0" step="0.25" style="max-width:100px;">
+        </div>
+        <div class="form-group">
+          <label for="courtCounselor">Counselor</label>
+          <select id="courtCounselor">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Two-column: search left, selected right -->
+    <div class="court-layout">
+
+      <!-- Left: search & add -->
+      <div>
+        <div class="card">
+          <div class="step-label">Step 2 — Add Clients Who Appeared</div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="clientSearch">Search clients</label>
+            <input type="text" id="clientSearch" placeholder="Name, counselor, or Rx number…" autocomplete="off">
+          </div>
+          <div id="clientResults" class="client-results">
+            <div class="empty-state">Start typing to find clients.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: selected clients -->
+      <div class="selected-panel">
+        <div class="card">
+          <div class="step-label">Step 3 — Court Appearances
+            <span id="selectedCount" style="background:var(--primary);color:#fff;border-radius:20px;padding:0.1rem 0.55rem;margin-left:0.35rem;font-size:0.7rem;">0</span>
+          </div>
+
+          <div id="selectedList">
+            <div class="empty-state" id="selectedEmpty">No clients added yet. Search and click a client to add them.</div>
+          </div>
+
+          <div id="submitSection" class="hidden" style="margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem;">
+            <p id="submitError" class="error-msg hidden" style="margin-bottom:0.5rem;"></p>
+            <button id="submitBtn" class="btn btn-primary" style="width:100%;">Log Court Appearances</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Success banner (hidden until submit) -->
+    <div id="successBanner" class="hidden" style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);padding:1rem 1.25rem;margin-top:1rem;font-size:0.875rem;">
+      <strong id="successMsg"></strong>
+      <div style="margin-top:0.5rem;">
+        <a href="clients.html" class="btn btn-secondary btn-sm">Back to Counseling Log</a>
+        <button id="logAnotherBtn" class="btn btn-primary btn-sm" style="margin-left:0.5rem;">Log Another Court Date</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/court-appearance.js"></script>
+</body>
+</html>

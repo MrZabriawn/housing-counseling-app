@@ -1,7 +1,34 @@
+/**
+ * hig-waitlist.js — "Repair Ready" page
+ *
+ * Manages the higWaitlist Firestore collection: POST clients on the home
+ * repair grant waitlist, ranked by a weighted priority score.
+ *
+ * Priority score formula (calcScore):
+ *   score = (amiScore * amiWeight + budgetScore * budgetWeight +
+ *            timeScore * timeWeight + waitScore * waitTimeWeight) / totalWeight
+ *
+ *   - Lower AMI  → higher amiScore   (Extremely Low scores highest)
+ *   - Smaller budget / fewer days → higher budgetScore / timeScore
+ *   - Longer time on waitlist → higher waitScore
+ *
+ *   Weights are stored in config/higWeights and editable in ED Settings.
+ *   AMI tier also determines assistance type: ≤50% = forgivable grant,
+ *   50–80% = forgivable loan, 80–120% = cost-sharing.
+ *
+ * Row click behavior:
+ *   - Has clientId → navigate to client.html?id={clientId} (full profile)
+ *   - "Edit Entry" button → open modal for waitlist-specific fields
+ *     (scope of work, budget, days, status, Drive documents)
+ *
+ * "+ Add Client" filters to active POST clients not already on the list.
+ */
+
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { openDrivePicker, openDriveFolderPicker } from './picker.js';
 import {
-  collection, getDocs, doc, getDoc, updateDoc, orderBy, query, serverTimestamp
+  collection, getDocs, doc, getDoc, addDoc, updateDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── AMI helpers ───────────────────────────────────────────────────────────────
@@ -73,9 +100,12 @@ const STATUS_COLORS = {
   complete:     'badge-gray',
 };
 
-let allRows = [];
-let weights = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
-let editingId = null;
+let allRows       = [];
+let _allClients   = []; // cached for client selector
+let weights       = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
+let editingId     = null;
+let _editFile     = null;
+let _editFolder   = null;
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'hig-waitlist');
@@ -95,6 +125,33 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('higEditCancel').addEventListener('click', closeModal);
   document.getElementById('higEditSave').addEventListener('click', saveEdit);
+
+  // Client selector
+  document.getElementById('addClientBtn').addEventListener('click', openClientSelector);
+  document.getElementById('clientSelectorClose').addEventListener('click', closeClientSelector);
+  document.getElementById('clientSelectorSearch').addEventListener('input', renderClientSelector);
+
+  // Drive link buttons
+  document.getElementById('linkSowBtn').addEventListener('click', async () => {
+    try {
+      const file = await openDrivePicker();
+      if (file) { _editFile = file; renderSowUI(); }
+    } catch (err) { alert('Could not open Drive picker: ' + err.message); }
+  });
+  document.getElementById('unlinkSowBtn').addEventListener('click', () => {
+    _editFile = null;
+    renderSowUI();
+  });
+  document.getElementById('linkHigFolderBtn').addEventListener('click', async () => {
+    try {
+      const folder = await openDriveFolderPicker();
+      if (folder) { _editFolder = folder; renderFolderUI(); }
+    } catch (err) { alert('Could not open Drive picker: ' + err.message); }
+  });
+  document.getElementById('unlinkHigFolderBtn').addEventListener('click', () => {
+    _editFolder = null;
+    renderFolderUI();
+  });
 });
 
 function render() {
@@ -116,7 +173,7 @@ function render() {
 
   const tbody = document.getElementById('higBody');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="padding:2rem;text-align:center;">No entries found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="padding:2rem;text-align:center;">No entries found.</td></tr>';
     return;
   }
 
@@ -131,9 +188,9 @@ function render() {
       : '';
     const docs = (docLink || folderLink) ? (docLink + folderLink) : '<span class="text-muted">—</span>';
 
-    return `<tr class="clickable-row" data-id="${r.id}">
+    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
       <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
-      <td>${esc(toTitleCase(r.clientName))}</td>
+      <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(r.amiPercent)}</td>
       <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
       <td>${r.estimatedBudget ? '$' + Number(r.estimatedBudget).toLocaleString() : '—'}</td>
@@ -142,13 +199,23 @@ function render() {
       <td>${daysWaiting}</td>
       <td><span class="badge ${STATUS_COLORS[r.status] || ''}">${STATUS_LABELS[r.status] || r.status}</span></td>
       <td>${docs}</td>
+      <td><button class="btn btn-secondary btn-sm edit-entry-btn" data-id="${r.id}" style="white-space:nowrap;">Edit Entry</button></td>
     </tr>`;
   }).join('');
 
   tbody.querySelectorAll('.clickable-row').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.tagName === 'A') return; // don't open modal when clicking links
-      openEditModal(row.dataset.id);
+      if (e.target.closest('a')) return;
+      if (e.target.closest('.edit-entry-btn')) {
+        openEditModal(e.target.closest('.edit-entry-btn').dataset.id);
+        return;
+      }
+      const clientId = row.dataset.clientId;
+      if (clientId) {
+        window.location.href = `client.html?id=${clientId}`;
+      } else {
+        openEditModal(row.dataset.id);
+      }
     });
   });
 }
@@ -165,34 +232,69 @@ function openEditModal(id) {
   document.getElementById('editHigStatus').value       = r.status          || 'waitlisted';
   document.getElementById('editHigNotes').value        = r.notes           || '';
 
-  const fileLink = document.getElementById('editHigFileLink');
-  const fileName = document.getElementById('editHigFileName');
-  if (r.driveFileUrl) {
-    fileLink.href = r.driveFileUrl;
-    fileLink.classList.remove('hidden');
-    fileName.textContent = r.driveFileName || '';
-  } else {
-    fileLink.classList.add('hidden');
-    fileName.textContent = 'No document linked';
-  }
-
-  const folderLink = document.getElementById('editHigFolderLink');
-  const folderName = document.getElementById('editHigFolderName');
-  if (r.driveFolderUrl) {
-    folderLink.href = r.driveFolderUrl;
-    folderLink.classList.remove('hidden');
-    folderName.textContent = r.driveFolderName || '';
-  } else {
-    folderLink.classList.add('hidden');
-    folderName.textContent = 'No folder linked';
-  }
+  // Seed local Drive state from record
+  _editFile   = r.driveFileId   ? { id: r.driveFileId,   name: r.driveFileName   || '', url: r.driveFileUrl   || '' } : null;
+  _editFolder = r.driveFolderId ? { id: r.driveFolderId, name: r.driveFolderName || '', url: r.driveFolderUrl || '' } : null;
+  renderSowUI();
+  renderFolderUI();
 
   document.getElementById('higEditError').classList.add('hidden');
+
+  const linkDiv = document.getElementById('higClientLink');
+  const anchor  = document.getElementById('higClientAnchor');
+  if (r.clientId) {
+    anchor.href        = `client.html?id=${r.clientId}`;
+    anchor.textContent = toTitleCase(r.clientName) || r.clientId;
+    linkDiv.classList.remove('hidden');
+  } else {
+    linkDiv.classList.add('hidden');
+  }
+
   document.getElementById('higEditModal').classList.remove('hidden');
 }
 
+function renderSowUI() {
+  const link      = document.getElementById('editHigFileLink');
+  const nameSpan  = document.getElementById('editHigFileName');
+  const linkBtn   = document.getElementById('linkSowBtn');
+  const unlinkBtn = document.getElementById('unlinkSowBtn');
+  if (_editFile) {
+    link.href = _editFile.url;
+    link.classList.remove('hidden');
+    nameSpan.textContent = _editFile.name;
+    linkBtn.textContent  = 'Change Document';
+    unlinkBtn.classList.remove('hidden');
+  } else {
+    link.classList.add('hidden');
+    nameSpan.textContent = 'No document linked';
+    linkBtn.textContent  = 'Link Document';
+    unlinkBtn.classList.add('hidden');
+  }
+}
+
+function renderFolderUI() {
+  const link      = document.getElementById('editHigFolderLink');
+  const nameSpan  = document.getElementById('editHigFolderName');
+  const linkBtn   = document.getElementById('linkHigFolderBtn');
+  const unlinkBtn = document.getElementById('unlinkHigFolderBtn');
+  if (_editFolder) {
+    link.href = _editFolder.url;
+    link.classList.remove('hidden');
+    nameSpan.textContent = _editFolder.name;
+    linkBtn.textContent  = 'Change Folder';
+    unlinkBtn.classList.remove('hidden');
+  } else {
+    link.classList.add('hidden');
+    nameSpan.textContent = 'No folder linked';
+    linkBtn.textContent  = 'Link Folder';
+    unlinkBtn.classList.add('hidden');
+  }
+}
+
 function closeModal() {
-  editingId = null;
+  editingId   = null;
+  _editFile   = null;
+  _editFolder = null;
   document.getElementById('higEditModal').classList.add('hidden');
 }
 
@@ -211,6 +313,12 @@ async function saveEdit() {
       estimatedDays:   parseInt(document.getElementById('editHigDays').value, 10) || 0,
       status:          document.getElementById('editHigStatus').value,
       notes:           document.getElementById('editHigNotes').value.trim(),
+      driveFileId:     _editFile?.id    || '',
+      driveFileName:   _editFile?.name  || '',
+      driveFileUrl:    _editFile?.url   || '',
+      driveFolderId:   _editFolder?.id   || '',
+      driveFolderName: _editFolder?.name || '',
+      driveFolderUrl:  _editFolder?.url  || '',
       updatedAt:       serverTimestamp(),
     };
     await updateDoc(doc(db, 'higWaitlist', editingId), updates);
@@ -228,6 +336,93 @@ async function saveEdit() {
     saveBtn.textContent = 'Save';
   }
 }
+
+// ── Client selector ───────────────────────────────────────────────────────────
+
+async function openClientSelector() {
+  document.getElementById('clientSelectorSearch').value = '';
+  document.getElementById('clientSelectorList').innerHTML =
+    '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">Loading…</div>';
+  document.getElementById('clientSelectorModal').classList.remove('hidden');
+
+  // Load all clients once and cache
+  if (!_allClients.length) {
+    const snap = await getDocs(collection(db, 'clients'));
+    _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+  renderClientSelector();
+}
+
+function closeClientSelector() {
+  document.getElementById('clientSelectorModal').classList.add('hidden');
+}
+
+function renderClientSelector() {
+  const search    = document.getElementById('clientSelectorSearch').value.toLowerCase();
+  const listedIds = new Set(allRows.map(r => r.clientId).filter(Boolean));
+
+  // Eligible: POST clients not already on the list
+  const eligible = _allClients.filter(c =>
+    c.counselingType === 'POST' &&
+    (c.status || 'active') === 'active' &&
+    !listedIds.has(c.id) &&
+    (!search ||
+      (c.clientName || '').toLowerCase().includes(search) ||
+      (c.counselor  || '').toLowerCase().includes(search))
+  ).sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
+
+  const list = document.getElementById('clientSelectorList');
+  if (!eligible.length) {
+    list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No eligible POST clients found.</div>';
+    return;
+  }
+
+  list.innerHTML = eligible.map(c => `
+    <div class="client-selector-item" data-client-id="${c.id}">
+      <div>
+        <div class="cs-name">${esc(toTitleCase(c.clientName))}</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.amiPercent || '')} · POST</div>
+      </div>
+      <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Add →</span>
+    </div>`).join('');
+
+  list.querySelectorAll('.client-selector-item').forEach(item => {
+    item.addEventListener('click', () => addClientToList(item.dataset.clientId));
+  });
+}
+
+async function addClientToList(clientId) {
+  const client = _allClients.find(c => c.id === clientId);
+  if (!client) return;
+
+  try {
+    const newDoc = await addDoc(collection(db, 'higWaitlist'), {
+      clientId,
+      clientName:      client.clientName      || '',
+      amiPercent:      client.amiPercent       || '',
+      driveFolderId:   client.driveFolderId    || '',
+      driveFolderName: client.driveFolderName  || '',
+      driveFolderUrl:  client.driveFolderUrl   || '',
+      scopeOfWork:     '',
+      estimatedBudget: 0,
+      estimatedDays:   0,
+      status:          'waitlisted',
+      notes:           '',
+      enrolledAt:      serverTimestamp(),
+      updatedAt:       serverTimestamp(),
+    });
+
+    // Add to local list immediately
+    allRows.push({ id: newDoc.id, clientId, clientName: client.clientName,
+      amiPercent: client.amiPercent, status: 'waitlisted', enrolledAt: new Date() });
+    closeClientSelector();
+    render();
+  } catch (err) {
+    alert('Failed to add client: ' + err.message);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function esc(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');

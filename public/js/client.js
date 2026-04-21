@@ -4,7 +4,7 @@ import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
-  query, orderBy, where, serverTimestamp
+  query, orderBy, where, serverTimestamp, limit
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const params   = new URLSearchParams(window.location.search);
@@ -30,7 +30,7 @@ requireAuth(async (user, profile) => {
   ]);
 
   await loadClient();
-  await Promise.all([loadSessions(), loadCmcLink()]);
+  await Promise.all([loadSessions(), loadCmcLink(), loadListMembership()]);
 
   wireClientForm();
   wireSessionModal();
@@ -152,10 +152,11 @@ function populateClientForm(c) {
   // Rx chips
   renderChips('rxChips', c.rxNumbers || [], removeRx);
 
-  // PRE-specific: areas of interest tag input
+  // PRE-specific: home search notes
   const isPre = c.counselingType === 'PRE';
   document.getElementById('areasSection').classList.toggle('hidden', !isPre);
-  if (isPre) renderAreaTags(c.areasOfInterest || []);
+  const notesEl = document.getElementById('homeSearchNotes');
+  if (notesEl) notesEl.value = c.homeSearchNotes || '';
 
   // Drive folder
   if (c.driveFolderId) {
@@ -163,7 +164,7 @@ function populateClientForm(c) {
   }
   renderFolderUI();
 
-  // Show/hide areas section when type changes
+  // Show/hide home search notes section when type changes
   document.getElementById('counselingType').addEventListener('change', () => {
     const pre = document.getElementById('counselingType').value === 'PRE';
     document.getElementById('areasSection').classList.toggle('hidden', !pre);
@@ -295,27 +296,6 @@ function wireClientForm() {
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addRxBtn').click(); }
   });
 
-  // Area tag input — Enter or comma triggers add
-  const areaInput = document.getElementById('areaInput');
-  if (areaInput) {
-    areaInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ',') {
-        e.preventDefault();
-        addAreaTag(areaInput.value);
-        areaInput.value = '';
-      }
-    });
-    // Also add on blur so typing then clicking Save still works
-    areaInput.addEventListener('blur', () => {
-      if (areaInput.value.trim()) {
-        addAreaTag(areaInput.value);
-        areaInput.value = '';
-      }
-    });
-    // Click on the box focuses the input
-    document.getElementById('areaTagBox').addEventListener('click', () => areaInput.focus());
-  }
-
   // Save client
   document.getElementById('saveClientBtn').addEventListener('click', saveClient);
 
@@ -395,7 +375,7 @@ async function saveClient() {
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,
       rxNumbers:         _client.rxNumbers || [],
-      areasOfInterest:   _client.areasOfInterest || [],
+      homeSearchNotes:   (document.getElementById('homeSearchNotes')?.value || '').trim(),
       driveFolderId:     _driveFolder?.id   || '',
       driveFolderName:   _driveFolder?.name || '',
       driveFolderUrl:    _driveFolder?.url  || '',
@@ -405,6 +385,7 @@ async function saveClient() {
     await updateDoc(doc(db, 'clients', clientId), data);
     Object.assign(_client, data);
     renderHeader(_client);
+    syncClientToLists(data); // fire-and-forget; non-blocking
     msgEl.textContent = 'Saved.';
     msgEl.style.color = 'var(--success, green)';
     msgEl.classList.remove('hidden');
@@ -520,7 +501,6 @@ function clearSessionModal() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  document.getElementById('sAwardType').value = '';
 }
 
 function closeSessionModal() {
@@ -628,6 +608,103 @@ async function refreshClientDenormalized() {
 
   _client.sessionCount      = sessionCount;
   _client.totalOutcomeValue = totalOutcomeValue;
+}
+
+// ── Program Lists (Buyer Ready / Repair Ready) ───────────────────────────────
+//
+// The "Program Lists" card at the bottom of the profile shows whether this
+// client is enrolled on the Buyer Ready (ccaList) or Repair Ready (higWaitlist)
+// list. Each slot shows either a "View on {List}" link or an "+ Add to {List}"
+// button, depending on whether a linked record exists.
+//
+// The link is established by storing clientId as a foreign key on the list doc.
+// limit(1) is used because each client should appear on each list at most once.
+
+async function loadListMembership() {
+  try {
+    const [ccaSnap, higSnap] = await Promise.all([
+      getDocs(query(collection(db, 'ccaList'),    where('clientId', '==', clientId), limit(1))),
+      getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId), limit(1))),
+    ]);
+    renderListSlot('buyerReadySlot',  ccaSnap.empty  ? null : ccaSnap.docs[0].id,  'Buyer Ready',  'cca-list');
+    renderListSlot('homeRepairsSlot', higSnap.empty  ? null : higSnap.docs[0].id,  'Home Repairs', 'hig-waitlist');
+  } catch (_) {}
+}
+
+function renderListSlot(slotId, linkedId, label, page) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  if (linkedId) {
+    slot.innerHTML = `<a href="${page}.html" class="btn btn-secondary btn-sm">View on ${label}</a>`;
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = `+ Add to ${label}`;
+    btn.addEventListener('click', () => addToList(slotId, label, page));
+    slot.innerHTML = '';
+    slot.appendChild(btn);
+  }
+}
+
+async function addToList(slotId, label, page) {
+  const btn = document.querySelector(`#${slotId} button`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const base = {
+      clientId:        clientId,
+      clientName:      _client.clientName  || '',
+      amiPercent:      _client.amiPercent  || '',
+      driveFolderId:   _client.driveFolderId  || '',
+      driveFolderName: _client.driveFolderName || '',
+      driveFolderUrl:  _client.driveFolderUrl  || '',
+      enrolledAt:      serverTimestamp(),
+      updatedAt:       serverTimestamp(),
+      notes:           '',
+      status:          page === 'cca-list' ? 'eligible' : 'waitlisted',
+    };
+    if (page === 'cca-list') {
+      Object.assign(base, { counselor: _client.counselor || '', closingDate: null, ccaAmount: 0 });
+      await addDoc(collection(db, 'ccaList'), base);
+    } else {
+      Object.assign(base, { scopeOfWork: '', estimatedBudget: 0, estimatedDays: 0 });
+      await addDoc(collection(db, 'higWaitlist'), base);
+    }
+    await loadListMembership();
+  } catch (err) {
+    alert('Failed to add to list: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = `+ Add to ${label}`; }
+  }
+}
+
+// Called (fire-and-forget, without await) after every client profile save.
+// Finds any ccaList / higWaitlist records linked to this client and pushes
+// the updated name, counselor, AMI, and Drive folder to them, so the list
+// pages always reflect the latest client data without the counselor having
+// to update two places. Errors are silently swallowed — a sync failure
+// should never block the profile save from completing.
+async function syncClientToLists(data) {
+  try {
+    const ccaBase = {
+      clientName:      data.clientName      || '',
+      counselor:       data.counselor       || '',
+      amiPercent:      data.amiPercent      || '',
+      driveFolderId:   data.driveFolderId   || '',
+      driveFolderName: data.driveFolderName || '',
+      driveFolderUrl:  data.driveFolderUrl  || '',
+      updatedAt:       serverTimestamp(),
+    };
+    const higBase = { ...ccaBase };
+    delete higBase.counselor; // hig records don't track counselor
+
+    const [ccaSnap, higSnap] = await Promise.all([
+      getDocs(query(collection(db, 'ccaList'),    where('clientId', '==', clientId))),
+      getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId))),
+    ]);
+    await Promise.all([
+      ...ccaSnap.docs.map(d => updateDoc(doc(db, 'ccaList',    d.id), ccaBase)),
+      ...higSnap.docs.map(d => updateDoc(doc(db, 'higWaitlist', d.id), higBase)),
+    ]);
+  } catch (_) {}
 }
 
 // ── Close File modal ──────────────────────────────────────────────────────────

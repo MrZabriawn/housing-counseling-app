@@ -122,13 +122,10 @@
 
         <!-- PRE only -->
         <div id="areasSection" class="full-width hidden">
-          <div class="section-title" style="grid-column:1/-1;">Areas of Interest</div>
+          <div class="section-title" style="grid-column:1/-1;">Home Search Notes</div>
           <div class="form-group full-width">
-            <label>Where are you looking to buy a home?</label>
-            <div class="tag-input-box" id="areaTagBox">
-              <input type="text" id="areaInput" placeholder="Type a county or area and press Enter…">
-            </div>
-            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem;">Press Enter or comma to add each area.</p>
+            <label for="homeSearchNotes">Desired location, home type, size, and any other search criteria</label>
+            <textarea id="homeSearchNotes" rows="4" placeholder="e.g. Looking for a 3-bedroom single family home in Beaver County, preferably with a garage. Budget around $180k. Open to Lawrence County as well."></textarea>
           </div>
         </div>
 
@@ -175,6 +172,15 @@
       </div>
     </div>
   </main>
+
+  <!-- Program Lists -->
+  <div class="card" style="margin-top:1.25rem;">
+    <div class="card-title">Program Lists</div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+      <div id="buyerReadySlot"></div>
+      <div id="homeRepairsSlot"></div>
+    </div>
+  </div>
 
   <!-- Session Modal -->
   <div id="sessionModal" class="modal-overlay hidden">

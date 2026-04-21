@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Buyer Ready — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
+  <style>
+    .client-selector-list { max-height:360px; overflow-y:auto; margin-top:0.75rem; border:1px solid var(--border); border-radius:var(--radius); }
+    .client-selector-item { display:flex; justify-content:space-between; align-items:center; padding:0.6rem 0.85rem; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.875rem; transition:background 0.1s; }
+    .client-selector-item:last-child { border-bottom:none; }
+    .client-selector-item:hover { background:var(--primary-light,#e8f0fe); }
+    .client-selector-item .cs-name { font-weight:600; }
+    .client-selector-item .cs-meta { font-size:0.78rem; color:var(--text-muted); }
+  </style>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -15,6 +23,7 @@
         <h2>Buyer Ready</h2>
         <p>Pre-purchase clients eligible for closing cost assistance.</p>
       </div>
+      <button id="addClientBtn" class="btn btn-primary btn-sm">+ Add Client</button>
     </div>
 
     <div class="filter-bar">
@@ -47,10 +56,11 @@
             <th>Status</th>
             <th>Drive Folder</th>
             <th>Enrolled</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="ccaBody">
-          <tr><td colspan="8" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
+          <tr><td colspan="9" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -60,6 +70,9 @@
   <div id="ccaEditModal" class="modal-overlay hidden">
     <div class="modal-box">
       <h3 id="ccaEditTitle">Edit CCA Entry</h3>
+      <div id="ccaClientLink" class="hidden" style="margin-bottom:0.75rem;font-size:0.8125rem;background:var(--primary-light,#e8f0fe);padding:0.45rem 0.75rem;border-radius:var(--radius);">
+        <a id="ccaClientAnchor" href="#" style="font-weight:600;">View Full Client Profile →</a>
+      </div>
       <div class="form-grid" style="margin-top:1rem;">
         <div class="form-group">
           <label for="editClosingDate">Closing Date</label>
@@ -88,6 +101,21 @@
       <div class="form-actions">
         <button id="ccaEditSave" class="btn btn-primary">Save</button>
         <button id="ccaEditCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Selector Modal -->
+  <div id="clientSelectorModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3>Add Client to Buyer Ready</h3>
+      <p style="font-size:0.8125rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">Showing PRE clients not already on this list.</p>
+      <input type="text" id="clientSelectorSearch" placeholder="Search by name or counselor…" style="width:100%;">
+      <div id="clientSelectorList" class="client-selector-list">
+        <div style="padding:1.5rem;text-align:center;color:var(--text-muted);">Loading…</div>
+      </div>
+      <div class="form-actions">
+        <button id="clientSelectorClose" class="btn btn-secondary">Cancel</button>
       </div>
     </div>
   </div>

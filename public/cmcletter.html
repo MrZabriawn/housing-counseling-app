@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CMC Letters — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* County toggle */
+    .county-tabs { display:flex; gap:0; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; width:fit-content; margin-bottom:1.25rem; }
+    .county-tab { padding:0.45rem 1.1rem; font-size:0.875rem; font-weight:600; cursor:pointer; background:#fff; border:none; border-right:1px solid var(--border); color:var(--text-muted); transition:background 0.12s,color 0.12s; }
+    .county-tab:last-child { border-right:none; }
+    .county-tab.active { background:var(--primary); color:#fff; }
+
+    /* Batch input table */
+    .batch-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .batch-table th { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; padding:0.5rem 0.4rem; border-bottom:2px solid var(--border); background:#f8f9fb; white-space:nowrap; }
+    .batch-table td { padding:0.3rem 0.4rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .batch-table input[type="text"] { width:100%; border:1px solid var(--border); border-radius:4px; padding:0.3rem 0.45rem; font-size:0.85rem; background:#fff; }
+    .batch-table input[type="text"]:focus { outline:none; border-color:var(--primary); }
+    .row-num { width:2rem; text-align:center; color:var(--text-muted); font-size:0.8rem; }
+    .del-col  { width:2.5rem; text-align:center; }
+    .del-btn  { background:none; border:none; cursor:pointer; color:var(--danger,#dc2626); font-size:1.2rem; line-height:1; padding:0.15rem 0.4rem; border-radius:4px; }
+    .del-btn:hover { background:#fee2e2; }
+
+    /* Past-log generate bar */
+    #generateBar { display:none; align-items:center; gap:1rem; background:var(--primary-light,#e8f0fe); border:1px solid var(--primary,#2563eb); border-radius:var(--radius); padding:0.65rem 1rem; margin-bottom:1rem; font-size:0.875rem; }
+    .cb-col { width:2rem; text-align:center; }
+    input[type="checkbox"] { width:1rem; height:1rem; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>CMC Letters</h2>
+        <p>Batch-generate foreclosure outreach letters and log them automatically.</p>
+      </div>
+    </div>
+
+    <!-- ── New Batch ──────────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title">New Batch</div>
+
+      <!-- County toggle -->
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);display:block;margin-bottom:0.5rem;">County / Template</label>
+        <div class="county-tabs">
+          <button class="county-tab active" data-county="dan">Beaver County</button>
+          <button class="county-tab" data-county="andrusa">Lawrence County</button>
+          <button class="county-tab" data-county="mercer">Mercer County</button>
+        </div>
+      </div>
+
+      <!-- Date -->
+      <div style="display:flex;align-items:flex-end;gap:1rem;margin-bottom:1.1rem;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;">
+          <label for="batchDate">Letter Date</label>
+          <input type="date" id="batchDate" style="max-width:185px;">
+        </div>
+      </div>
+
+      <!-- Batch rows -->
+      <div style="overflow-x:auto;margin-bottom:0.75rem;">
+        <table class="batch-table">
+          <thead>
+            <tr>
+              <th class="row-num">#</th>
+              <th style="min-width:160px;">Recipient Name *</th>
+              <th style="min-width:180px;">Mailing Address — Street *</th>
+              <th style="min-width:180px;">City, State ZIP *</th>
+              <th style="min-width:180px;">Property Address *</th>
+              <th id="lenderHeader" style="min-width:160px;">Lender / Plaintiff *</th>
+              <th class="del-col"></th>
+            </tr>
+          </thead>
+          <tbody id="batchBody"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+        <button id="addRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        <button id="clearBatchBtn" class="btn btn-secondary btn-sm">Clear All</button>
+        <button id="generateLogBtn" class="btn btn-primary" style="margin-left:auto;">Generate Letters &amp; Log All</button>
+      </div>
+      <p id="batchError" class="error-msg hidden" style="margin-top:0.6rem;"></p>
+    </div>
+
+    <!-- ── Stats ──────────────────────────────────────────────────────── -->
+    <div class="stats-row" style="margin:1.25rem 0;">
+      <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Letters Sent</div></div>
+      <div class="stat-card"><div class="stat-value" id="statLinked">—</div><div class="stat-label">Became Clients</div></div>
+      <div class="stat-card"><div class="stat-value" id="statRate">—</div><div class="stat-label">Success Rate</div></div>
+    </div>
+
+    <!-- ── Past Letters ───────────────────────────────────────────────── -->
+    <div id="generateBar">
+      <span id="selectedCount">0 selected</span>
+      <button id="generateBtn" class="btn btn-primary btn-sm">Re-generate Selected</button>
+      <button id="clearSelBtn" class="btn btn-secondary btn-sm">Clear Selection</button>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);">
+        <span style="font-weight:600;font-size:0.9rem;">Past Letters</span>
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="selectAll"> Select all
+        </label>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th class="cb-col"></th>
+              <th>Date Sent</th>
+              <th>Name</th>
+              <th>Mailing Address</th>
+              <th>Property Address</th>
+              <th>County</th>
+              <th>Logged By</th>
+              <th>Linked Client</th>
+            </tr>
+          </thead>
+          <tbody id="cmcTableBody">
+            <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/cmcletter.js"></script>
+</body>
+</html>

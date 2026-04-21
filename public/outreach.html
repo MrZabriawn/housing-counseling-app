@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outreach — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* County toggle */
+    .county-tabs { display:flex; gap:0; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; width:fit-content; margin-bottom:1.25rem; }
+    .county-tab { padding:0.45rem 1.1rem; font-size:0.875rem; font-weight:600; cursor:pointer; background:#fff; border:none; border-right:1px solid var(--border); color:var(--text-muted); transition:background 0.12s,color 0.12s; }
+    .county-tab:last-child { border-right:none; }
+    .county-tab.active { background:var(--primary); color:#fff; }
+
+    /* Batch input table */
+    .batch-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .batch-table th { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; padding:0.5rem 0.4rem; border-bottom:2px solid var(--border); background:#f8f9fb; white-space:nowrap; }
+    .batch-table td { padding:0.3rem 0.4rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .batch-table input[type="text"] { width:100%; border:1px solid var(--border); border-radius:4px; padding:0.3rem 0.45rem; font-size:0.85rem; background:#fff; }
+    .batch-table input[type="text"]:focus { outline:none; border-color:var(--primary); }
+    .row-num { width:2rem; text-align:center; color:var(--text-muted); font-size:0.8rem; }
+    .del-col  { width:2.5rem; text-align:center; }
+    .del-btn  { background:none; border:none; cursor:pointer; color:var(--danger,#dc2626); font-size:1.2rem; line-height:1; padding:0.15rem 0.4rem; border-radius:4px; }
+    .del-btn:hover { background:#fee2e2; }
+
+    /* Past-log generate bar */
+    #generateBar { display:none; align-items:center; gap:1rem; background:var(--primary-light,#e8f0fe); border:1px solid var(--primary,#2563eb); border-radius:var(--radius); padding:0.65rem 1rem; margin-bottom:1rem; font-size:0.875rem; }
+    .cb-col { width:2rem; text-align:center; }
+    input[type="checkbox"] { width:1rem; height:1rem; cursor:pointer; }
+
+    /* Call log */
+    .call-type-toggle { display:flex; gap:0; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; width:fit-content; margin-bottom:1rem; }
+    .call-type-btn { padding:0.4rem 1rem; font-size:0.875rem; font-weight:600; cursor:pointer; background:#fff; border:none; border-right:1px solid var(--border); color:var(--text-muted); transition:background 0.12s,color 0.12s; }
+    .call-type-btn:last-child { border-right:none; }
+    .call-type-btn.active { background:var(--primary); color:#fff; }
+
+    /* Client search in modal */
+    .client-search-results { border:1px solid var(--border); border-radius:var(--radius); max-height:220px; overflow-y:auto; margin-top:0.4rem; }
+    .csr-item { padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.875rem; }
+    .csr-item:last-child { border-bottom:none; }
+    .csr-item:hover { background:var(--primary-light,#e8f0fe); }
+    .csr-item.selected { background:var(--primary-light,#e8f0fe); font-weight:600; }
+    .csr-name { font-weight:600; }
+    .csr-meta { font-size:0.77rem; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Outreach</h2>
+        <p>CMC foreclosure letters and phone call activity log.</p>
+      </div>
+    </div>
+
+    <!-- ── CMC Letters ──────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title">New CMC Batch</div>
+
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);display:block;margin-bottom:0.5rem;">County / Template</label>
+        <div class="county-tabs">
+          <button class="county-tab active" data-county="dan">Beaver County</button>
+          <button class="county-tab" data-county="andrusa">Lawrence County</button>
+          <button class="county-tab" data-county="mercer">Mercer County</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;gap:1rem;margin-bottom:1.1rem;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;">
+          <label for="batchDate">Letter Date</label>
+          <input type="date" id="batchDate" style="max-width:185px;">
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;margin-bottom:0.75rem;">
+        <table class="batch-table">
+          <thead>
+            <tr>
+              <th class="row-num">#</th>
+              <th style="min-width:160px;">Recipient Name *</th>
+              <th style="min-width:180px;">Mailing Address — Street *</th>
+              <th style="min-width:180px;">City, State ZIP *</th>
+              <th style="min-width:180px;">Property Address *</th>
+              <th id="lenderHeader" style="min-width:160px;">Lender / Plaintiff *</th>
+              <th class="del-col"></th>
+            </tr>
+          </thead>
+          <tbody id="batchBody"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+        <button id="addRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        <button id="clearBatchBtn" class="btn btn-secondary btn-sm">Clear All</button>
+        <button id="generateLogBtn" class="btn btn-primary" style="margin-left:auto;">Generate Letters &amp; Log All</button>
+      </div>
+      <p id="batchError" class="error-msg hidden" style="margin-top:0.6rem;"></p>
+    </div>
+
+    <!-- ── Letter Stats ──────────────────────────────────────────────── -->
+    <div class="stats-row" style="margin:1.25rem 0 0;">
+      <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Letters Sent</div></div>
+      <div class="stat-card"><div class="stat-value" id="statLinked">—</div><div class="stat-label">Became Clients</div></div>
+      <div class="stat-card"><div class="stat-value" id="statRate">—</div><div class="stat-label">Success Rate</div></div>
+    </div>
+
+    <!-- ── Call Log ──────────────────────────────────────────────────── -->
+    <div class="card" style="padding:0;margin-top:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);">
+        <span style="font-weight:600;font-size:0.9rem;">Call Log</span>
+        <button id="logCallBtn" class="btn btn-primary btn-sm">+ Log a Call</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Counselor</th>
+              <th>Outcome</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="callLogBody">
+            <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Past Letters ───────────────────────────────────────────────── -->
+    <div id="generateBar" style="margin-top:1.25rem;">
+      <span id="selectedCount">0 selected</span>
+      <button id="generateBtn" class="btn btn-primary btn-sm">Re-generate Selected</button>
+      <button id="clearSelBtn" class="btn btn-secondary btn-sm">Clear Selection</button>
+    </div>
+
+    <div class="card" style="padding:0;margin-top:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);">
+        <span style="font-weight:600;font-size:0.9rem;">Past Letters</span>
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="selectAll"> Select all
+        </label>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th class="cb-col"></th>
+              <th>Date Sent</th>
+              <th>Name</th>
+              <th>Mailing Address</th>
+              <th>Property Address</th>
+              <th>County</th>
+              <th>Logged By</th>
+              <th>Linked Client</th>
+            </tr>
+          </thead>
+          <tbody id="cmcTableBody">
+            <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Log a Call Modal ──────────────────────────────────────────── -->
+  <div id="callModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3>Log a Call</h3>
+
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="callDate">Date *</label>
+          <input type="date" id="callDate">
+        </div>
+        <div class="form-group">
+          <label for="callCounselor">Counselor</label>
+          <select id="callCounselor">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+
+        <!-- Type toggle -->
+        <div class="form-group full-width">
+          <label>Contact Type</label>
+          <div class="call-type-toggle">
+            <button class="call-type-btn active" data-type="client">Existing Client</button>
+            <button class="call-type-btn" data-type="prospect">Prospect</button>
+          </div>
+        </div>
+
+        <!-- Client search (shown for type=client) -->
+        <div id="clientSearchSection" class="form-group full-width">
+          <label for="callClientSearch">Search Client</label>
+          <input type="text" id="callClientSearch" placeholder="Name, counselor, or Rx…" autocomplete="off">
+          <div id="callClientResults" class="client-search-results">
+            <div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>
+          </div>
+          <input type="hidden" id="callClientId">
+          <div id="callClientSelected" class="hidden" style="margin-top:0.5rem;font-size:0.875rem;background:var(--primary-light,#e8f0fe);border-radius:var(--radius);padding:0.4rem 0.75rem;display:flex;justify-content:space-between;align-items:center;">
+            <span id="callClientSelectedName"></span>
+            <button type="button" id="callClientClear" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;">×</button>
+          </div>
+        </div>
+
+        <!-- Prospect fields (shown for type=prospect) -->
+        <div id="prospectSection" class="hidden" style="display:contents;">
+          <div class="form-group">
+            <label for="prospectName">Prospect Name *</label>
+            <input type="text" id="prospectName" placeholder="Full name">
+          </div>
+          <div class="form-group">
+            <label for="prospectPhone">Phone Number</label>
+            <input type="text" id="prospectPhone" placeholder="555-555-5555">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="callOutcome">Outcome</label>
+          <input type="text" id="callOutcome" placeholder="e.g. Left voicemail, Intake scheduled…">
+        </div>
+        <div class="form-group full-width">
+          <label for="callNotes">Notes</label>
+          <textarea id="callNotes" rows="3" placeholder="Brief summary of the call…"></textarea>
+        </div>
+      </div>
+
+      <p id="callModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="callModalSave" class="btn btn-primary">Save Call</button>
+        <button id="callModalCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/outreach.js"></script>
+</body>
+</html>

@@ -53,15 +53,13 @@ export function setupNav(profile, activePage) {
     nav.innerHTML = `
       <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
       <div class="nav-links">
-        <a href="clients.html"     data-page="clients">Counseling Log</a>
-        <a href="new-client.html"  data-page="new-client">New Client</a>
-        <a href="cmc-log.html"     data-page="cmc-log">CMC Letters</a>
-        <a href="cca-list.html"    data-page="cca-list">Buyer Ready</a>
-        <a href="hig-waitlist.html" data-page="hig-waitlist">HIG Waitlist</a>
-        <a href="operations.html"  data-page="operations">Operations</a>
-        <a href="reports.html"     data-page="reports">Reports</a>
-        <a href="import.html"      data-page="import" class="admin-only hidden">Import</a>
-        <a href="settings.html"    data-page="settings" class="admin-only hidden">Settings</a>
+        <a href="clients.html"      data-page="clients">Counseling Log</a>
+        <a href="cca-list.html"     data-page="cca-list">Buyer Ready</a>
+        <a href="hig-waitlist.html" data-page="hig-waitlist">Repair Ready</a>
+        <a href="outreach.html"     data-page="outreach">Outreach</a>
+        <a href="operations.html"   data-page="operations">Operations</a>
+        <a href="reports.html"      data-page="reports">Reports</a>
+        <a href="settings.html"     data-page="settings" class="admin-only hidden">Settings</a>
       </div>
       <div class="nav-user">
         <span id="navUserName"></span>

@@ -15,9 +15,7 @@ requireAuth(async (user, profile) => {
   // Store the logged-in counselor's name for new records
   window._currentCounselor = profile.name || profile.email || '';
 
-  await loadRecords();
-
-  // Modal open/close
+  // Wire up all event listeners first so a loadRecords error can't block them
   document.getElementById('logLetterBtn').addEventListener('click', openModal);
   document.getElementById('logModalSave').addEventListener('click', saveRecord);
   document.getElementById('logModalCancel').addEventListener('click', closeModal);
@@ -43,6 +41,8 @@ requireAuth(async (user, profile) => {
     document.getElementById('selectAll').checked = false;
     updateGenerateBar();
   });
+
+  await loadRecords();
 });
 
 // ── Load & render ─────────────────────────────────────────────────────────────
@@ -73,7 +73,9 @@ function renderTable(records) {
 
     const templateLabel = r.counselorTemplate === 'andrusa'
       ? 'Andrusa — Lawrence'
-      : 'Dan — Beaver';
+      : r.counselorTemplate === 'mercer'
+        ? 'Mercer County'
+        : 'Dan — Beaver';
 
     // Combine both mailing address lines for display
     const mailingDisplay = [r.mailingAddress, r.mailingAddress2].filter(Boolean).join(', ');
@@ -130,8 +132,10 @@ function generateLetters() {
     month: 'long', day: 'numeric', year: 'numeric'
   });
 
+  const logoUrl = window.location.origin + '/img/logo.png';
+
   // Build one letter page per selected record
-  const pages = selected.map(r => buildLetterHTML(r, today)).join('');
+  const pages = selected.map(r => buildLetterHTML(r, today, logoUrl)).join('');
 
   const win = window.open('', '_blank');
   win.document.write(`<!DOCTYPE html>
@@ -161,6 +165,39 @@ function generateLetters() {
     .closing     { margin-top: 2.5em; }
     .sig-block   { margin-top: 3.5em; line-height: 1.5; }
 
+    /* Mercer County letterhead */
+    .mercer-page {
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .mc-header {
+      background: #2d6a4f;
+      padding: 0.6in 1.1in;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .mc-logo {
+      height: 0.7in;
+      background: #fff;
+      padding: 0.08in 0.15in;
+      border-radius: 4px;
+    }
+    .mc-body {
+      flex: 1;
+      padding: 0.6in 1.1in 0.4in 1.1in;
+    }
+    .mc-footer {
+      border-top: 2px solid #2d6a4f;
+      padding: 0.18in 1.1in;
+      display: flex;
+      align-items: center;
+      gap: 0.25in;
+    }
+    .mc-footer-logo { height: 0.4in; }
+    .mc-footer-text { font-size: 9pt; line-height: 1.5; }
+
     @media print {
       @page { size: letter; margin: 0; }
       body  { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -176,7 +213,7 @@ ${pages}
 }
 
 // Returns the HTML for a single letter, choosing the correct template
-function buildLetterHTML(r, fallbackDate) {
+function buildLetterHTML(r, fallbackDate, logoUrl) {
   const dateLine    = r.dateSent
     ? fmtDateLong(r.dateSent)
     : fallbackDate;
@@ -185,9 +222,13 @@ function buildLetterHTML(r, fallbackDate) {
   const addr2       = escHtml(r.mailingAddress2 || '');
   const propAddr    = escHtml(r.propertyAddress || '');
   const lender      = escHtml(r.lender          || '');
+  const counselor   = escHtml(r.counselor       || '');
 
   if (r.counselorTemplate === 'andrusa') {
     return andrusaletter(dateLine, name, addr1, addr2, propAddr);
+  }
+  if (r.counselorTemplate === 'mercer') {
+    return mercerLetter(dateLine, name, addr1, addr2, propAddr, lender, counselor, logoUrl);
   }
   // Default to Dan's Beaver County template
   return danLetter(dateLine, name, addr1, addr2, propAddr, lender);
@@ -250,15 +291,58 @@ function andrusaletter(date, name, addr1, addr2, propAddr) {
 </div>`;
 }
 
+// Mercer County template (uses logged-in counselor's name as signature)
+function mercerLetter(date, name, addr1, addr2, propAddr, lender, counselor, logoUrl) {
+  return `<div class="letter-page mercer-page">
+  <div class="mc-header">
+    <img class="mc-logo" src="${logoUrl}" alt="Housing Opportunities Inc.">
+  </div>
+  <div class="mc-body">
+    <p class="date-line">${date}</p>
+
+    <div class="addr-block">
+      <p>${name}</p>
+      <p>${addr1}</p>
+      ${addr2 ? `<p>${addr2}</p>` : ''}
+    </div>
+
+    <p class="salutation">Dear ${name},</p>
+
+    <p class="body-para">Our agency has received notification that a Complaint in Foreclosure has been filed against you by Plaintiff, ${lender || '[BANK NAME]'}, in the Court of Common Pleas of Mercer County, PA.</p>
+
+    <p class="body-para">This Complaint regards your mortgaged property on ${propAddr || '[PROPERTY ADDRESS]'}.</p>
+
+    <p class="body-para">Housing Opportunities Inc is a HUD Approved Housing Counseling Agency located in New Castle, PA. We provide free services and advice for homeowners facing foreclosure enabling them to make an informed decision. Also, we can represent your case in Mercer County Mortgage Conciliation Court at no charge. If you choose to utilize our services, we require your written authorization during an in-office appointment at our location in New Castle to gather pertinent documents, information and advocate on your behalf.</p>
+
+    <p class="body-para">Please call us at 724.728.7511 to discuss your situation. We are here to help you navigate through the foreclosure process and find the best available solution.</p>
+
+    <p class="closing">Sincerely,</p>
+
+    <div class="sig-block">
+      <p>${counselor || '[COUNSELOR]'}</p>
+      <p>HUD Certified Housing Counselor</p>
+    </div>
+  </div>
+  <div class="mc-footer">
+    <img class="mc-footer-logo" src="${logoUrl}" alt="">
+    <div class="mc-footer-text">
+      <p>2418 Willmington Road, Suite C &nbsp;·&nbsp; New Castle, PA 16101</p>
+      <p>www.HousingOpps.org &nbsp;·&nbsp; 724-728-7511</p>
+    </div>
+  </div>
+</div>`;
+}
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 function toggleLenderField() {
   const template   = document.getElementById('lTemplate').value;
   const lenderGroup = document.getElementById('lenderGroup');
-  // Lender field is only relevant for Dan's Beaver County template
-  lenderGroup.style.opacity  = template === 'dan' ? '1' : '0.35';
-  lenderGroup.style.pointerEvents = template === 'dan' ? '' : 'none';
-  document.getElementById('lLender').required = template === 'dan';
+  // Lender field is required for Beaver County (dan) and Mercer County templates
+  const needsLender = template === 'dan' || template === 'mercer';
+  lenderGroup.style.opacity  = needsLender ? '1' : '0.35';
+  lenderGroup.style.pointerEvents = needsLender ? '' : 'none';
+  document.getElementById('lLender').required = needsLender;
 }
 
 function openModal() {
@@ -298,8 +382,8 @@ async function saveRecord() {
     errorEl.classList.remove('hidden');
     return;
   }
-  if (template === 'dan' && !lender) {
-    errorEl.textContent = 'Lender / Plaintiff is required for the Beaver County letter.';
+  if ((template === 'dan' || template === 'mercer') && !lender) {
+    errorEl.textContent = 'Lender / Plaintiff is required for this letter template.';
     errorEl.classList.remove('hidden');
     return;
   }

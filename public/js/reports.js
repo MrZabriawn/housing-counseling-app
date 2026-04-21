@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { MONTHS, AMI_LEVELS, RE_CODES, RE_CODE_LABELS } from './data.js';
 import {
-  collection, getDocs, query
+  collection, collectionGroup, getDocs, query, where, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // window.docx is loaded via the <script src="…/docx/build/index.js"> tag in reports.html
@@ -38,6 +38,10 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('downloadR1').addEventListener('click', () => generateReport1());
   document.getElementById('downloadR2').addEventListener('click', () => generateReport2());
+
+  // Court report
+  document.getElementById('courtReportYear').value = new Date().getFullYear();
+  document.getElementById('loadCourtReportBtn').addEventListener('click', loadCourtReport);
 });
 
 async function loadMonth() {
@@ -274,6 +278,138 @@ function buildTable3Col(headers, rows) {
       ...rows.map(([c1, c2, c3]) => new TableRow({ children: [makeCell(c1), makeCell(c2), makeCell(c3)] })),
     ]
   });
+}
+
+// ── Court Appearance Report ───────────────────────────────────────────────────
+//
+// Uses collectionGroup('sessions') to query across ALL clients' session
+// subcollections in one request, filtered by date range for the selected year.
+// Results are filtered client-side for caseStatus starting with "Court".
+//
+// Sessions written by court-appearance.js store clientName directly on the
+// session doc so this query can display names without needing to load each
+// client doc separately.
+//
+// NOTE: This query requires a Firestore index on sessions.date. If you see a
+// "Missing index" error in the browser console, Firebase provides a one-click
+// link to create it.
+
+async function loadCourtReport() {
+  const year    = parseInt(document.getElementById('courtReportYear').value, 10);
+  const resultEl = document.getElementById('courtReportResult');
+
+  if (!year || isNaN(year)) {
+    resultEl.innerHTML = '<span style="color:var(--danger);">Please enter a valid year.</span>';
+    return;
+  }
+
+  resultEl.textContent = 'Loading…';
+  document.getElementById('loadCourtReportBtn').disabled = true;
+
+  try {
+    const startDate = new Date(`${year}-01-01T00:00:00`);
+    const endDate   = new Date(`${year}-12-31T23:59:59`);
+
+    const snap = await getDocs(
+      query(
+        collectionGroup(db, 'sessions'),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate),
+        orderBy('date', 'asc')
+      )
+    );
+
+    // Filter to court sessions only and extract clientId from the path
+    const sessions = snap.docs
+      .map(d => ({
+        id:         d.id,
+        clientId:   d.ref.parent.parent.id,
+        ...d.data(),
+      }))
+      .filter(s => (s.caseStatus || '').startsWith('Court'));
+
+    if (!sessions.length) {
+      resultEl.innerHTML = `<span style="color:var(--text-muted);">No court appearances logged in ${year}.</span>`;
+      return;
+    }
+
+    // Group by date + county key (e.g. "2025-03-15|Beaver County")
+    const groups = {};
+    for (const s of sessions) {
+      const dateMs  = s.date?.toDate ? s.date.toDate() : new Date(s.date);
+      const dateStr = dateMs.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      // caseStatus = "Court — Beaver County"
+      const county  = (s.caseStatus || '').replace(/^Court\s*[—-]\s*/i, '').trim() || 'Unknown County';
+      const key     = `${dateMs.toISOString().split('T')[0]}|${county}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          dateStr,
+          dateMs,
+          county,
+          counselors: new Set(),
+          clients: [],
+        };
+      }
+      const g = groups[key];
+      if (s.counselor) g.counselors.add(s.counselor);
+      const name = (s.clientName || '').trim();
+      if (name && !g.clients.includes(name)) g.clients.push(name);
+    }
+
+    // Sort by date descending
+    const sorted = Object.values(groups).sort((a, b) => b.dateMs - a.dateMs);
+
+    // Totals
+    const totalDates   = sorted.length;
+    const totalClients = sorted.reduce((s, g) => s + g.clients.length, 0);
+
+    resultEl.innerHTML = `
+      <div style="margin-bottom:0.75rem;font-size:0.8125rem;color:var(--text-muted);">
+        <strong style="color:var(--text);">${totalDates}</strong> court date${totalDates !== 1 ? 's' : ''} &nbsp;·&nbsp;
+        <strong style="color:var(--text);">${totalClients}</strong> total client appearances in ${year}
+      </div>
+      <div class="table-wrapper">
+        <table style="font-size:0.875rem;">
+          <thead>
+            <tr>
+              <th>Court Date</th>
+              <th>County</th>
+              <th style="text-align:right;"># Clients</th>
+              <th>Counselor(s)</th>
+              <th>Clients</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(g => `
+              <tr>
+                <td style="white-space:nowrap;">${esc(g.dateStr)}</td>
+                <td>${esc(g.county)}</td>
+                <td style="text-align:right;font-weight:600;">${g.clients.length}</td>
+                <td>${esc([...g.counselors].join(', ') || '—')}</td>
+                <td style="font-size:0.8rem;color:var(--text-muted);">${
+                  g.clients.length
+                    ? g.clients.map(n => esc(toTitleCase(n))).join(', ')
+                    : '—'
+                }</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    resultEl.innerHTML = `<span style="color:var(--danger);">Failed to load: ${esc(err.message)}</span>`;
+  } finally {
+    document.getElementById('loadCourtReportBtn').disabled = false;
+  }
+}
+
+function esc(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 async function downloadDocx(docObj, filename) {
