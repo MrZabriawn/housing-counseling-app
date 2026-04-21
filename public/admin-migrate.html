@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin — Migration Runner</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Migration Runner</h2>
+        <p class="metadata-row">Open DevTools console and call the migration function you need.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Available migrations</h4>
+      <table>
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>migrateRxNumbers()</code></td>
+            <td>
+              Copies each client's <code>rxNumber</code> string field into a
+              <code>rxNumbers</code> subcollection document.
+              Safe to re-run — exits immediately if already completed.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  <script type="module" src="js/hud-schema.js"></script>
+</body>
+</html>

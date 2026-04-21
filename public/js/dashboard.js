@@ -2,8 +2,10 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { MONTHS } from './data.js';
 import {
-  collection, collectionGroup, getDocs, query, where, orderBy
+  collection, collectionGroup, getDocs, query, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const SS = 'dashboardFilters'; // sessionStorage key
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'dashboard');
@@ -17,7 +19,7 @@ requireAuth(async (user, profile) => {
   });
 
   // Populate year filter (current year back to 2020)
-  const yearSel = document.getElementById('filterYear');
+  const yearSel  = document.getElementById('filterYear');
   const thisYear = new Date().getFullYear();
   for (let y = thisYear; y >= 2020; y--) {
     const o = document.createElement('option');
@@ -36,28 +38,56 @@ requireAuth(async (user, profile) => {
     });
   } catch (_) { /* counselors collection optional */ }
 
+  // Restore saved filters from sessionStorage so navigating away and back
+  // keeps whatever the user had selected.
+  restoreFilters();
+
   await loadDashboard();
 
   document.getElementById('filterForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    saveFilters();
     await loadDashboard();
   });
+
   document.getElementById('clearFilters').addEventListener('click', () => {
     document.getElementById('filterMonth').value     = '';
     document.getElementById('filterYear').value      = '';
     document.getElementById('filterDateStart').value = '';
     document.getElementById('filterDateEnd').value   = '';
     document.getElementById('filterCounselor').value = '';
+    sessionStorage.removeItem(SS);
     loadDashboard();
   });
 });
+
+function saveFilters() {
+  sessionStorage.setItem(SS, JSON.stringify({
+    month:     document.getElementById('filterMonth').value,
+    year:      document.getElementById('filterYear').value,
+    dateStart: document.getElementById('filterDateStart').value,
+    dateEnd:   document.getElementById('filterDateEnd').value,
+    counselor: document.getElementById('filterCounselor').value,
+  }));
+}
+
+function restoreFilters() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SS) || 'null');
+    if (!saved) return;
+    document.getElementById('filterMonth').value     = saved.month     || '';
+    document.getElementById('filterYear').value      = saved.year      || '';
+    document.getElementById('filterDateStart').value = saved.dateStart || '';
+    document.getElementById('filterDateEnd').value   = saved.dateEnd   || '';
+    document.getElementById('filterCounselor').value = saved.counselor || '';
+  } catch (_) {}
+}
 
 function toDate(ts) {
   if (!ts) return new Date(0);
   return ts.toDate ? ts.toDate() : new Date(ts);
 }
 
-// Unique households: deduplicate by caseNo, falling back to clientName
 function uniqueHouseholds(rows) {
   const seen = new Set();
   return rows.filter(r => {
@@ -79,15 +109,15 @@ async function loadDashboard() {
   const endVal       = document.getElementById('filterDateEnd').value;
   const counselorVal = document.getElementById('filterCounselor').value;
 
-  // ── Load counselingLog records (demographics / CDBG data) ──────────────────
+  const hasDateRange = !!(startVal || endVal);
+  const start = startVal ? new Date(startVal + 'T00:00:00') : null;
+  const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
+
+  // ── counselingLog (demographics / CDBG data) ──────────────────────────────
   const snap = await getDocs(collection(db, 'counselingLog'));
   let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  const hasDateRange = startVal || endVal;
-
   if (hasDateRange) {
-    const start = startVal ? new Date(startVal + 'T00:00:00') : null;
-    const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
     rows = rows.filter(r => {
       if (!r.counselingDate) return false;
       const d = toDate(r.counselingDate);
@@ -100,7 +130,7 @@ async function loadDashboard() {
       if (r.sourceMonth !== monthVal) return false;
       if (yearVal) {
         const d = toDate(r.counselingDate);
-        if (d.getTime() === 0) return true; // no date — keep if month matches
+        if (d.getTime() === 0) return true;
         return d.getFullYear() === yearVal;
       }
       return true;
@@ -117,52 +147,29 @@ async function loadDashboard() {
     rows = rows.filter(r => (r.counselor || '') === counselorVal);
   }
 
-  // ── Load sessions subcollection for Total Hours ────────────────────────────
-  // Sessions are stored in clients/{id}/sessions with a `date` and `hours` field.
-  // We apply the same date/counselor filters here.
+  // ── Sessions subcollection — Total Hours ──────────────────────────────────
+  // Always load all sessions and filter client-side to avoid needing a
+  // composite Firestore index on collectionGroup + date range.
   let totalHours = 0;
   try {
-    let sessSnap;
-    if (hasDateRange) {
-      const start = startVal ? new Date(startVal + 'T00:00:00') : null;
-      const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
-      const constraints = [collectionGroup(db, 'sessions')];
-      if (start && end) {
-        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
-          where('date', '>=', start), where('date', '<=', end), orderBy('date')));
-      } else if (start) {
-        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
-          where('date', '>=', start), orderBy('date')));
-      } else if (end) {
-        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
-          where('date', '<=', end), orderBy('date')));
-      } else {
-        sessSnap = await getDocs(collectionGroup(db, 'sessions'));
-      }
-    } else {
-      // Load all and filter client-side for month/year/counselor
-      sessSnap = await getDocs(collectionGroup(db, 'sessions'));
-    }
-
+    const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
     sessSnap.docs.forEach(d => {
       const s = d.data();
-      // Apply month/year filter if not using date range
-      if (!hasDateRange) {
-        const sDate = toDate(s.date);
-        if (monthVal) {
-          const sMonth = MONTHS[sDate.getMonth()];
-          if (sMonth !== monthVal) return;
-        }
-        if (yearVal) {
-          if (sDate.getFullYear() !== yearVal) return;
-        }
+      const sDate = toDate(s.date);
+
+      if (hasDateRange) {
+        if (start && sDate < start) return;
+        if (end   && sDate > end)   return;
+      } else {
+        if (monthVal && MONTHS[sDate.getMonth()] !== monthVal) return;
+        if (yearVal  && sDate.getFullYear() !== yearVal)        return;
       }
+
       if (counselorVal && (s.counselor || '') !== counselorVal) return;
       totalHours += Number(s.hours) || 0;
     });
   } catch (_) {
-    // Hours unavailable (index not yet created, etc.) — show N/A
-    totalHours = null;
+    totalHours = null; // show N/A only if the query itself fails
   }
 
   renderStats(rows, totalHours);
@@ -173,12 +180,13 @@ function renderStats(rows, totalHours) {
 
   document.getElementById('statHouseholds').textContent = unique.length;
   document.getElementById('statSessions').textContent   = rows.length;
-  document.getElementById('statHours').textContent      = totalHours === null
-    ? 'N/A'
-    : totalHours % 1 === 0
-      ? totalHours.toLocaleString()
-      : totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-  document.getElementById('statDollars').textContent    =
+  document.getElementById('statHours').textContent      =
+    totalHours === null
+      ? 'N/A'
+      : totalHours % 1 === 0
+        ? totalHours.toLocaleString()
+        : totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  document.getElementById('statDollars').textContent =
     '$' + rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0)
               .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   document.getElementById('statFemale').textContent   = unique.filter(r => r.femaleHeaded).length;
@@ -206,7 +214,5 @@ function renderBreakdown(tableId, field, rows) {
     return;
   }
 
-  tbody.innerHTML = entries
-    .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
-    .join('');
+  tbody.innerHTML = entries.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 }

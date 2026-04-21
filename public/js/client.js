@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES } from './data.js';
+import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
@@ -11,11 +11,24 @@ const params   = new URLSearchParams(window.location.search);
 const clientId = params.get('id');
 if (!clientId) window.location.href = 'clients.html';
 
-let _client     = null;
-let _sessions   = [];
-let _profile    = null;
-let _driveFolder = null;
+let _client           = null;
+let _sessions         = [];
+let _rxDocs           = [];   // clients/{id}/rxNumbers subcollection
+let _profile          = null;
+let _driveFolder      = null;
 let _editingSessionId = null; // null = new session, else existing id
+
+// ── Billing Type → report routing ─────────────────────────────────────────────
+// billingType is stored on the client document (not per-session) and determines
+// which activity log a client's sessions are routed to in HUD report generation.
+//
+//   "In-Person"                → sessions appear on CAL (Counseling Activity Log)
+//   "Case Management Activity" → sessions appear on CML (Case Management Log)
+//   "Court"                    → sessions appear on CML (Case Management Log)
+//
+// billingType is referenced starting in Prompt 6 when report output logic is built.
+// Sessions inherit the client's billingType. No per-session override exists yet.
+// ──────────────────────────────────────────────────────────────────────────────
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -30,7 +43,7 @@ requireAuth(async (user, profile) => {
   ]);
 
   await loadClient();
-  await Promise.all([loadSessions(), loadCmcLink(), loadListMembership()]);
+  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership()]);
 
   wireClientForm();
   wireSessionModal();
@@ -90,6 +103,7 @@ async function loadCmcLink() {
 
 function buildSelects() {
   appendOptions('counselingType',   COUNSELING_TYPES);
+  appendOptions('billingType',      BILLING_TYPES);
   appendOptions('amiPercent',       AMI_LEVELS);
   appendOptions('reCode',           RE_CODES);
   appendOptions('closureAwardType', AWARD_TYPES);
@@ -140,17 +154,17 @@ function populateClientForm(c) {
   setValue('guarantor',     c.guarantor);
   setValue('zipCode',       c.zipCode);
   setSelectValue('counselingType', c.counselingType);
+  setSelectValue('billingType',    c.billingType);
   setSelectValue('amiPercent',     c.amiPercent);
   setSelectValue('reCode',         c.reCode);
 
   // Counselor — inject custom option if not in list
   setSelectValue('counselor', c.counselor);
 
-  document.getElementById('hispanic').checked    = !!c.hispanic;
+  document.getElementById('hispanic').checked     = !!c.hispanic;
   document.getElementById('femaleHeaded').checked = !!c.femaleHeaded;
 
-  // Rx chips
-  renderChips('rxChips', c.rxNumbers || [], removeRx);
+  // rxPanel is populated by loadRxNumbers() after subcollection loads
 
   // PRE-specific: home search notes
   const isPre = c.counselingType === 'PRE';
@@ -213,32 +227,12 @@ function renderHeader(c) {
   }
 }
 
-// ── Chips (Rx Numbers & Areas of Interest) ────────────────────────────────────
-
-// ── Chips (Rx Numbers — plain chip list) ─────────────────────────────────────
-
-function renderChips(containerId, items, onRemove) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.innerHTML = items.map((item, i) => `
-    <span class="chip">
-      ${escHtml(item)}
-      <button type="button" class="chip-remove" data-index="${i}" aria-label="Remove">×</button>
-    </span>`).join('');
-  container.querySelectorAll('.chip-remove').forEach(btn => {
-    btn.addEventListener('click', () => onRemove(parseInt(btn.dataset.index)));
-  });
-}
-
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function removeRx(index) {
-  const rxNumbers = [...(_client.rxNumbers || [])];
-  rxNumbers.splice(index, 1);
-  _client.rxNumbers = rxNumbers;
-  renderChips('rxChips', rxNumbers, removeRx);
+function escAttr(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── Tag input (Areas of Interest) ────────────────────────────────────────────
@@ -284,18 +278,6 @@ function updateClosureCcaPercent() {
 // ── Wire client form ──────────────────────────────────────────────────────────
 
 function wireClientForm() {
-  // Add Rx (still uses button + Enter)
-  document.getElementById('addRxBtn').addEventListener('click', () => {
-    const val = document.getElementById('rxInput').value.trim();
-    if (!val) return;
-    _client.rxNumbers = [...(_client.rxNumbers || []), val];
-    document.getElementById('rxInput').value = '';
-    renderChips('rxChips', _client.rxNumbers, removeRx);
-  });
-  document.getElementById('rxInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addRxBtn').click(); }
-  });
-
   // Save client
   document.getElementById('saveClientBtn').addEventListener('click', saveClient);
 
@@ -367,6 +349,7 @@ async function saveClient() {
     const data = {
       clientName:        toTitleCase(document.getElementById('clientName').value.trim()),
       counselingType,
+      billingType:       document.getElementById('billingType').value,
       counselor:         document.getElementById('counselor').value,
       guarantor:         document.getElementById('guarantor').value.trim(),
       zipCode:           document.getElementById('zipCode').value.trim(),
@@ -374,7 +357,6 @@ async function saveClient() {
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,
-      rxNumbers:         _client.rxNumbers || [],
       homeSearchNotes:   (document.getElementById('homeSearchNotes')?.value || '').trim(),
       driveFolderId:     _driveFolder?.id   || '',
       driveFolderName:   _driveFolder?.name || '',
@@ -465,9 +447,15 @@ function openAddSession() {
   clearSessionModal();
 
   // Defaults
-  document.getElementById('sDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('sDate').value      = new Date().toISOString().split('T')[0];
   document.getElementById('sCounselor').value = _client.counselor || '';
-  document.getElementById('sRxNumber').value  = (_client.rxNumbers || [])[0] || '';
+  // Pre-fill with the first HUD-billable Rx (NOFA + active), else first active, else first
+  const defaultRx = (
+    _rxDocs.find(r => r.active !== false && r.guarantor === 'NOFA') ||
+    _rxDocs.find(r => r.active !== false) ||
+    _rxDocs[0]
+  )?.rxNumber || '';
+  document.getElementById('sRxNumber').value = defaultRx;
 
   document.getElementById('sessionModalError').classList.add('hidden');
   document.getElementById('sessionModal').classList.remove('hidden');
@@ -520,12 +508,14 @@ function readSessionForm() {
     date:          dateVal ? new Date(dateVal + 'T12:00:00') : null,
     counselor:     document.getElementById('sCounselor').value,
     rxNumber:      document.getElementById('sRxNumber').value.trim(),
-    hours:      parseFloat(document.getElementById('sHours').value) || 0,
-    dollarsFor: document.getElementById('sDollarsFor').value.trim(),
+    hours:         parseFloat(document.getElementById('sHours').value) || 0,
+    dollarsFor:    document.getElementById('sDollarsFor').value.trim(),
     caseStatus:    document.getElementById('sCaseStatus').value.trim(),
     outcome:       document.getElementById('sOutcome').value.trim(),
     notes:         document.getElementById('sNotes').value.trim(),
     updatedAt:     serverTimestamp(),
+    // billingType: "In-Person" | "Case Management Activity" | "Court"
+    // Not yet collected by the UI; treat as null when absent on historical sessions.
   };
 }
 
@@ -705,6 +695,199 @@ async function syncClientToLists(data) {
       ...higSnap.docs.map(d => updateDoc(doc(db, 'higWaitlist', d.id), higBase)),
     ]);
   } catch (_) {}
+}
+
+// ── Rx Numbers subcollection panel ───────────────────────────────────────────
+
+async function loadRxNumbers() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'clients', clientId, 'rxNumbers'), orderBy('createdAt', 'asc'))
+    );
+    _rxDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (_) {
+    _rxDocs = [];
+  }
+  renderRxPanel();
+}
+
+function renderRxPanel() {
+  const panel = document.getElementById('rxPanel');
+  if (!panel) return;
+
+  const legacyRx     = (_client.rxNumber || '').trim();
+  const legacyInSub  = legacyRx && _rxDocs.some(r => r.rxNumber === legacyRx);
+
+  const TH = 'style="text-align:left;padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
+  const TD = 'style="padding:0.4rem 0.6rem;border-bottom:1px solid var(--border);"';
+
+  let html = '';
+
+  if (legacyRx && !legacyInSub) {
+    html += `<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;padding:0.45rem 0.75rem;background:#fff8e1;border-left:3px solid #f59e0b;border-radius:var(--radius);">
+      Legacy Rx on file: <strong>${escHtml(legacyRx)}</strong> — migrated, assign guarantor above
+    </p>`;
+  }
+
+  if (_rxDocs.length) {
+    html += `<table style="width:100%;border-collapse:collapse;font-size:0.875rem;margin-bottom:0.75rem;">
+      <thead>
+        <tr style="background:#f8f9fb;">
+          <th ${TH}>Rx #</th>
+          <th ${TH}>Guarantor</th>
+          <th ${TH} style="text-align:center;">Active</th>
+          <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${_rxDocs.map(r => {
+          const isHud = r.active !== false && r.guarantor === 'NOFA';
+          const hudBadge = isHud
+            ? `<span style="font-size:0.68rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:20px;background:#1a73e8;color:#fff;margin-left:0.4rem;vertical-align:middle;">HUD</span>`
+            : '';
+          const guarantorOpts = ['', ...RX_GUARANTORS].map(v =>
+            `<option value="${escAttr(v)}" ${v === (r.guarantor || '') ? 'selected' : ''}>${v || '— none —'}</option>`
+          ).join('');
+          return `<tr>
+            <td ${TD}>${escHtml(r.rxNumber)}${hudBadge}</td>
+            <td ${TD}>
+              <select class="rx-guarantor" data-rx-id="${escAttr(r.id)}"
+                style="font-size:0.8125rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);">
+                ${guarantorOpts}
+              </select>
+            </td>
+            <td ${TD} style="text-align:center;">
+              <input type="checkbox" class="rx-active" data-rx-id="${escAttr(r.id)}" ${r.active !== false ? 'checked' : ''}>
+            </td>
+            <td ${TD} style="white-space:nowrap;">
+              <button class="btn btn-sm btn-secondary rx-save-btn" data-rx-id="${escAttr(r.id)}" style="font-size:0.75rem;">Save</button>
+              <button class="btn btn-sm btn-danger rx-remove-btn" data-rx-id="${escAttr(r.id)}" style="font-size:0.75rem;margin-left:4px;">×</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  } else {
+    html += `<p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:0.75rem;">No Rx numbers on file.</p>`;
+  }
+
+  html += `
+    <div id="rxAddForm" class="hidden" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;padding:0.75rem;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;">
+      <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+        <label style="font-size:0.75rem;">Rx Number *</label>
+        <input type="text" id="rxNewNumber" placeholder="Enter Rx #">
+      </div>
+      <div class="form-group" style="margin:0;flex:0 0 150px;">
+        <label style="font-size:0.75rem;">Guarantor *</label>
+        <select id="rxNewGuarantor">
+          <option value="">— required —</option>
+          ${RX_GUARANTORS.map(v => `<option value="${escAttr(v)}">${escHtml(v)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.75rem;">Active</label>
+        <div style="padding-top:0.5rem;"><input type="checkbox" id="rxNewActive" checked></div>
+      </div>
+      <div style="display:flex;gap:0.4rem;align-self:flex-end;padding-bottom:2px;">
+        <button type="button" id="rxAddConfirmBtn" class="btn btn-primary btn-sm">Add</button>
+        <button type="button" id="rxAddCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+      </div>
+    </div>
+    <button type="button" id="rxShowAddBtn" class="btn btn-secondary btn-sm">+ Add Rx #</button>
+    <p id="rxPanelMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>`;
+
+  panel.innerHTML = html;
+
+  document.getElementById('rxShowAddBtn').addEventListener('click', () => {
+    document.getElementById('rxAddForm').classList.remove('hidden');
+    document.getElementById('rxAddForm').style.display = 'flex';
+    document.getElementById('rxShowAddBtn').classList.add('hidden');
+    document.getElementById('rxNewNumber').focus();
+  });
+  document.getElementById('rxAddCancelBtn').addEventListener('click', resetRxAddForm);
+  document.getElementById('rxAddConfirmBtn').addEventListener('click', addRxNumber);
+
+  panel.querySelectorAll('.rx-save-btn').forEach(btn =>
+    btn.addEventListener('click', () => saveRxRow(btn.dataset.rxId))
+  );
+  panel.querySelectorAll('.rx-remove-btn').forEach(btn =>
+    btn.addEventListener('click', () => deleteRxRow(btn.dataset.rxId))
+  );
+}
+
+function resetRxAddForm() {
+  const form = document.getElementById('rxAddForm');
+  if (!form) return;
+  form.classList.add('hidden');
+  document.getElementById('rxShowAddBtn').classList.remove('hidden');
+  document.getElementById('rxNewNumber').value   = '';
+  document.getElementById('rxNewGuarantor').value = '';
+  document.getElementById('rxNewActive').checked = true;
+}
+
+async function saveRxRow(rxId) {
+  const guarEl  = document.querySelector(`.rx-guarantor[data-rx-id="${rxId}"]`);
+  const actEl   = document.querySelector(`.rx-active[data-rx-id="${rxId}"]`);
+  const saveBtn = document.querySelector(`.rx-save-btn[data-rx-id="${rxId}"]`);
+  if (!guarEl || !actEl) return;
+
+  saveBtn.disabled    = true;
+  saveBtn.textContent = '…';
+
+  try {
+    await updateDoc(doc(db, 'clients', clientId, 'rxNumbers', rxId), {
+      guarantor: guarEl.value,
+      active:    actEl.checked,
+    });
+    const rxDoc = _rxDocs.find(r => r.id === rxId);
+    if (rxDoc) { rxDoc.guarantor = guarEl.value; rxDoc.active = actEl.checked; }
+    renderRxPanel();
+  } catch (err) {
+    alert('Save failed: ' + err.message);
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
+  }
+}
+
+async function deleteRxRow(rxId) {
+  if (!confirm('Remove this Rx number? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db, 'clients', clientId, 'rxNumbers', rxId));
+    _rxDocs = _rxDocs.filter(r => r.id !== rxId);
+    renderRxPanel();
+  } catch (err) {
+    alert('Remove failed: ' + err.message);
+  }
+}
+
+async function addRxNumber() {
+  const numEl  = document.getElementById('rxNewNumber');
+  const guarEl = document.getElementById('rxNewGuarantor');
+  const actEl  = document.getElementById('rxNewActive');
+  const addBtn = document.getElementById('rxAddConfirmBtn');
+
+  const rxNumber  = numEl.value.trim();
+  const guarantor = guarEl.value;
+  if (!rxNumber)  { alert('Enter an Rx number.'); numEl.focus(); return; }
+  if (!guarantor) { alert('Select a guarantor.'); guarEl.focus(); return; }
+
+  addBtn.disabled    = true;
+  addBtn.textContent = 'Adding…';
+
+  try {
+    const ref = await addDoc(collection(db, 'clients', clientId, 'rxNumbers'), {
+      rxNumber,
+      guarantor,
+      active:    actEl.checked,
+      createdAt: serverTimestamp(),
+    });
+    _rxDocs.push({ id: ref.id, rxNumber, guarantor, active: actEl.checked });
+    renderRxPanel();
+  } catch (err) {
+    alert('Add failed: ' + err.message);
+    addBtn.disabled    = false;
+    addBtn.textContent = 'Add';
+  }
 }
 
 // ── Close File modal ──────────────────────────────────────────────────────────

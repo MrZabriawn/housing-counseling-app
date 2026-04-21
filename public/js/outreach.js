@@ -37,11 +37,19 @@ let _callType     = 'client'; // current call modal type: 'client' | 'prospect'
 let _selectedClientId   = null; // clientId chosen in the call modal client search
 let _selectedClientName = null; // display name for the chosen client
 
+// TAL Hours modal state
+let _talStaffNum    = null;  // staffNumber from counselors collection for logged-in user
+let _talStaffName   = '';    // display name of logged-in user
+let _talCounselorId = '';    // counselors doc ID for logged-in user (for hudTrainingEntries)
+let _talUserId      = '';    // firebase uid for hudTrainingEntries.counselorId fallback
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'outreach');
   window._currentCounselor = profile.name || profile.email || '';
+  _talUserId   = user.uid;
+  _talStaffName = profile.name || profile.email || '';
 
   document.getElementById('batchDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('callDate').value  = new Date().toISOString().split('T')[0];
@@ -87,6 +95,14 @@ requireAuth(async (user, profile) => {
   document.getElementById('callClientSearch').addEventListener('input', renderCallClientSearch);
   document.getElementById('callClientClear').addEventListener('click', clearCallClientSelection);
 
+  // TAL Hours modal
+  document.getElementById('openTalBtn').addEventListener('click', openTalModal);
+  document.getElementById('talCancelBtn').addEventListener('click', closeTalModal);
+  document.getElementById('talSaveBtn').addEventListener('click', saveTal);
+  document.getElementById('talModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('talModal')) closeTalModal();
+  });
+
   addBatchRow();
   await Promise.all([loadRecords(), loadCalls()]);
 });
@@ -107,6 +123,15 @@ async function loadCounselorOptions() {
       });
     // Pre-select current counselor
     sel.value = window._currentCounselor;
+
+    // Capture staffNumber + doc ID for the logged-in counselor (used by TAL modal)
+    const myDoc = snap.docs.find(
+      d => d.data().name === window._currentCounselor && d.data().active !== false
+    );
+    if (myDoc) {
+      _talStaffNum    = myDoc.data().staffNumber ?? null;
+      _talCounselorId = myDoc.id;
+    }
   } catch (_) {}
 }
 
@@ -222,8 +247,9 @@ async function generateAndLog() {
           { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
       : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    const logoUrl = window.location.origin + '/img/logo.png';
-    const pages   = rows.map(r => buildLetterHTML({
+    const logoUrl   = window.location.origin + '/img/logo.png';
+    const bannerUrl = window.location.origin + '/img/banner-blue.png';
+    const pages     = rows.map(r => buildLetterHTML({
       recipientName:     r.name,
       mailingAddress:    r.addr1,
       mailingAddress2:   r.addr2,
@@ -232,7 +258,7 @@ async function generateAndLog() {
       counselorTemplate: _county,
       dateSent:          dateVal ? new Date(dateVal + 'T12:00:00') : null,
       counselor:         window._currentCounselor,
-    }, dateDisplay, logoUrl)).join('');
+    }, dateDisplay, logoUrl, bannerUrl)).join('');
 
     openPrintWindow(pages);
     await loadRecords();
@@ -312,9 +338,10 @@ function reGenerateSelected() {
   const selected   = _allRecords.filter(r => checkedIds.has(r.id));
   if (!selected.length) return;
 
-  const today   = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  const logoUrl = window.location.origin + '/img/logo.png';
-  const pages   = selected.map(r => buildLetterHTML(r, today, logoUrl)).join('');
+  const today     = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const logoUrl   = window.location.origin + '/img/logo.png';
+  const bannerUrl = window.location.origin + '/img/banner-blue.png';
+  const pages     = selected.map(r => buildLetterHTML(r, today, logoUrl, bannerUrl)).join('');
   openPrintWindow(pages);
 }
 
@@ -537,11 +564,13 @@ function openPrintWindow(pages) {
     body { font-family:"Times New Roman",Times,serif; font-size:12pt; color:#000; }
     .letter-page {
       width:8.5in; min-height:11in;
-      padding:1in 1.1in 1in 1.1in;
+      padding:0 1.1in 1in 1.1in;
       page-break-after:always;
       position:relative;
     }
     .letter-page:last-child { page-break-after:auto; }
+    .lh-banner     { width:calc(100% + 2.2in); margin-left:-1.1in; margin-bottom:0.45in; }
+    .lh-banner img { width:100%; display:block; }
     .date-line  { margin-bottom:1.5em; }
     .addr-block { margin-bottom:1.5em; line-height:1.4; }
     .salutation { margin-bottom:1em; }
@@ -571,7 +600,7 @@ ${pages}
 
 // ── Letter templates ──────────────────────────────────────────────────────────
 
-function buildLetterHTML(r, fallbackDate, logoUrl) {
+function buildLetterHTML(r, fallbackDate, logoUrl, bannerUrl) {
   const dateLine  = r.dateSent ? fmtDateLong(r.dateSent) : fallbackDate;
   const name      = escHtml(r.recipientName   || '');
   const addr1     = escHtml(r.mailingAddress  || '');
@@ -580,26 +609,28 @@ function buildLetterHTML(r, fallbackDate, logoUrl) {
   const lender    = escHtml(r.lender          || '');
   const counselor = escHtml(r.counselor       || '');
 
-  if (r.counselorTemplate === 'andrusa') return andrusaletter(dateLine, name, addr1, addr2, propAddr);
+  if (r.counselorTemplate === 'andrusa') return andrusaletter(dateLine, name, addr1, addr2, propAddr, bannerUrl);
   if (r.counselorTemplate === 'mercer')  return mercerLetter(dateLine, name, addr1, addr2, propAddr, lender, counselor, logoUrl);
-  return danLetter(dateLine, name, addr1, addr2, propAddr, lender);
+  return danLetter(dateLine, name, addr1, addr2, propAddr, lender, bannerUrl);
 }
 
-function danLetter(date, name, addr1, addr2, propAddr, lender) {
+function danLetter(date, name, addr1, addr2, propAddr, lender, bannerUrl) {
   return `<div class="letter-page">
+  <div class="lh-banner"><img src="${bannerUrl}" alt="Housing Opportunities Inc."></div>
   <p class="date-line">${date}</p>
   <div class="addr-block"><p>${name}</p><p>${addr1}</p>${addr2 ? `<p>${addr2}</p>` : ''}</div>
   <p class="salutation">Dear ${name},</p>
   <p class="body-para">Our agency has received notification that a Complaint in Mortgage Foreclosure has been filed against you by Plaintiff, ${lender || '[LENDER]'}, in the Court of Common Pleas of Beaver County, PA. This Complaint regards your mortgaged property on ${propAddr || '[PROPERTY ADDRESS]'}.</p>
   <p class="body-para">Housing Opportunities Inc. (HOI) is a HUD Approved Housing Counseling Agency located in Rochester, PA. We provide free services and advice for homeowners facing foreclosure enabling them to make an informed decision. Also, we can represent your case in Beaver County Mortgage Conciliation Court at no charge. If you choose to utilize our services, we require your written authorization during an in-office appointment at our location in Beaver to gather pertinent documents and information.</p>
-  <p class="body-para">Please call HOBC at 724.728.7511 to discuss your situation. We will be glad to assist your effort to navigate through the foreclosure process with a goal to retain your home.</p>
+  <p class="body-para">Please call HOI at 724.728.7511 to discuss your situation. We will be glad to assist your effort to navigate through the foreclosure process with a goal to retain your home.</p>
   <p class="closing">Sincerely,</p>
   <div class="sig-block"><p>Daniel Bernabie</p><p>HUD Certified Housing Counselor</p></div>
 </div>`;
 }
 
-function andrusaletter(date, name, addr1, addr2, propAddr) {
+function andrusaletter(date, name, addr1, addr2, propAddr, bannerUrl) {
   return `<div class="letter-page">
+  <div class="lh-banner"><img src="${bannerUrl}" alt="Housing Opportunities Inc."></div>
   <p class="date-line">${date}</p>
   <div class="addr-block"><p>${name}</p><p>${addr1}</p>${addr2 ? `<p>${addr2}</p>` : ''}</div>
   <p class="salutation">Dear ${name},</p>
@@ -668,4 +699,83 @@ function escHtml(str) {
 
 function escAttr(str) {
   return (str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── TAL Hours modal ───────────────────────────────────────────────────────────
+
+function openTalModal() {
+  document.getElementById('talDate').value      = new Date().toISOString().split('T')[0];
+  document.getElementById('talTime').value      = '';
+  document.getElementById('talStaffNum').value  = _talStaffNum !== null ? String(_talStaffNum) : '';
+  document.getElementById('talStaffName').value = _talStaffName;
+  document.getElementById('talType').value      = '';
+  document.getElementById('talCost').value      = '';
+  document.getElementById('talDesc').value      = '';
+  document.getElementById('talDuration').value  = '';
+  document.getElementById('talError').classList.add('hidden');
+  document.getElementById('talModal').classList.remove('hidden');
+}
+
+function closeTalModal() {
+  document.getElementById('talModal').classList.add('hidden');
+}
+
+function toAMPM(timeVal) {
+  if (!timeVal) return '';
+  const [h, m] = timeVal.split(':').map(Number);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12    = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
+async function saveTal() {
+  const date      = document.getElementById('talDate').value;
+  const time      = document.getElementById('talTime').value;
+  const staffNumR = document.getElementById('talStaffNum').value.trim();
+  const staffName = document.getElementById('talStaffName').value.trim();
+  const certType  = document.getElementById('talType').value;
+  const costType  = document.getElementById('talCost').value.trim();
+  const desc      = document.getElementById('talDesc').value.trim();
+  const duration  = parseFloat(document.getElementById('talDuration').value) || 0;
+  const errEl     = document.getElementById('talError');
+  const saveBtn   = document.getElementById('talSaveBtn');
+
+  errEl.classList.add('hidden');
+  if (!date)       { showTalErr('Date is required.');                        return; }
+  if (!time)       { showTalErr('Time is required.');                        return; }
+  if (!staffName)  { showTalErr('Staff name is required.');                  return; }
+  if (!certType)   { showTalErr('Select a certification activity type.');    return; }
+  if (!desc)       { showTalErr('Description is required.');                 return; }
+  if (duration <= 0) { showTalErr('Duration must be greater than 0.');      return; }
+
+  const staffNum = staffNumR !== '' ? parseInt(staffNumR, 10) : 0;
+
+  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+
+  try {
+    await addDoc(collection(db, 'hudTrainingEntries'), {
+      counselorId:               _talCounselorId || _talUserId,
+      counselorName:             staffName,
+      staffNumber:               isNaN(staffNum) ? 0 : staffNum,
+      month:                     date.substring(0, 7),
+      date,
+      time:                      toAMPM(time),
+      activityDescription:       desc,
+      certificationActivityType: certType,
+      costType:                  costType || '',
+      durationHours:             duration,
+      createdAt:                 serverTimestamp(),
+    });
+    closeTalModal();
+  } catch (err) {
+    showTalErr('Save failed: ' + err.message);
+  } finally {
+    saveBtn.disabled = false; saveBtn.textContent = 'Save';
+  }
+}
+
+function showTalErr(msg) {
+  const el = document.getElementById('talError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
 }

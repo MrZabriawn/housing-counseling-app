@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Counseling Log — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
+  <style>
+    .radio-group { display:flex; flex-direction:column; gap:0.45rem; margin-top:0.35rem; }
+    .radio-label { display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; cursor:pointer; font-weight:normal; }
+    .radio-label input[type="radio"] { width:1rem; height:1rem; flex-shrink:0; cursor:pointer; }
+  </style>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -15,9 +20,12 @@
         <h2>Counseling Log</h2>
         <p id="rowCount" class="metadata-row"></p>
       </div>
-      <div style="display:flex;gap:0.5rem;">
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         <a href="court-appearance.html" class="btn btn-secondary btn-sm">Court Appearance</a>
         <button id="printReportBtn" class="btn btn-secondary btn-sm">Print Report</button>
+        <button id="openCmBtn" class="btn btn-secondary btn-sm">+ Case Management</button>
+        <button id="openWsBtn" class="btn btn-secondary btn-sm">+ Workshop Entry</button>
+        <button id="openEmBtn" class="btn btn-secondary btn-sm ed-only hidden">+ Exec Management</button>
         <a href="new-client.html" class="btn btn-primary btn-sm">+ New Client</a>
       </div>
     </div>
@@ -33,6 +41,10 @@
         <div class="stat-value" id="statSessions">—</div>
       </div>
       <div class="stat-card">
+        <div class="stat-label">Total Hours</div>
+        <div class="stat-value" id="statHours">—</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label">Outcome Value</div>
         <div class="stat-value" id="statDollars">—</div>
       </div>
@@ -45,7 +57,7 @@
         <input type="text" id="fName" placeholder="Client name…">
       </div>
       <div class="form-group">
-        <label>Type</label>
+        <label>Counseling Type</label>
         <select id="fType">
           <option value="">All</option>
         </select>
@@ -57,8 +69,14 @@
         </select>
       </div>
       <div class="form-group">
-        <label>AMI</label>
+        <label>AMI Level</label>
         <select id="fAmi">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>R&amp;E Code</label>
+        <select id="fRe">
           <option value="">All</option>
         </select>
       </div>
@@ -69,6 +87,26 @@
           <option value="active">Active</option>
           <option value="closed">Closed</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>Month</label>
+        <select id="fMonth">
+          <option value="">All Months</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Year</label>
+        <select id="fYear">
+          <option value="">All Years</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date From</label>
+        <input type="date" id="fDateStart">
+      </div>
+      <div class="form-group">
+        <label>Date To</label>
+        <input type="date" id="fDateEnd">
       </div>
       <div style="display:flex;gap:0.5rem;align-self:flex-end;">
         <button type="submit" class="btn btn-primary btn-sm">Apply</button>
@@ -117,6 +155,145 @@
       </div>
     </div>
   </main>
+
+  <!-- Case Management Modal -->
+  <div id="cmModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Log Case Management Activity</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="cmDate">Date *</label>
+          <input type="date" id="cmDate">
+        </div>
+        <div class="form-group">
+          <label for="cmCounselor">Counselor *</label>
+          <select id="cmCounselor">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label>PAR Row *</label>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="cmParRow" value="Processing-Intake"> Processing – Intake and follow-up</label>
+            <label class="radio-label"><input type="radio" name="cmParRow" value="Management"> Management</label>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label for="cmDesc">Description of Activity *</label>
+          <textarea id="cmDesc" rows="3" placeholder="Describe the activity…"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="cmDuration">Duration (hours) *</label>
+          <input type="number" id="cmDuration" min="0.25" step="0.25" placeholder="e.g. 0.50">
+        </div>
+      </div>
+      <p id="cmError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="cmSaveBtn" class="btn btn-primary">Save</button>
+        <button id="cmCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Executive Management Modal (ED only) -->
+  <div id="emModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Log Executive Management Activity</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="emDate">Date *</label>
+          <input type="date" id="emDate">
+        </div>
+        <div class="form-group">
+          <label>Counselor</label>
+          <div id="emCounselorDisplay" style="padding:0.5rem 0;font-weight:600;font-size:0.9rem;color:var(--text-muted);"></div>
+        </div>
+        <div class="form-group full-width">
+          <label>PAR Row *</label>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="emParRow" value="Supervision"> Supervision</label>
+            <label class="radio-label"><input type="radio" name="emParRow" value="Processing-Billing"> Processing – Billing</label>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label for="emDesc">Description of Activity *</label>
+          <textarea id="emDesc" rows="3" placeholder="Describe the activity…"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="emDuration">Duration (hours) *</label>
+          <input type="number" id="emDuration" min="0.25" step="0.25" placeholder="e.g. 0.50">
+        </div>
+      </div>
+      <p id="emError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="emSaveBtn" class="btn btn-primary">Save</button>
+        <button id="emCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workshop Entry Modal -->
+  <div id="wsModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3>Add Workshop Attendee</h3>
+
+      <div id="wsFormSection">
+        <div class="form-grid" style="margin-top:1rem;">
+          <div class="form-group">
+            <label for="wsName">Workshop Name *</label>
+            <input type="text" id="wsName" placeholder="e.g. Homebuyer Education">
+          </div>
+          <div class="form-group">
+            <label for="wsDate">Workshop Date *</label>
+            <input type="date" id="wsDate">
+          </div>
+          <div class="form-group">
+            <label for="wsAttendeeName">Attendee Name *</label>
+            <input type="text" id="wsAttendeeName" placeholder="First Last">
+          </div>
+          <div class="form-group">
+            <label for="wsAddress">Address</label>
+            <input type="text" id="wsAddress" placeholder="123 Main St, City, PA 15001">
+          </div>
+          <div class="form-group full-width">
+            <label>Contact Type *</label>
+            <div class="radio-group" style="flex-direction:row;gap:1.25rem;">
+              <label class="radio-label"><input type="radio" name="wsContact" value="email" checked> Email</label>
+              <label class="radio-label"><input type="radio" name="wsContact" value="phone"> Phone</label>
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <label for="wsContactVal">Contact Value *</label>
+            <input type="text" id="wsContactVal" placeholder="email@example.com">
+          </div>
+          <div class="form-group full-width">
+            <label for="wsClientSearch">Link to Client <span style="font-weight:normal;color:var(--text-muted);">(optional)</span></label>
+            <input type="text" id="wsClientSearch" placeholder="Type client name to search…" autocomplete="off">
+            <div id="wsClientResults" style="border:1px solid var(--border);border-radius:var(--radius);max-height:180px;overflow-y:auto;margin-top:0.35rem;display:none;"></div>
+            <div id="wsClientSelected" class="hidden" style="margin-top:0.35rem;font-size:0.875rem;background:var(--primary-light,#e8f0fe);border-radius:var(--radius);padding:0.35rem 0.75rem;display:flex;justify-content:space-between;align-items:center;">
+              <span id="wsClientSelectedName"></span>
+              <button type="button" id="wsClientClear" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.1rem;line-height:1;">×</button>
+            </div>
+            <input type="hidden" id="wsClientId">
+          </div>
+        </div>
+        <p id="wsError" class="error-msg hidden"></p>
+        <div class="form-actions">
+          <button id="wsSaveBtn" class="btn btn-primary">Save Attendee</button>
+          <button id="wsCancelBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+
+      <div id="wsSuccessSection" class="hidden" style="text-align:center;padding:1.5rem 0.5rem;">
+        <p style="font-size:1.05rem;font-weight:600;color:var(--accent,green);margin-bottom:0.4rem;">Attendee saved!</p>
+        <p id="wsSuccessMsg" style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1.5rem;"></p>
+        <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;">
+          <button id="wsAddAnotherBtn" class="btn btn-primary">Add Another Attendee</button>
+          <button id="wsDoneBtn" class="btn btn-secondary">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/clients.js"></script>
 </body>

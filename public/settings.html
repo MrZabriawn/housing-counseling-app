@@ -18,7 +18,7 @@
     </div>
 
     <!-- Counselors -->
-    <div class="card" style="max-width:640px;">
+    <div class="card" style="max-width:860px;">
       <div class="card-title">Active Counselors</div>
 
       <div id="counselorsList" style="margin-bottom:1rem;">
@@ -28,13 +28,48 @@
       <div style="border-top:1px solid var(--border);padding-top:1rem;">
         <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.75rem;">Add Counselor</p>
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
-          <div class="form-group" style="flex:1;min-width:160px;">
+          <div class="form-group" style="flex:2;min-width:160px;">
             <label for="newCounselorName">Full Name</label>
             <input type="text" id="newCounselorName" placeholder="Jane Smith">
+          </div>
+          <div class="form-group" style="flex:0 0 100px;">
+            <label for="newCounselorStaffNum">Staff #</label>
+            <input type="number" id="newCounselorStaffNum" placeholder="e.g. 3" min="1" step="1">
+          </div>
+          <div class="form-group" style="flex:2;min-width:160px;">
+            <label for="newCounselorTitle">Staff Title</label>
+            <input type="text" id="newCounselorTitle" placeholder="Housing Counselor">
           </div>
           <button id="addCounselorBtn" class="btn btn-primary" style="margin-bottom:2px;">Add</button>
         </div>
         <p id="counselorMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+      </div>
+    </div>
+
+    <!-- Edit Counselor Modal -->
+    <div id="editCounselorModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:var(--radius);padding:1.5rem;width:100%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <h3 style="margin:0 0 1.25rem;font-size:1rem;">Edit Counselor</h3>
+        <div class="form-group">
+          <label for="editCounselorName">Full Name</label>
+          <input type="text" id="editCounselorName">
+        </div>
+        <div style="display:flex;gap:0.75rem;">
+          <div class="form-group" style="flex:0 0 110px;">
+            <label for="editCounselorStaffNum">Staff #</label>
+            <input type="number" id="editCounselorStaffNum" min="1" step="1">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="editCounselorTitle">Staff Title</label>
+            <input type="text" id="editCounselorTitle" placeholder="Housing Counselor">
+          </div>
+        </div>
+        <input type="hidden" id="editCounselorId">
+        <p id="editCounselorError" class="hidden" style="font-size:0.8125rem;color:var(--danger);margin-bottom:0.75rem;"></p>
+        <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:0.5rem;">
+          <button id="editCounselorCancelBtn" class="btn btn-secondary">Cancel</button>
+          <button id="editCounselorSaveBtn" class="btn btn-primary">Save</button>
+        </div>
       </div>
     </div>
 

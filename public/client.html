@@ -72,6 +72,12 @@
           </select>
         </div>
         <div class="form-group">
+          <label for="billingType">Billing Type</label>
+          <select id="billingType">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label for="counselor">Counselor *</label>
           <select id="counselor" required>
             <option value="">— Select —</option>
@@ -111,14 +117,7 @@
 
         <div class="section-title">Rx Numbers</div>
 
-        <div class="form-group full-width">
-          <label>Rx Numbers on File</label>
-          <div id="rxChips" class="chip-list"></div>
-          <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-            <input type="text" id="rxInput" placeholder="Add Rx number…" style="max-width:200px;">
-            <button type="button" id="addRxBtn" class="btn btn-secondary btn-sm">Add</button>
-          </div>
-        </div>
+        <div id="rxPanel" class="full-width"></div>
 
         <!-- PRE only -->
         <div id="areasSection" class="full-width hidden">

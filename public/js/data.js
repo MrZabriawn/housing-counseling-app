@@ -46,6 +46,10 @@ export const AWARD_TYPES = [
   'Other',
 ];
 
+export const BILLING_TYPES = ['In-Person', 'Case Management Activity', 'Court'];
+
+export const RX_GUARANTORS = ['NOFA', 'Anti-Pred', 'CHCI'];
+
 export const DEFAULT_RATE = 48.5;
 export const COURT_RATE   = 2.0;
 

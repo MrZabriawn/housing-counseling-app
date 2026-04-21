@@ -161,8 +161,9 @@ async function generateAndLog() {
           { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
       : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    const logoUrl = window.location.origin + '/img/logo.png';
-    const pages   = rows.map(r => buildLetterHTML({
+    const logoUrl   = window.location.origin + '/img/logo.png';
+    const bannerUrl = window.location.origin + '/img/banner-blue.png';
+    const pages     = rows.map(r => buildLetterHTML({
       recipientName:     r.name,
       mailingAddress:    r.addr1,
       mailingAddress2:   r.addr2,
@@ -171,7 +172,7 @@ async function generateAndLog() {
       counselorTemplate: _county,
       dateSent:          dateVal ? new Date(dateVal + 'T12:00:00') : null,
       counselor:         window._currentCounselor,
-    }, dateDisplay, logoUrl)).join('');
+    }, dateDisplay, logoUrl, bannerUrl)).join('');
 
     openPrintWindow(pages);
 
@@ -253,9 +254,10 @@ function reGenerateSelected() {
   const selected   = _allRecords.filter(r => checkedIds.has(r.id));
   if (!selected.length) return;
 
-  const today   = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  const logoUrl = window.location.origin + '/img/logo.png';
-  const pages   = selected.map(r => buildLetterHTML(r, today, logoUrl)).join('');
+  const today     = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const logoUrl   = window.location.origin + '/img/logo.png';
+  const bannerUrl = window.location.origin + '/img/banner-blue.png';
+  const pages     = selected.map(r => buildLetterHTML(r, today, logoUrl, bannerUrl)).join('');
   openPrintWindow(pages);
 }
 
@@ -283,11 +285,13 @@ function openPrintWindow(pages) {
     /* Standard letter page */
     .letter-page {
       width:8.5in; min-height:11in;
-      padding:1in 1.1in 1in 1.1in;
+      padding:0 1.1in 1in 1.1in;
       page-break-after:always;
       position:relative;
     }
     .letter-page:last-child { page-break-after:auto; }
+    .lh-banner     { width:calc(100% + 2.2in); margin-left:-1.1in; margin-bottom:0.45in; }
+    .lh-banner img { width:100%; display:block; }
 
     /* Shared text styles */
     .date-line  { margin-bottom:1.5em; }
@@ -322,7 +326,7 @@ ${pages}
 
 // ── Letter templates ──────────────────────────────────────────────────────────
 
-function buildLetterHTML(r, fallbackDate, logoUrl) {
+function buildLetterHTML(r, fallbackDate, logoUrl, bannerUrl) {
   const dateLine  = r.dateSent ? fmtDateLong(r.dateSent) : fallbackDate;
   const name      = escHtml(r.recipientName   || '');
   const addr1     = escHtml(r.mailingAddress  || '');
@@ -331,28 +335,30 @@ function buildLetterHTML(r, fallbackDate, logoUrl) {
   const lender    = escHtml(r.lender          || '');
   const counselor = escHtml(r.counselor       || '');
 
-  if (r.counselorTemplate === 'andrusa') return andrusaletter(dateLine, name, addr1, addr2, propAddr);
+  if (r.counselorTemplate === 'andrusa') return andrusaletter(dateLine, name, addr1, addr2, propAddr, bannerUrl);
   if (r.counselorTemplate === 'mercer')  return mercerLetter(dateLine, name, addr1, addr2, propAddr, lender, counselor, logoUrl);
-  return danLetter(dateLine, name, addr1, addr2, propAddr, lender);
+  return danLetter(dateLine, name, addr1, addr2, propAddr, lender, bannerUrl);
 }
 
 // Dan Bernabie — Beaver County
-function danLetter(date, name, addr1, addr2, propAddr, lender) {
+function danLetter(date, name, addr1, addr2, propAddr, lender, bannerUrl) {
   return `<div class="letter-page">
+  <div class="lh-banner"><img src="${bannerUrl}" alt="Housing Opportunities Inc."></div>
   <p class="date-line">${date}</p>
   <div class="addr-block"><p>${name}</p><p>${addr1}</p>${addr2 ? `<p>${addr2}</p>` : ''}</div>
   <p class="salutation">Dear ${name},</p>
   <p class="body-para">Our agency has received notification that a Complaint in Mortgage Foreclosure has been filed against you by Plaintiff, ${lender || '[LENDER]'}, in the Court of Common Pleas of Beaver County, PA. This Complaint regards your mortgaged property on ${propAddr || '[PROPERTY ADDRESS]'}.</p>
   <p class="body-para">Housing Opportunities Inc. (HOI) is a HUD Approved Housing Counseling Agency located in Rochester, PA. We provide free services and advice for homeowners facing foreclosure enabling them to make an informed decision. Also, we can represent your case in Beaver County Mortgage Conciliation Court at no charge. If you choose to utilize our services, we require your written authorization during an in-office appointment at our location in Beaver to gather pertinent documents and information.</p>
-  <p class="body-para">Please call HOBC at 724.728.7511 to discuss your situation. We will be glad to assist your effort to navigate through the foreclosure process with a goal to retain your home.</p>
+  <p class="body-para">Please call HOI at 724.728.7511 to discuss your situation. We will be glad to assist your effort to navigate through the foreclosure process with a goal to retain your home.</p>
   <p class="closing">Sincerely,</p>
   <div class="sig-block"><p>Daniel Bernabie</p><p>HUD Certified Housing Counselor</p></div>
 </div>`;
 }
 
 // Andrusa Lawson — Lawrence County
-function andrusaletter(date, name, addr1, addr2, propAddr) {
+function andrusaletter(date, name, addr1, addr2, propAddr, bannerUrl) {
   return `<div class="letter-page">
+  <div class="lh-banner"><img src="${bannerUrl}" alt="Housing Opportunities Inc."></div>
   <p class="date-line">${date}</p>
   <div class="addr-block"><p>${name}</p><p>${addr1}</p>${addr2 ? `<p>${addr2}</p>` : ''}</div>
   <p class="salutation">Dear ${name},</p>

@@ -21,6 +21,12 @@ requireED(async (user, profile) => {
     if (e.key === 'Enter') addCounselor();
   });
 
+  // Edit counselor modal
+  document.getElementById('editCounselorCancelBtn').addEventListener('click', () => {
+    document.getElementById('editCounselorModal').classList.add('hidden');
+  });
+  document.getElementById('editCounselorSaveBtn').addEventListener('click', saveEditCounselor);
+
   // Weight sliders live update
   ['wAmi', 'wBudget', 'wTime', 'wWait'].forEach(id => {
     document.getElementById(id).addEventListener('input', (e) => {
@@ -56,6 +62,9 @@ requireED(async (user, profile) => {
 
 // ── Counselors ────────────────────────────────────────────────────────────────
 
+const TH = 'style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
+const TD = 'style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);"';
+
 async function loadCounselors() {
   const container = document.getElementById('counselorsList');
   try {
@@ -68,24 +77,39 @@ async function loadCounselors() {
       <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
         <thead>
           <tr style="background:#f8f9fb;">
-            <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Name</th>
-            <th style="text-align:center;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Status</th>
+            <th ${TH}>Name</th>
+            <th ${TH}>Staff #</th>
+            <th ${TH}>Title</th>
+            <th ${TH} style="text-align:center;">Status</th>
             <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
           </tr>
         </thead>
         <tbody>
           ${snap.docs.map(d => {
             const c = d.data();
-            const isActive = c.active !== false;
+            const isActive   = c.active !== false;
+            const missingHud = isActive && (c.staffNumber == null || !c.staffTitle);
+            const warn = missingHud
+              ? `<span title="Staff Number or Title missing — HUD reports cannot be generated for this counselor"
+                   style="color:#e65100;margin-left:0.35rem;cursor:default;font-size:0.85em;">⚠</span>`
+              : '';
+            const staffNum = c.staffNumber != null ? escHtml(String(c.staffNumber)) : '<span style="color:var(--text-muted);">—</span>';
+            const title    = c.staffTitle ? escHtml(c.staffTitle) : '<span style="color:var(--text-muted);">—</span>';
             return `<tr style="opacity:${isActive ? '1' : '0.55'};">
-              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);">${escHtml(c.name)}</td>
-              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;">
+              <td ${TD}>${escHtml(c.name)}${warn}</td>
+              <td ${TD}>${staffNum}</td>
+              <td ${TD}>${title}</td>
+              <td ${TD} style="text-align:center;">
                 <span style="font-size:0.75rem;font-weight:600;color:${isActive ? 'var(--accent,green)' : 'var(--text-muted)'};">
                   ${isActive ? 'Active' : 'Inactive'}
                 </span>
               </td>
               <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
-                <button class="btn btn-sm btn-secondary" data-toggle="${d.id}" data-active="${isActive}">${isActive ? 'Mark Inactive' : 'Mark Active'}</button>
+                <button class="btn btn-sm btn-secondary" data-edit="${d.id}"
+                  data-name="${escAttr(c.name)}"
+                  data-staff-num="${escAttr(c.staffNumber != null ? String(c.staffNumber) : '')}"
+                  data-staff-title="${escAttr(c.staffTitle || '')}">Edit</button>
+                <button class="btn btn-sm btn-secondary" data-toggle="${d.id}" data-active="${isActive}" style="margin-left:4px;">${isActive ? 'Mark Inactive' : 'Mark Active'}</button>
                 <button class="btn btn-sm btn-danger" data-delete="${d.id}" style="margin-left:4px;">Remove</button>
               </td>
             </tr>`;
@@ -93,6 +117,14 @@ async function loadCounselors() {
         </tbody>
       </table>`;
 
+    container.querySelectorAll('button[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openEditCounselor(
+        btn.dataset.edit,
+        btn.dataset.name,
+        btn.dataset.staffNum,
+        btn.dataset.staffTitle,
+      ));
+    });
     container.querySelectorAll('button[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => toggleCounselor(btn.dataset.toggle, btn.dataset.active === 'true', btn));
     });
@@ -105,24 +137,32 @@ async function loadCounselors() {
 }
 
 async function addCounselor() {
-  const nameEl = document.getElementById('newCounselorName');
-  const msgEl  = document.getElementById('counselorMsg');
-  const btn    = document.getElementById('addCounselorBtn');
+  const nameEl     = document.getElementById('newCounselorName');
+  const staffNumEl = document.getElementById('newCounselorStaffNum');
+  const titleEl    = document.getElementById('newCounselorTitle');
+  const msgEl      = document.getElementById('counselorMsg');
+  const btn        = document.getElementById('addCounselorBtn');
 
   const name = nameEl.value.trim();
   if (!name) { showMsg(msgEl, 'Enter a name.', false); return; }
+
+  const staffNumRaw = staffNumEl.value.trim();
+  const staffNum    = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
+  const staffTitle  = titleEl.value.trim();
 
   btn.disabled = true;
   btn.textContent = 'Adding…';
   msgEl.classList.add('hidden');
 
   try {
-    await addDoc(collection(db, 'counselors'), {
-      name,
-      active:    true,
-      createdAt: serverTimestamp(),
-    });
-    nameEl.value = '';
+    const data = { name, active: true, createdAt: serverTimestamp() };
+    if (staffNum  != null) data.staffNumber = staffNum;
+    if (staffTitle)        data.staffTitle  = staffTitle;
+
+    await addDoc(collection(db, 'counselors'), data);
+    nameEl.value     = '';
+    staffNumEl.value = '';
+    titleEl.value    = '';
     await loadCounselors();
     showMsg(msgEl, `${name} added.`, true);
   } catch (err) {
@@ -157,6 +197,54 @@ async function removeCounselor(id, btn) {
     alert('Failed: ' + err.message);
     btn.disabled = false;
     btn.textContent = 'Remove';
+  }
+}
+
+function openEditCounselor(id, name, staffNum, staffTitle) {
+  document.getElementById('editCounselorId').value       = id;
+  document.getElementById('editCounselorName').value     = name;
+  document.getElementById('editCounselorStaffNum').value = staffNum;
+  document.getElementById('editCounselorTitle').value    = staffTitle;
+  document.getElementById('editCounselorError').classList.add('hidden');
+  document.getElementById('editCounselorSaveBtn').disabled    = false;
+  document.getElementById('editCounselorSaveBtn').textContent = 'Save';
+  document.getElementById('editCounselorModal').classList.remove('hidden');
+  document.getElementById('editCounselorName').focus();
+}
+
+async function saveEditCounselor() {
+  const id         = document.getElementById('editCounselorId').value;
+  const name       = document.getElementById('editCounselorName').value.trim();
+  const staffNumRaw = document.getElementById('editCounselorStaffNum').value.trim();
+  const staffTitle = document.getElementById('editCounselorTitle').value.trim();
+  const errorEl    = document.getElementById('editCounselorError');
+  const saveBtn    = document.getElementById('editCounselorSaveBtn');
+
+  if (!name) {
+    errorEl.textContent = 'Name is required.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const staffNum = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
+
+  saveBtn.disabled    = true;
+  saveBtn.textContent = 'Saving…';
+  errorEl.classList.add('hidden');
+
+  try {
+    const update = { name, staffTitle: staffTitle || '', updatedAt: serverTimestamp() };
+    update.staffNumber = staffNum !== null ? staffNum : null;
+
+    await updateDoc(doc(db, 'counselors', id), update);
+    document.getElementById('editCounselorModal').classList.add('hidden');
+    await loadCounselors();
+    showMsg(document.getElementById('counselorMsg'), `${name} updated.`, true);
+  } catch (err) {
+    errorEl.textContent = 'Save failed: ' + err.message;
+    errorEl.classList.remove('hidden');
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
   }
 }
 
