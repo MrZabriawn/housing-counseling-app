@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { MONTHS } from './data.js';
 import {
-  collection, getDocs, query, orderBy
+  collection, collectionGroup, getDocs, query, where, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 requireAuth(async (user, profile) => {
@@ -15,7 +15,26 @@ requireAuth(async (user, profile) => {
     o.value = m; o.textContent = m;
     monthSel.appendChild(o);
   });
-  monthSel.value = '';
+
+  // Populate year filter (current year back to 2020)
+  const yearSel = document.getElementById('filterYear');
+  const thisYear = new Date().getFullYear();
+  for (let y = thisYear; y >= 2020; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    yearSel.appendChild(o);
+  }
+
+  // Populate counselor filter
+  const counselorSel = document.getElementById('filterCounselor');
+  try {
+    const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    cSnap.docs.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.data().name; o.textContent = d.data().name;
+      counselorSel.appendChild(o);
+    });
+  } catch (_) { /* counselors collection optional */ }
 
   await loadDashboard();
 
@@ -24,48 +43,14 @@ requireAuth(async (user, profile) => {
     await loadDashboard();
   });
   document.getElementById('clearFilters').addEventListener('click', () => {
-    document.getElementById('filterMonth').value = '';
+    document.getElementById('filterMonth').value     = '';
+    document.getElementById('filterYear').value      = '';
     document.getElementById('filterDateStart').value = '';
-    document.getElementById('filterDateEnd').value = '';
+    document.getElementById('filterDateEnd').value   = '';
+    document.getElementById('filterCounselor').value = '';
     loadDashboard();
   });
 });
-
-async function loadDashboard() {
-  // Reset stat cards
-  ['statHouseholds','statSessions','statDollars','statFemale','statHispanic'].forEach(id => {
-    document.getElementById(id).textContent = '…';
-  });
-
-  const monthVal = document.getElementById('filterMonth').value;
-  const startVal = document.getElementById('filterDateStart').value;
-  const endVal   = document.getElementById('filterDateEnd').value;
-
-  // Fetch all records — no orderBy so null-date records are included
-  const snap = await getDocs(collection(db, 'counselingLog'));
-  let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-  const hasDateRange = startVal || endVal;
-
-  if (hasDateRange) {
-    // Explicit date range — filter by counselingDate, skip records with no date
-    const start = startVal ? new Date(startVal + 'T00:00:00') : null;
-    const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
-    rows = rows.filter(r => {
-      if (!r.counselingDate) return false;
-      const d = toDate(r.counselingDate);
-      if (start && d < start) return false;
-      if (end   && d > end)   return false;
-      return true;
-    });
-  } else if (monthVal) {
-    // Month selected — filter by sourceMonth label only, all years
-    rows = rows.filter(r => r.sourceMonth === monthVal);
-  }
-  // No filters = show all
-
-  renderStats(rows);
-}
 
 function toDate(ts) {
   if (!ts) return new Date(0);
@@ -83,19 +68,124 @@ function uniqueHouseholds(rows) {
   });
 }
 
-function renderStats(rows) {
+async function loadDashboard() {
+  ['statHouseholds','statSessions','statHours','statDollars','statFemale','statHispanic'].forEach(id => {
+    document.getElementById(id).textContent = '…';
+  });
+
+  const monthVal     = document.getElementById('filterMonth').value;
+  const yearVal      = parseInt(document.getElementById('filterYear').value, 10) || 0;
+  const startVal     = document.getElementById('filterDateStart').value;
+  const endVal       = document.getElementById('filterDateEnd').value;
+  const counselorVal = document.getElementById('filterCounselor').value;
+
+  // ── Load counselingLog records (demographics / CDBG data) ──────────────────
+  const snap = await getDocs(collection(db, 'counselingLog'));
+  let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const hasDateRange = startVal || endVal;
+
+  if (hasDateRange) {
+    const start = startVal ? new Date(startVal + 'T00:00:00') : null;
+    const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
+    rows = rows.filter(r => {
+      if (!r.counselingDate) return false;
+      const d = toDate(r.counselingDate);
+      if (start && d < start) return false;
+      if (end   && d > end)   return false;
+      return true;
+    });
+  } else if (monthVal) {
+    rows = rows.filter(r => {
+      if (r.sourceMonth !== monthVal) return false;
+      if (yearVal) {
+        const d = toDate(r.counselingDate);
+        if (d.getTime() === 0) return true; // no date — keep if month matches
+        return d.getFullYear() === yearVal;
+      }
+      return true;
+    });
+  } else if (yearVal) {
+    rows = rows.filter(r => {
+      const d = toDate(r.counselingDate);
+      if (d.getTime() === 0) return false;
+      return d.getFullYear() === yearVal;
+    });
+  }
+
+  if (counselorVal) {
+    rows = rows.filter(r => (r.counselor || '') === counselorVal);
+  }
+
+  // ── Load sessions subcollection for Total Hours ────────────────────────────
+  // Sessions are stored in clients/{id}/sessions with a `date` and `hours` field.
+  // We apply the same date/counselor filters here.
+  let totalHours = 0;
+  try {
+    let sessSnap;
+    if (hasDateRange) {
+      const start = startVal ? new Date(startVal + 'T00:00:00') : null;
+      const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
+      const constraints = [collectionGroup(db, 'sessions')];
+      if (start && end) {
+        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
+          where('date', '>=', start), where('date', '<=', end), orderBy('date')));
+      } else if (start) {
+        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
+          where('date', '>=', start), orderBy('date')));
+      } else if (end) {
+        sessSnap = await getDocs(query(collectionGroup(db, 'sessions'),
+          where('date', '<=', end), orderBy('date')));
+      } else {
+        sessSnap = await getDocs(collectionGroup(db, 'sessions'));
+      }
+    } else {
+      // Load all and filter client-side for month/year/counselor
+      sessSnap = await getDocs(collectionGroup(db, 'sessions'));
+    }
+
+    sessSnap.docs.forEach(d => {
+      const s = d.data();
+      // Apply month/year filter if not using date range
+      if (!hasDateRange) {
+        const sDate = toDate(s.date);
+        if (monthVal) {
+          const sMonth = MONTHS[sDate.getMonth()];
+          if (sMonth !== monthVal) return;
+        }
+        if (yearVal) {
+          if (sDate.getFullYear() !== yearVal) return;
+        }
+      }
+      if (counselorVal && (s.counselor || '') !== counselorVal) return;
+      totalHours += Number(s.hours) || 0;
+    });
+  } catch (_) {
+    // Hours unavailable (index not yet created, etc.) — show N/A
+    totalHours = null;
+  }
+
+  renderStats(rows, totalHours);
+}
+
+function renderStats(rows, totalHours) {
   const unique = uniqueHouseholds(rows);
 
   document.getElementById('statHouseholds').textContent = unique.length;
   document.getElementById('statSessions').textContent   = rows.length;
+  document.getElementById('statHours').textContent      = totalHours === null
+    ? 'N/A'
+    : totalHours % 1 === 0
+      ? totalHours.toLocaleString()
+      : totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
   document.getElementById('statDollars').textContent    =
     '$' + rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0)
               .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   document.getElementById('statFemale').textContent   = unique.filter(r => r.femaleHeaded).length;
   document.getElementById('statHispanic').textContent = unique.filter(r => r.hispanic).length;
 
-  renderBreakdown('amiTable',       'amiPercent',    unique);
-  renderBreakdown('reTable',        'reCode',        unique);
+  renderBreakdown('amiTable',       'amiPercent',     unique);
+  renderBreakdown('reTable',        'reCode',         unique);
   renderBreakdown('typeTable',      'counselingType', rows);
   renderBreakdown('counselorTable', 'counselor',      rows);
 }

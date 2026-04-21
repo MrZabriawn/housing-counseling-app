@@ -5,21 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reports — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* ── Print styles ───────────────────────────────────────────────────────── */
+    @media print {
+      /* Hide everything we don't want in the printout */
+      .nav,
+      .no-print,
+      #cdbgControls,
+      #courtSection { display: none !important; }
+
+      main.page { padding: 0 !important; margin: 0 !important; }
+
+      /* The combined card wrapper — keep it, but strip card chrome */
+      #cdbgCard {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      #cdbgPrintArea {
+        display: block !important;
+        padding: 0;
+      }
+
+      .cdbg-print-header {
+        margin-bottom: 1.5rem;
+      }
+
+      .cdbg-print-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 0.2rem;
+      }
+
+      .cdbg-print-header p {
+        font-size: 0.85rem;
+        color: #555;
+        margin: 0.15rem 0;
+      }
+
+      .cdbg-report-section {
+        margin-bottom: 2rem;
+        page-break-inside: avoid;
+      }
+
+      .cdbg-report-section h3 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 0.25rem;
+      }
+
+      .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      .print-table th,
+      .print-table td {
+        border: 1px solid #999;
+        padding: 0.3rem 0.5rem;
+      }
+
+      .print-table th {
+        background: #f0f0f0;
+        font-weight: 700;
+        text-align: left;
+      }
+
+      .print-table td.num {
+        text-align: right;
+      }
+
+      /* Force page to show the print area which is normally hidden on-screen */
+      #cdbgPrintArea { display: block !important; }
+    }
+  </style>
 </head>
 <body>
   <nav class="nav"></nav>
 
   <main class="page">
-    <div class="page-header">
+    <div class="page-header no-print">
       <div class="page-header-text">
-        <h2>CDBG Report Generator</h2>
-        <p>Select a month, customize header fields, then download the .docx forms.</p>
+        <h2>Reports</h2>
+        <p>Monthly CDBG reports, court appearances, and other program summaries.</p>
       </div>
     </div>
 
-    <!-- Month selector -->
-    <div class="card" style="margin-bottom:1.25rem;">
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));">
+    <!-- ── CDBG Monthly Reports ─────────────────────────────────────────────── -->
+    <div style="margin-bottom:0.5rem;" class="no-print">
+      <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
+        CDBG Monthly Reports — Home Stabilization
+      </h3>
+    </div>
+
+    <!-- Controls (hidden when printing) -->
+    <div id="cdbgControls" class="card no-print" style="margin-bottom:1.25rem;">
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));align-items:end;">
         <div class="form-group">
           <label for="reportMonth">Report Month *</label>
           <select id="reportMonth">
@@ -30,121 +116,125 @@
           <label for="reportYear">Year *</label>
           <input type="number" id="reportYear" min="2000" max="2100" style="max-width:120px;">
         </div>
+        <div class="form-group" style="flex:1;min-width:160px;">
+          <label for="reportPerson">Person Completing Form</label>
+          <input type="text" id="reportPerson">
+        </div>
       </div>
+      <p id="reportStatus" style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;min-height:1.2em;"></p>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;flex-wrap:wrap;" id="reportCards">
+    <!-- Combined CDBG report card — visible on screen AND when printing -->
+    <div class="card" id="cdbgCard" style="margin-bottom:1.25rem;display:none;">
 
-      <!-- Report 1: Income -->
-      <div class="card">
-        <h3 style="font-size:0.95rem;margin-bottom:1rem;color:var(--primary);">
-          Report 1 — CDBG Direct Benefit Report: Income (Owner Households)
-        </h3>
-        <div style="display:grid;gap:0.75rem;">
-          <div class="form-group">
-            <label>Project Name</label>
-            <input type="text" id="r1ProjectName" value="BC Home Stabilization">
-          </div>
-          <div class="form-group">
-            <label>Project Number</label>
-            <input type="text" id="r1ProjectNumber" value="CD255505 2419-PRO-SUBR">
-          </div>
-          <div class="form-group">
-            <label>Date</label>
-            <input type="text" id="r1Date" readonly>
-          </div>
-          <div class="form-group">
-            <label>Person Completing Form</label>
-            <input type="text" id="r1Person">
-          </div>
+      <!-- On-screen header row with Print button -->
+      <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
+        <div>
+          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.15rem;">CDBG Direct Benefit Report</div>
+          <div id="cdbgCardSubtitle" style="font-size:0.95rem;font-weight:600;"></div>
         </div>
-        <div class="form-actions">
-          <button id="downloadR1" class="btn btn-primary" disabled>Download Report 1 (.docx)</button>
+        <button id="printCdbgBtn" class="btn btn-primary">Print / Save as PDF</button>
+      </div>
+
+      <!-- Hidden-on-screen print header (shows when printing) -->
+      <div id="cdbgPrintArea" style="display:none;">
+        <div class="cdbg-print-header">
+          <h2>CDBG Direct Benefit Report — Home Stabilization</h2>
+          <p id="printMonthLine"></p>
+          <p id="printPersonLine"></p>
+          <p id="printDateLine"></p>
         </div>
-        <div id="r1Preview" class="mt-2" style="display:none;">
-          <p class="text-muted" style="font-size:0.8rem;margin-bottom:0.5rem;">Preview counts:</p>
+
+        <div class="cdbg-report-section">
+          <h3>Report 1 — Income (Owner Households)<br>
+            <span style="font-weight:400;font-size:0.82rem;">Project: BC Home Stabilization &nbsp;·&nbsp; CD255505 2419-PRO-SUBR</span>
+          </h3>
+          <table class="print-table">
+            <thead>
+              <tr><th style="width:70px;">Count</th><th>AMI Category</th></tr>
+            </thead>
+            <tbody id="r1PrintBody"></tbody>
+          </table>
+        </div>
+
+        <div class="cdbg-report-section">
+          <h3>Report 2 — Race &amp; Ethnicity (Owner Households)<br>
+            <span style="font-weight:400;font-size:0.82rem;">Project: Home Stabilization Program &nbsp;·&nbsp; CD255505 2419-PRO</span>
+          </h3>
+          <table class="print-table">
+            <thead>
+              <tr><th style="width:60px;">Count</th><th>Race / Ethnicity</th><th style="width:80px;">Hispanic</th></tr>
+            </thead>
+            <tbody id="r2PrintBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- On-screen preview tables (same data, styled for screen) -->
+      <div class="no-print" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;flex-wrap:wrap;">
+
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 1 — Income</div>
           <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
             <thead>
               <tr>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:80px;">Count</th>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Count</th>
                 <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">AMI Category</th>
               </tr>
             </thead>
             <tbody id="r1PreviewBody"></tbody>
           </table>
         </div>
-      </div>
 
-      <!-- Report 2: Race & Ethnicity -->
-      <div class="card">
-        <h3 style="font-size:0.95rem;margin-bottom:1rem;color:var(--primary);">
-          Report 2 — CDBG Direct Benefit Report: Race &amp; Ethnicity (Owner Households)
-        </h3>
-        <div style="display:grid;gap:0.75rem;">
-          <div class="form-group">
-            <label>Project Name</label>
-            <input type="text" id="r2ProjectName" value="Home Stabilization Program">
-          </div>
-          <div class="form-group">
-            <label>Project Number</label>
-            <input type="text" id="r2ProjectNumber" value="CD255505 2419-PRO">
-          </div>
-          <div class="form-group">
-            <label>Date</label>
-            <input type="text" id="r2Date" readonly>
-          </div>
-          <div class="form-group">
-            <label>Person Completing Form</label>
-            <input type="text" id="r2Person">
-          </div>
-        </div>
-        <div class="form-actions">
-          <button id="downloadR2" class="btn btn-primary" disabled>Download Report 2 (.docx)</button>
-        </div>
-        <div id="r2Preview" class="mt-2" style="display:none;">
-          <p class="text-muted" style="font-size:0.8rem;margin-bottom:0.5rem;">Preview counts:</p>
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 2 — Race &amp; Ethnicity</div>
           <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
             <thead>
               <tr>
                 <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:60px;">Count</th>
                 <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">Race / Ethnicity</th>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:80px;">Hispanic</th>
+                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Hispanic</th>
               </tr>
             </thead>
             <tbody id="r2PreviewBody"></tbody>
           </table>
         </div>
-      </div>
 
+      </div>
     </div>
-    <p id="reportStatus" class="text-muted mt-2" style="font-size:0.8125rem;"></p>
 
-    <!-- Court Appearances Summary -->
-    <div class="card" style="margin-top:1.5rem;">
-      <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
-        Court Appearance Summary
-      </h3>
-      <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
-        Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
-      </p>
-
-      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
-        <div class="form-group" style="margin-bottom:0;">
-          <label for="courtReportYear">Year</label>
-          <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
-        </div>
-        <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
+    <!-- ── Court Appearances Summary ─────────────────────────────────────────── -->
+    <div id="courtSection">
+      <div style="margin-top:2rem;margin-bottom:0.5rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
+          Court Appearances
+        </h3>
       </div>
 
-      <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
-        Select a year and click Load.
+      <div class="card">
+        <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
+          Court Appearance Summary
+        </h3>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
+          Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
+        </p>
+
+        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="courtReportYear">Year</label>
+            <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
+          </div>
+          <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
+        </div>
+
+        <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
+          Select a year and click Load.
+        </div>
       </div>
     </div>
 
   </main>
 
-  <!-- docx UMD bundle — exposes window.docx -->
-  <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
   <script type="module" src="js/reports.js"></script>
 </body>
 </html>

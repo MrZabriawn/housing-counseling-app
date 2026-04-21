@@ -68,11 +68,23 @@
 
   <!-- Edit Modal -->
   <div id="ccaEditModal" class="modal-overlay hidden">
-    <div class="modal-box">
+    <div class="modal-box modal-box-wide">
       <h3 id="ccaEditTitle">Edit CCA Entry</h3>
-      <div id="ccaClientLink" class="hidden" style="margin-bottom:0.75rem;font-size:0.8125rem;background:var(--primary-light,#e8f0fe);padding:0.45rem 0.75rem;border-radius:var(--radius);">
+
+      <!-- Shown when record IS linked to a client profile -->
+      <div id="ccaLinkedBar" class="hidden" style="margin-bottom:0.75rem;font-size:0.8125rem;background:var(--primary-light,#e8f0fe);padding:0.45rem 0.75rem;border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;">
         <a id="ccaClientAnchor" href="#" style="font-weight:600;">View Full Client Profile →</a>
+        <button id="ccaResyncBtn" type="button" class="btn btn-secondary btn-sm">Re-sync from client</button>
       </div>
+
+      <!-- Shown when record is NOT linked — search to find and link the client -->
+      <div id="ccaLinkSection" class="hidden" style="margin-bottom:1rem;border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;">
+        <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.5rem;">Link to Client Profile</p>
+        <input type="text" id="ccaLinkSearch" placeholder="Search by name, counselor, or Rx…" autocomplete="off" style="width:100%;margin-bottom:0.4rem;">
+        <div id="ccaLinkResults" style="border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;font-size:0.875rem;"></div>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.4rem;">Once linked, clicking this row will open the full client profile and keep data in sync.</p>
+      </div>
+
       <div class="form-grid" style="margin-top:1rem;">
         <div class="form-group">
           <label for="editClosingDate">Closing Date</label>

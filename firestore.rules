@@ -6,31 +6,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    match /counselingLog/{doc} {
+    // All authenticated users (signed-in @housingopps.org accounts) can read
+    // and write any collection. The security boundary is Google login — only
+    // staff with an org account can reach this app.
+    match /{document=**} {
       allow read, write: if isSignedIn();
     }
-    match /ccaList/{doc} {
-      allow read, write: if isSignedIn();
-    }
-    match /higWaitlist/{doc} {
-      allow read, write: if isSignedIn();
-    }
-    match /users/{doc} {
-      allow read, write: if isSignedIn();
-    }
-    match /config/{doc} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-    match /counselors/{doc} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-    match /clients/{clientId} {
-      allow read, write: if isSignedIn();
-      match /sessions/{sessionId} {
-        allow read, write: if isSignedIn();
-      }
-    }
+
   }
 }

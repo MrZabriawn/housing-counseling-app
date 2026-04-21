@@ -100,12 +100,13 @@ const STATUS_COLORS = {
   complete:     'badge-gray',
 };
 
-let allRows       = [];
-let _allClients   = []; // cached for client selector
-let weights       = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
-let editingId     = null;
-let _editFile     = null;
-let _editFolder   = null;
+let allRows        = [];
+let _allClients    = [];   // cached for client selector + link search
+let weights        = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
+let editingId      = null;
+let _editingRecord = null; // full higWaitlist record currently open in the edit modal
+let _editFile      = null;
+let _editFolder    = null;
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'hig-waitlist');
@@ -125,6 +126,10 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('higEditCancel').addEventListener('click', closeModal);
   document.getElementById('higEditSave').addEventListener('click', saveEdit);
+
+  // Link search inside edit modal
+  document.getElementById('higLinkSearch').addEventListener('input', renderHigLinkResults);
+  document.getElementById('higResyncBtn').addEventListener('click', resyncHigFromClient);
 
   // Client selector
   document.getElementById('addClientBtn').addEventListener('click', openClientSelector);
@@ -223,16 +228,16 @@ function render() {
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
-  editingId = id;
+  editingId      = id;
+  _editingRecord = r;
 
   document.getElementById('higEditTitle').textContent  = toTitleCase(r.clientName);
-  document.getElementById('editHigScope').value        = r.scopeOfWork    || '';
+  document.getElementById('editHigScope').value        = r.scopeOfWork     || '';
   document.getElementById('editHigBudget').value       = r.estimatedBudget || '';
   document.getElementById('editHigDays').value         = r.estimatedDays   || '';
   document.getElementById('editHigStatus').value       = r.status          || 'waitlisted';
   document.getElementById('editHigNotes').value        = r.notes           || '';
 
-  // Seed local Drive state from record
   _editFile   = r.driveFileId   ? { id: r.driveFileId,   name: r.driveFileName   || '', url: r.driveFileUrl   || '' } : null;
   _editFolder = r.driveFolderId ? { id: r.driveFolderId, name: r.driveFolderName || '', url: r.driveFolderUrl || '' } : null;
   renderSowUI();
@@ -240,14 +245,17 @@ function openEditModal(id) {
 
   document.getElementById('higEditError').classList.add('hidden');
 
-  const linkDiv = document.getElementById('higClientLink');
-  const anchor  = document.getElementById('higClientAnchor');
   if (r.clientId) {
+    const anchor = document.getElementById('higClientAnchor');
     anchor.href        = `client.html?id=${r.clientId}`;
     anchor.textContent = toTitleCase(r.clientName) || r.clientId;
-    linkDiv.classList.remove('hidden');
+    document.getElementById('higLinkedBar').classList.remove('hidden');
+    document.getElementById('higLinkSection').classList.add('hidden');
   } else {
-    linkDiv.classList.add('hidden');
+    document.getElementById('higLinkedBar').classList.add('hidden');
+    document.getElementById('higLinkSection').classList.remove('hidden');
+    document.getElementById('higLinkSearch').value = r.clientName || '';
+    renderHigLinkResults();
   }
 
   document.getElementById('higEditModal').classList.remove('hidden');
@@ -334,6 +342,127 @@ async function saveEdit() {
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save';
+  }
+}
+
+// ── Link search (inside edit modal for unlinked records) ─────────────────────
+
+async function renderHigLinkResults() {
+  const search    = document.getElementById('higLinkSearch').value.toLowerCase().trim();
+  const resultsEl = document.getElementById('higLinkResults');
+
+  if (!_allClients.length) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">Loading…</div>';
+    try {
+      const snap = await getDocs(collection(db, 'clients'));
+      _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) { _allClients = []; }
+  }
+
+  if (!search) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">Start typing to search clients.</div>';
+    return;
+  }
+
+  const matches = _allClients.filter(c =>
+    (c.clientName || '').toLowerCase().includes(search) ||
+    (c.counselor  || '').toLowerCase().includes(search) ||
+    (c.rxNumbers  || []).some(rx => rx.toLowerCase().includes(search))
+  ).slice(0, 20);
+
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">No clients found.</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(c => `
+    <div class="client-selector-item" data-client-id="${c.id}">
+      <div>
+        <div class="cs-name">${esc(toTitleCase(c.clientName || ''))}</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(c.amiPercent || '')}</div>
+      </div>
+      <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Link →</span>
+    </div>`).join('');
+
+  resultsEl.querySelectorAll('.client-selector-item').forEach(item => {
+    item.addEventListener('click', () => linkHigClientToEntry(item.dataset.clientId));
+  });
+}
+
+async function linkHigClientToEntry(clientDocId) {
+  if (!editingId) return;
+  const errorEl = document.getElementById('higEditError');
+  errorEl.classList.add('hidden');
+
+  try {
+    const clientSnap = await getDoc(doc(db, 'clients', clientDocId));
+    if (!clientSnap.exists()) throw new Error('Client not found.');
+    const c = clientSnap.data();
+
+    const updates = {
+      clientId:        clientDocId,
+      clientName:      c.clientName      || _editingRecord.clientName || '',
+      amiPercent:      c.amiPercent      || '',
+      driveFolderId:   c.driveFolderId   || '',
+      driveFolderName: c.driveFolderName || '',
+      driveFolderUrl:  c.driveFolderUrl  || '',
+      updatedAt:       serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'higWaitlist', editingId), updates);
+
+    const idx = allRows.findIndex(x => x.id === editingId);
+    if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
+    _editingRecord = { ..._editingRecord, ...updates };
+
+    const anchor = document.getElementById('higClientAnchor');
+    anchor.href        = `client.html?id=${clientDocId}`;
+    anchor.textContent = toTitleCase(c.clientName || '') || clientDocId;
+    document.getElementById('higLinkedBar').classList.remove('hidden');
+    document.getElementById('higLinkSection').classList.add('hidden');
+    document.getElementById('higEditTitle').textContent = toTitleCase(c.clientName || '');
+
+    render();
+  } catch (err) {
+    errorEl.textContent = 'Link failed: ' + err.message;
+    errorEl.classList.remove('hidden');
+  }
+}
+
+async function resyncHigFromClient() {
+  if (!editingId || !_editingRecord?.clientId) return;
+  const btn = document.getElementById('higResyncBtn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+
+  try {
+    const clientSnap = await getDoc(doc(db, 'clients', _editingRecord.clientId));
+    if (!clientSnap.exists()) throw new Error('Client not found.');
+    const c = clientSnap.data();
+
+    const updates = {
+      clientName:      c.clientName      || '',
+      amiPercent:      c.amiPercent      || '',
+      driveFolderId:   c.driveFolderId   || '',
+      driveFolderName: c.driveFolderName || '',
+      driveFolderUrl:  c.driveFolderUrl  || '',
+      updatedAt:       serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'higWaitlist', editingId), updates);
+
+    const idx = allRows.findIndex(x => x.id === editingId);
+    if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
+    _editingRecord = { ..._editingRecord, ...updates };
+
+    document.getElementById('higEditTitle').textContent = toTitleCase(c.clientName || '');
+    render();
+    btn.textContent = 'Synced ✓';
+    setTimeout(() => { btn.textContent = 'Re-sync from client'; btn.disabled = false; }, 1500);
+  } catch (err) {
+    alert('Re-sync failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Re-sync from client';
   }
 }
 

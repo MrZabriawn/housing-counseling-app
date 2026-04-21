@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import { requireED, setupNav } from './auth.js';
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch,
-  query, orderBy, serverTimestamp
+  query, where, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const DEFAULTS = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
@@ -48,6 +48,10 @@ requireED(async (user, profile) => {
 
   // CMC link tool
   document.getElementById('loadCmcLinkBtn').addEventListener('click', loadCmcLinkTool);
+
+  // Auto-link list records to client profiles
+  document.getElementById('scanUnlinkedBtn').addEventListener('click', scanUnlinkedListRecords);
+  document.getElementById('applyAutoLinkBtn').addEventListener('click', applyAutoLinks);
 });
 
 // ── Counselors ────────────────────────────────────────────────────────────────
@@ -628,21 +632,43 @@ async function scanDuplicates() {
     const confidenceLabel = { high: 'Strong match', medium: 'Possible match', low: 'Weak signal' };
 
     container.innerHTML = `
-      <p style="margin-bottom:0.75rem;font-weight:600;">${pairs.length} potential duplicate pair${pairs.length !== 1 ? 's' : ''} found:</p>
-      <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.9rem;">
+        <div class="form-group" style="margin:0;flex:1;min-width:180px;">
+          <label style="font-size:0.75rem;">Filter by name</label>
+          <input type="text" id="dupFilterSearch" placeholder="Type a name…" style="font-size:0.8125rem;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;">Confidence</label>
+          <select id="dupFilterConf" style="font-size:0.8125rem;">
+            <option value="">All</option>
+            <option value="high">Strong match only</option>
+            <option value="medium">Possible match only</option>
+            <option value="low">Weak signal only</option>
+          </select>
+        </div>
+      </div>
+      <p id="dupCount" style="margin-bottom:0.75rem;font-weight:600;">${pairs.length} potential duplicate pair${pairs.length !== 1 ? 's' : ''} found:</p>
+      <div id="dupPairList" style="display:flex;flex-direction:column;gap:0.75rem;">
         ${pairs.map(({ a, b, reasons, key }) => {
           const topConf = reasons.reduce((best, r) => rank(r) < rank(best) ? r : best, reasons[0]);
+          const aName = toTitleCase(a.clientName);
+          const bName = toTitleCase(b.clientName);
           return `
-          <div class="dup-pair" data-key="${escAttr(key)}"
+          <div class="dup-pair"
+            data-key="${escAttr(key)}"
+            data-conf="${topConf.confidence}"
+            data-names="${escAttr((aName + ' ' + bName).toLowerCase())}"
             style="border:1px solid var(--border);border-radius:var(--radius);padding:0.9rem 1rem;background:#fff;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
               <div style="flex:1;min-width:200px;">
-                <div style="font-weight:600;font-size:0.9rem;">${escHtml(toTitleCase(a.clientName))}</div>
+                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.15rem;">A</div>
+                <div style="font-weight:600;font-size:0.9rem;">${escHtml(aName)}</div>
                 <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(a.counselingType || '')} · ${escHtml(a.counselor || '')} · ${a.sessionCount || 0} sessions</div>
               </div>
               <div style="font-size:0.8rem;color:var(--text-muted);padding:0 0.25rem;">↔</div>
               <div style="flex:1;min-width:200px;">
-                <div style="font-weight:600;font-size:0.9rem;">${escHtml(toTitleCase(b.clientName))}</div>
+                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.15rem;">B</div>
+                <div style="font-weight:600;font-size:0.9rem;">${escHtml(bName)}</div>
                 <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(b.counselingType || '')} · ${escHtml(b.counselor || '')} · ${b.sessionCount || 0} sessions</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end;flex-shrink:0;">
@@ -655,9 +681,14 @@ async function scanDuplicates() {
                   <button class="btn btn-sm btn-secondary dismiss-pair" data-key="${escAttr(key)}" style="font-size:0.75rem;">Dismiss</button>
                   <button class="btn btn-sm btn-primary merge-btn"
                     data-keep="${a.id}" data-drop="${b.id}"
-                    data-keep-name="${escAttr(toTitleCase(a.clientName))}"
-                    data-drop-name="${escAttr(toTitleCase(b.clientName))}"
+                    data-keep-name="${escAttr(aName)}"
+                    data-drop-name="${escAttr(bName)}"
                     style="font-size:0.75rem;">Merge B→A</button>
+                  <button class="btn btn-sm btn-primary merge-btn"
+                    data-keep="${b.id}" data-drop="${a.id}"
+                    data-keep-name="${escAttr(bName)}"
+                    data-drop-name="${escAttr(aName)}"
+                    style="font-size:0.75rem;">Merge A→B</button>
                 </div>
               </div>
             </div>
@@ -671,14 +702,40 @@ async function scanDuplicates() {
         }).join('')}
       </div>`;
 
+    function updateDupCount() {
+      const visible = container.querySelectorAll('.dup-pair:not([style*="display: none"])').length;
+      const total   = container.querySelectorAll('.dup-pair').length;
+      const countEl = document.getElementById('dupCount');
+      if (countEl) countEl.textContent = visible === total
+        ? `${total} potential duplicate pair${total !== 1 ? 's' : ''} found:`
+        : `Showing ${visible} of ${total} pairs:`;
+    }
+
+    function applyDupFilter() {
+      const search = (document.getElementById('dupFilterSearch')?.value || '').toLowerCase();
+      const conf   = document.getElementById('dupFilterConf')?.value || '';
+      container.querySelectorAll('.dup-pair').forEach(pair => {
+        const nameMatch = !search || pair.dataset.names.includes(search);
+        const confMatch = !conf   || pair.dataset.conf === conf;
+        pair.style.display = (nameMatch && confMatch) ? '' : 'none';
+      });
+      updateDupCount();
+    }
+
+    document.getElementById('dupFilterSearch').addEventListener('input', applyDupFilter);
+    document.getElementById('dupFilterConf').addEventListener('change', applyDupFilter);
+
     // Wire dismiss buttons
     container.querySelectorAll('.dismiss-pair').forEach(btn => {
       btn.addEventListener('click', () => {
         _dismissedPairs.add(btn.dataset.key);
         btn.closest('.dup-pair').remove();
+        updateDupCount();
         const remaining = container.querySelectorAll('.dup-pair').length;
-        if (!remaining) container.querySelector('p').textContent = 'All pairs dismissed.';
-        else container.querySelector('p').textContent = `${remaining} potential duplicate pair${remaining !== 1 ? 's' : ''} found:`;
+        if (!remaining) {
+          document.getElementById('dupPairList').innerHTML = '';
+          document.getElementById('dupCount').textContent = 'All pairs dismissed.';
+        }
       });
     });
 
@@ -794,7 +851,16 @@ async function performMerge() {
     document.getElementById('mergeModal').classList.add('hidden');
     _dismissedPairs.add(pk);
     const pairEl = document.querySelector(`.dup-pair[data-key="${CSS.escape(pk)}"]`);
-    if (pairEl) pairEl.remove();
+    if (pairEl) {
+      pairEl.remove();
+      const countEl = document.getElementById('dupCount');
+      if (countEl) {
+        const remaining = document.querySelectorAll('.dup-pair').length;
+        countEl.textContent = remaining
+          ? `${remaining} potential duplicate pair${remaining !== 1 ? 's' : ''} found:`
+          : 'All pairs dismissed.';
+      }
+    }
 
     showMsg(document.getElementById('duplicatesMsg'),
       `Merged "${dropName}" into "${keepName}" — ${dropSessions.length} session(s) transferred.`, true);
@@ -944,6 +1010,218 @@ async function loadCmcLinkTool() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Load Unlinked Letters';
+  }
+}
+
+// ── Auto-Link List Records to Client Profiles ────────────────────────────────
+
+// Pending auto-link assignments: [{ collection, docId, clientDocId }]
+let _autoLinkPending = [];
+
+function normName(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+async function scanUnlinkedListRecords() {
+  const btn       = document.getElementById('scanUnlinkedBtn');
+  const resultEl  = document.getElementById('autoLinkResult');
+  const applyBtn  = document.getElementById('applyAutoLinkBtn');
+  _autoLinkPending = [];
+  applyBtn.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  resultEl.innerHTML = '<p style="color:var(--text-muted);">Loading records…</p>';
+
+  try {
+    // Load all clients once for matching
+    const clientsSnap = await getDocs(collection(db, 'clients'));
+    const clients = clientsSnap.docs.map(d => ({
+      id: d.id,
+      name: d.data().clientName || '',
+      counselor: d.data().counselor || '',
+      ami: d.data().ami || '',
+      driveFolder: d.data().driveFolder || '',
+      driveFolderName: d.data().driveFolderName || '',
+    }));
+
+    // Load unlinked ccaList and higWaitlist records
+    const [ccaSnap, higSnap] = await Promise.all([
+      getDocs(query(collection(db, 'ccaList'), where('clientId', '==', ''))),
+      getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', ''))),
+    ]);
+
+    // Also catch docs where clientId field is absent entirely
+    const [ccaAllSnap, higAllSnap] = await Promise.all([
+      getDocs(collection(db, 'ccaList')),
+      getDocs(collection(db, 'higWaitlist')),
+    ]);
+
+    const ccaDocs  = ccaAllSnap.docs.filter(d => !d.data().clientId).map(d => ({ col: 'ccaList',     id: d.id, name: d.data().clientName || d.data().name || '', counselor: d.data().counselor || '' }));
+    const higDocs  = higAllSnap.docs.filter(d => !d.data().clientId).map(d => ({ col: 'higWaitlist', id: d.id, name: d.data().clientName || d.data().name || '', counselor: d.data().counselor || '' }));
+    const unlinked = [...ccaDocs, ...higDocs];
+
+    if (!unlinked.length) {
+      resultEl.innerHTML = '<p style="color:var(--accent);font-weight:600;">All records are already linked.</p>';
+      return;
+    }
+
+    // Match each unlinked record to client(s) by normalized name
+    const rows = unlinked.map(rec => {
+      const norm   = normName(rec.name);
+      const matches = clients.filter(c => normName(c.name) === norm);
+      return { rec, matches };
+    });
+
+    const autoRows     = rows.filter(r => r.matches.length === 1);
+    const multiRows    = rows.filter(r => r.matches.length > 1);
+    const noMatchRows  = rows.filter(r => r.matches.length === 0);
+
+    // Pre-fill _autoLinkPending with single-match results
+    _autoLinkPending = autoRows.map(r => ({
+      collection: r.rec.col,
+      docId: r.rec.id,
+      clientDocId: r.matches[0].id,
+    }));
+
+    // Build preview table
+    const listLabel = col => col === 'ccaList' ? 'Buyer Ready' : 'Repair Ready';
+
+    let html = `<p style="margin-bottom:0.75rem;font-size:0.8125rem;">
+      Found <strong>${unlinked.length}</strong> unlinked record(s):
+      <strong>${autoRows.length}</strong> auto-matched,
+      <strong>${multiRows.length}</strong> need manual selection,
+      <strong>${noMatchRows.length}</strong> no match found.
+    </p>
+    <table class="data-table" style="font-size:0.8125rem;">
+      <thead><tr>
+        <th>List</th><th>Record Name</th><th>Counselor</th><th>Match</th>
+      </tr></thead><tbody>`;
+
+    // Auto-matched rows
+    autoRows.forEach(({ rec, matches }) => {
+      const c = matches[0];
+      html += `<tr style="background:#f0faf0;">
+        <td>${escHtml(listLabel(rec.col))}</td>
+        <td>${escHtml(rec.name)}</td>
+        <td style="color:var(--text-muted);">${escHtml(rec.counselor)}</td>
+        <td>
+          <span style="color:var(--accent);font-weight:600;">Auto → ${escHtml(c.name)}</span>
+          <input type="hidden" class="auto-link-row" data-col="${escAttr(rec.col)}" data-doc="${escAttr(rec.id)}" data-client="${escAttr(c.id)}">
+        </td>
+      </tr>`;
+    });
+
+    // Multiple-match rows — show select dropdown
+    multiRows.forEach(({ rec, matches }) => {
+      const opts = matches.map(c => `<option value="${escAttr(c.id)}">${escHtml(c.name)} (${escHtml(c.counselor)})</option>`).join('');
+      html += `<tr>
+        <td>${escHtml(listLabel(rec.col))}</td>
+        <td>${escHtml(rec.name)}</td>
+        <td style="color:var(--text-muted);">${escHtml(rec.counselor)}</td>
+        <td>
+          <select class="multi-match-select" data-col="${escAttr(rec.col)}" data-doc="${escAttr(rec.id)}" style="font-size:0.8125rem;width:100%;">
+            <option value="">— choose —</option>
+            ${opts}
+          </select>
+        </td>
+      </tr>`;
+    });
+
+    // No-match rows
+    noMatchRows.forEach(({ rec }) => {
+      html += `<tr style="opacity:0.55;">
+        <td>${escHtml(listLabel(rec.col))}</td>
+        <td>${escHtml(rec.name)}</td>
+        <td style="color:var(--text-muted);">${escHtml(rec.counselor)}</td>
+        <td style="color:var(--text-muted);font-style:italic;">No matching client found</td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    resultEl.innerHTML = html;
+
+    // Wire up multi-match selects to add/update pending
+    resultEl.querySelectorAll('.multi-match-select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const col    = sel.dataset.col;
+        const docId  = sel.dataset.doc;
+        const existing = _autoLinkPending.findIndex(p => p.collection === col && p.docId === docId);
+        if (sel.value) {
+          const entry = { collection: col, docId, clientDocId: sel.value };
+          if (existing >= 0) _autoLinkPending[existing] = entry;
+          else _autoLinkPending.push(entry);
+        } else {
+          if (existing >= 0) _autoLinkPending.splice(existing, 1);
+        }
+      });
+    });
+
+    if (_autoLinkPending.length || multiRows.length) {
+      applyBtn.classList.remove('hidden');
+    }
+
+  } catch (err) {
+    resultEl.innerHTML = `<p class="error-msg">Scan failed: ${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan Unlinked Records';
+  }
+}
+
+async function applyAutoLinks() {
+  const btn    = document.getElementById('applyAutoLinkBtn');
+  const msgEl  = document.getElementById('autoLinkMsg');
+  msgEl.classList.add('hidden');
+
+  if (!_autoLinkPending.length) {
+    showMsg(msgEl, 'No confirmed matches to apply.', false);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+
+  try {
+    // Load all client docs we need (deduplicate)
+    const clientIds = [...new Set(_autoLinkPending.map(p => p.clientDocId))];
+    const clientMap = {};
+    await Promise.all(clientIds.map(async id => {
+      const snap = await getDoc(doc(db, 'clients', id));
+      if (snap.exists()) clientMap[id] = snap.data();
+    }));
+
+    const batch = writeBatch(db);
+    let count = 0;
+
+    for (const { collection: col, docId, clientDocId } of _autoLinkPending) {
+      const c = clientMap[clientDocId];
+      if (!c) continue;
+      const ref = doc(db, col, docId);
+      const update = {
+        clientId: clientDocId,
+        counselor: c.counselor || '',
+        updatedAt: serverTimestamp(),
+      };
+      // Sync AMI for both lists; sync folder links if present
+      if (c.ami)             update.ami             = c.ami;
+      if (c.driveFolder)     update.driveFolder     = c.driveFolder;
+      if (c.driveFolderName) update.driveFolderName = c.driveFolderName;
+      batch.update(ref, update);
+      count++;
+    }
+
+    await batch.commit();
+    _autoLinkPending = [];
+    document.getElementById('applyAutoLinkBtn').classList.add('hidden');
+    showMsg(msgEl, `Linked ${count} record(s) successfully.`, true);
+    // Refresh the scan view to confirm all resolved
+    await scanUnlinkedListRecords();
+
+  } catch (err) {
+    showMsg(msgEl, 'Apply failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Apply Links';
   }
 }
 

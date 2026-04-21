@@ -62,6 +62,22 @@
       <p id="cmcLinkMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
     </div>
 
+    <!-- Auto-Link List Records to Client Profiles -->
+    <div class="card" style="max-width:960px;margin-top:1.25rem;">
+      <div class="card-title">Auto-Link Buyer Ready &amp; Repair Ready to Client Profiles</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        Scans Buyer Ready and Repair Ready for records not yet linked to a client profile.
+        Matches by name and shows the result for review. Auto-matched records will be linked and synced in one click.
+        Records with multiple possible matches let you choose the right one.
+      </p>
+      <button id="scanUnlinkedBtn" class="btn btn-secondary">Scan Unlinked Records</button>
+      <div id="autoLinkResult" style="margin-top:1rem;font-size:0.875rem;color:var(--text-muted);">Click to scan.</div>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button id="applyAutoLinkBtn" class="btn btn-primary hidden">Apply Links</button>
+      </div>
+      <p id="autoLinkMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
     <!-- Possible Duplicate Scanner -->
     <div class="card" style="max-width:960px;margin-top:1.25rem;">
       <div class="card-title">Possible Duplicate Scanner</div>

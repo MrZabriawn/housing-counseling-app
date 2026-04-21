@@ -18,10 +18,30 @@
  * by syncClientToLists() in client.js whenever the client profile is saved.
  */
 
+/**
+ * cca-list.js — "Buyer Ready" page
+ *
+ * Manages the ccaList Firestore collection: PRE clients enrolled in the
+ * Closing Cost Assistance program.
+ *
+ * Row click behavior:
+ *   - If the record has a clientId → navigate to client.html?id={clientId}
+ *     for the full editable client profile.
+ *   - "Edit Entry" button → open modal to edit CCA-specific fields only
+ *     (status, closing date, amount, notes) without leaving the page.
+ *
+ * "+ Add Client" opens a selector modal filtered to active PRE clients
+ * not already on the list. Adding a client creates a new ccaList doc with
+ * clientId set, which enables the row navigation and cross-collection sync.
+ *
+ * Client name / counselor / AMI / Drive folder are kept in sync automatically
+ * by syncClientToLists() in client.js whenever the client profile is saved.
+ */
+
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import {
-  collection, getDocs, doc, addDoc, updateDoc, orderBy, query, serverTimestamp
+  collection, getDocs, doc, getDoc, addDoc, updateDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const STATUS_LABELS = {
@@ -40,9 +60,10 @@ const STATUS_COLORS = {
   closed:   'badge-gray',
 };
 
-let allRows     = [];
-let _allClients = [];
-let editingId   = null;
+let allRows      = [];
+let _allClients  = [];   // lazy-loaded full client list (for Add + Link searches)
+let editingId    = null;
+let _editingRecord = null; // full ccaList record currently open in the edit modal
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'cca-list');
@@ -61,6 +82,10 @@ requireAuth(async (user, profile) => {
   document.getElementById('addClientBtn').addEventListener('click', openClientSelector);
   document.getElementById('clientSelectorClose').addEventListener('click', closeClientSelector);
   document.getElementById('clientSelectorSearch').addEventListener('input', renderClientSelector);
+
+  // Link search inside the edit modal
+  document.getElementById('ccaLinkSearch').addEventListener('input', renderLinkResults);
+  document.getElementById('ccaResyncBtn').addEventListener('click', resyncFromClient);
 });
 
 function render() {
@@ -142,7 +167,8 @@ function isUrgent(closingDate) {
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
-  editingId = id;
+  editingId     = id;
+  _editingRecord = r;
 
   document.getElementById('ccaEditTitle').textContent = toTitleCase(r.clientName);
   document.getElementById('editClosingDate').value = toDateInput(r.closingDate);
@@ -151,14 +177,19 @@ function openEditModal(id) {
   document.getElementById('editCcaNotes').value    = r.notes  || '';
   document.getElementById('ccaEditError').classList.add('hidden');
 
-  const linkDiv = document.getElementById('ccaClientLink');
-  const anchor  = document.getElementById('ccaClientAnchor');
   if (r.clientId) {
+    // Record is linked — show the profile link and re-sync button
+    const anchor = document.getElementById('ccaClientAnchor');
     anchor.href        = `client.html?id=${r.clientId}`;
     anchor.textContent = toTitleCase(r.clientName) || r.clientId;
-    linkDiv.classList.remove('hidden');
+    document.getElementById('ccaLinkedBar').classList.remove('hidden');
+    document.getElementById('ccaLinkSection').classList.add('hidden');
   } else {
-    linkDiv.classList.add('hidden');
+    // Record is not linked — show the link search, pre-filled with the stored name
+    document.getElementById('ccaLinkedBar').classList.add('hidden');
+    document.getElementById('ccaLinkSection').classList.remove('hidden');
+    document.getElementById('ccaLinkSearch').value = r.clientName || '';
+    renderLinkResults();
   }
 
   document.getElementById('ccaEditModal').classList.remove('hidden');
@@ -213,6 +244,133 @@ function fmtDate(ts) {
   if (!ts) return '';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Link search (inside edit modal for unlinked records) ─────────────────────
+
+async function renderLinkResults() {
+  const search     = document.getElementById('ccaLinkSearch').value.toLowerCase().trim();
+  const resultsEl  = document.getElementById('ccaLinkResults');
+
+  // Lazy-load clients on first search
+  if (!_allClients.length) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">Loading…</div>';
+    try {
+      const snap = await getDocs(collection(db, 'clients'));
+      _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) { _allClients = []; }
+  }
+
+  if (!search) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">Start typing to search clients.</div>';
+    return;
+  }
+
+  const matches = _allClients.filter(c =>
+    (c.clientName  || '').toLowerCase().includes(search) ||
+    (c.counselor   || '').toLowerCase().includes(search) ||
+    (c.rxNumbers   || []).some(rx => rx.toLowerCase().includes(search))
+  ).slice(0, 20);
+
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">No clients found.</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(c => `
+    <div class="client-selector-item" data-client-id="${c.id}">
+      <div>
+        <div class="cs-name">${esc(toTitleCase(c.clientName || ''))}</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(c.amiPercent || '')}</div>
+      </div>
+      <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Link →</span>
+    </div>`).join('');
+
+  resultsEl.querySelectorAll('.client-selector-item').forEach(item => {
+    item.addEventListener('click', () => linkClientToEntry(item.dataset.clientId));
+  });
+}
+
+async function linkClientToEntry(clientDocId) {
+  if (!editingId) return;
+  const errorEl = document.getElementById('ccaEditError');
+  errorEl.classList.add('hidden');
+
+  try {
+    // Load the real client doc to pull fresh canonical data
+    const clientSnap = await getDoc(doc(db, 'clients', clientDocId));
+    if (!clientSnap.exists()) { throw new Error('Client not found.'); }
+    const c = clientSnap.data();
+
+    const updates = {
+      clientId:        clientDocId,
+      clientName:      c.clientName      || _editingRecord.clientName || '',
+      counselor:       c.counselor       || '',
+      amiPercent:      c.amiPercent      || '',
+      driveFolderId:   c.driveFolderId   || '',
+      driveFolderName: c.driveFolderName || '',
+      driveFolderUrl:  c.driveFolderUrl  || '',
+      updatedAt:       serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'ccaList', editingId), updates);
+
+    // Update local cache
+    const idx = allRows.findIndex(x => x.id === editingId);
+    if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
+    _editingRecord = { ..._editingRecord, ...updates };
+
+    // Flip the modal to show the linked state
+    const anchor = document.getElementById('ccaClientAnchor');
+    anchor.href        = `client.html?id=${clientDocId}`;
+    anchor.textContent = toTitleCase(c.clientName || '') || clientDocId;
+    document.getElementById('ccaLinkedBar').classList.remove('hidden');
+    document.getElementById('ccaLinkSection').classList.add('hidden');
+    document.getElementById('ccaEditTitle').textContent = toTitleCase(c.clientName || '');
+
+    render(); // refresh table so the row shows updated counselor name
+  } catch (err) {
+    errorEl.textContent = 'Link failed: ' + err.message;
+    errorEl.classList.remove('hidden');
+  }
+}
+
+async function resyncFromClient() {
+  if (!editingId || !_editingRecord?.clientId) return;
+  const btn = document.getElementById('ccaResyncBtn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+
+  try {
+    const clientSnap = await getDoc(doc(db, 'clients', _editingRecord.clientId));
+    if (!clientSnap.exists()) throw new Error('Client not found.');
+    const c = clientSnap.data();
+
+    const updates = {
+      clientName:      c.clientName      || '',
+      counselor:       c.counselor       || '',
+      amiPercent:      c.amiPercent      || '',
+      driveFolderId:   c.driveFolderId   || '',
+      driveFolderName: c.driveFolderName || '',
+      driveFolderUrl:  c.driveFolderUrl  || '',
+      updatedAt:       serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'ccaList', editingId), updates);
+
+    const idx = allRows.findIndex(x => x.id === editingId);
+    if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
+    _editingRecord = { ..._editingRecord, ...updates };
+
+    document.getElementById('ccaEditTitle').textContent = toTitleCase(c.clientName || '');
+    render();
+    btn.textContent = 'Synced ✓';
+    setTimeout(() => { btn.textContent = 'Re-sync from client'; btn.disabled = false; }, 1500);
+  } catch (err) {
+    alert('Re-sync failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Re-sync from client';
+  }
 }
 
 // ── Client selector ───────────────────────────────────────────────────────────
