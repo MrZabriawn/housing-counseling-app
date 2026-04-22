@@ -151,7 +151,7 @@ function setSelectValue(id, val) {
 
 function populateClientForm(c) {
   setValue('clientName',    c.clientName);
-  setValue('guarantor',     c.guarantor);
+  setSelectValue('guarantor', c.guarantor);
   setValue('zipCode',       c.zipCode);
   setSelectValue('counselingType', c.counselingType);
   setSelectValue('billingType',    c.billingType);
@@ -726,6 +726,16 @@ function renderRxPanel() {
   if (legacyRx && !legacyInSub) {
     html += `<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;padding:0.45rem 0.75rem;background:#fff8e1;border-left:3px solid #f59e0b;border-radius:var(--radius);">
       Legacy Rx on file: <strong>${escHtml(legacyRx)}</strong> — migrated, assign guarantor above
+    </p>`;
+  }
+
+  // Surface Rx numbers found in session history that aren't in the subcollection
+  const knownRxNums = new Set([..._rxDocs.map(r => r.rxNumber), legacyRx].filter(Boolean));
+  const sessionRxNums = [...new Set(_sessions.map(s => (s.rxNumber || '').trim()).filter(Boolean))]
+    .filter(rx => !knownRxNums.has(rx));
+  if (sessionRxNums.length) {
+    html += `<p style="font-size:0.8rem;margin-bottom:0.75rem;padding:0.45rem 0.75rem;background:#f0f4ff;border-left:3px solid var(--primary);border-radius:var(--radius);">
+      Found in session history (not yet on file): <strong>${sessionRxNums.map(escHtml).join(', ')}</strong> — add below to assign a guarantor.
     </p>`;
   }
 

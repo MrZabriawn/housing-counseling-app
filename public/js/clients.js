@@ -10,6 +10,7 @@ const SS = 'clientsFilters'; // sessionStorage key
 let allClients       = [];
 let _filteredClients = [];
 let _filteredHours   = null;  // hours from session query when date filter active
+let _displayLimit    = 25;    // rows currently shown; expanded by "Show more"
 let _user            = null;  // Firebase Auth user
 let _profile         = null;  // Firestore users/{uid} profile
 let _counselorDocs   = [];    // { id, name, staffNumber } from counselors collection
@@ -244,6 +245,7 @@ async function applyFilters() {
   }
 
   _filteredClients = rows;
+  _displayLimit    = 25;
   renderTable(rows);
   renderStats(rows);
 
@@ -256,13 +258,18 @@ async function applyFilters() {
 }
 
 function renderTable(clients) {
-  const tbody = document.getElementById('tableBody');
+  const tbody   = document.getElementById('tableBody');
+  const footer  = document.getElementById('tableFooter');
+
   if (!clients.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No clients found.</td></tr>';
+    tbody.innerHTML  = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No clients found.</td></tr>';
+    if (footer) footer.innerHTML = '';
     return;
   }
 
-  tbody.innerHTML = clients.map(c => {
+  const visible = clients.slice(0, _displayLimit);
+
+  tbody.innerHTML = visible.map(c => {
     const status = c.status || 'active';
     const statusBadge = status === 'closed'
       ? `<span class="badge badge-outstanding" style="font-size:0.75rem;">Closed</span>`
@@ -289,6 +296,36 @@ function renderTable(clients) {
       window.location.href = `client.html?id=${tr.dataset.id}`;
     });
   });
+
+  // Pagination footer
+  if (footer) {
+    const remaining = clients.length - visible.length;
+    if (remaining <= 0) {
+      footer.innerHTML = '';
+    } else {
+      footer.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center;padding:0.75rem;background:#f8f9fb;border-top:2px solid var(--border);">
+            <span style="font-size:0.8125rem;color:var(--text-muted);margin-right:1rem;">
+              Showing ${visible.length} of ${clients.length}
+            </span>
+            <button id="showMoreBtn" class="btn btn-secondary btn-sm" style="margin-right:0.5rem;">
+              Show ${Math.min(25, remaining)} more
+            </button>
+            <button id="showAllBtn" class="btn btn-secondary btn-sm">Show all ${clients.length}</button>
+          </td>
+        </tr>`;
+
+      document.getElementById('showMoreBtn').addEventListener('click', () => {
+        _displayLimit += 25;
+        renderTable(_filteredClients);
+      });
+      document.getElementById('showAllBtn').addEventListener('click', () => {
+        _displayLimit = _filteredClients.length;
+        renderTable(_filteredClients);
+      });
+    }
+  }
 }
 
 function renderStats(clients) {

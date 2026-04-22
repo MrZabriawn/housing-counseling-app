@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUD Reports — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .report-section { margin-bottom: 1.5rem; }
+    .report-section-title {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.6rem;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .status-table th {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 700; padding: 0.4rem 0.75rem;
+      border-bottom: 2px solid var(--border); text-align: left; white-space: nowrap;
+    }
+    .status-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .warn-badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      background: #fff3e0; color: #e65100; border: 1px solid #ffcc80;
+      border-radius: 3px; padding: 0.1rem 0.45rem; margin-left: 0.4rem;
+    }
+    #exportArea { max-width: 860px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+    #statusMsg { font-size: 0.8125rem; margin-top: 0.5rem; }
+  </style>
+
+  <!-- CDN libraries loaded as globals before the module -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>HUD Reports</h2>
+        <p>Generate monthly HUD submission files. Executive Director only.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div class="form-group" style="margin:0;">
+          <label for="monthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
+          <input type="month" id="monthPicker" style="font-size:0.875rem;">
+        </div>
+        <button id="refreshBtn" class="btn btn-secondary btn-sm" style="margin-top:18px;">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Status table -->
+    <div class="card" style="max-width:860px;">
+      <div class="card-title">Counselor Status</div>
+      <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+        Entry counts for selected month. ⚠ = missing Staff # or Title — blocks export for that counselor.
+      </p>
+      <div id="statusTableWrap">
+        <p style="color:var(--text-muted);font-size:0.875rem;">Select a month and click Refresh.</p>
+      </div>
+    </div>
+
+    <!-- Export buttons -->
+    <div class="card" id="exportArea" style="margin-top:1.25rem;">
+      <div class="card-title">Generate Reports</div>
+
+      <p id="statusMsg" class="hidden"></p>
+
+      <div class="report-section">
+        <div class="report-section-title">Client Activity Log</div>
+        <div class="btn-group">
+          <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="report-section">
+        <div class="report-section-title">Personnel Activity Report (PAR) — per counselor</div>
+        <div class="btn-group" id="parButtons">
+          <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+        </div>
+        <div style="margin-top:0.5rem;">
+          <button id="genAllParsBtn" class="btn btn-secondary btn-sm">Generate All PARs</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="report-section">
+        <div class="report-section-title">Case Management Log (CML) — per counselor</div>
+        <div class="btn-group" id="cmlButtons">
+          <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+        </div>
+        <div style="margin-top:0.5rem;">
+          <button id="genAllCmlsBtn" class="btn btn-secondary btn-sm">Generate All CMLs</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="report-section">
+        <div class="report-section-title">Training Activity Log &amp; Invoice</div>
+        <div class="btn-group">
+          <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+          <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="report-section">
+        <div class="report-section-title">Full Submission Package</div>
+        <div class="btn-group">
+          <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent);">Generate All → ZIP</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/hud-reports.js"></script>
+</body>
+</html>

@@ -64,6 +64,16 @@
             <input type="text" id="editCounselorTitle" placeholder="Housing Counselor">
           </div>
         </div>
+        <div style="display:flex;gap:0.75rem;">
+          <div class="form-group" style="flex:1;">
+            <label for="editCounselorBaseSalary">Base Salary ($/hr)</label>
+            <input type="number" id="editCounselorBaseSalary" min="0" step="0.01" placeholder="e.g. 24.50">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="editCounselorFringe">Fringe ($/hr)</label>
+            <input type="number" id="editCounselorFringe" min="0" step="0.01" placeholder="e.g. 8.00">
+          </div>
+        </div>
         <input type="hidden" id="editCounselorId">
         <p id="editCounselorError" class="hidden" style="font-size:0.8125rem;color:var(--danger);margin-bottom:0.75rem;"></p>
         <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:0.5rem;">

@@ -108,7 +108,9 @@ async function loadCounselors() {
                 <button class="btn btn-sm btn-secondary" data-edit="${d.id}"
                   data-name="${escAttr(c.name)}"
                   data-staff-num="${escAttr(c.staffNumber != null ? String(c.staffNumber) : '')}"
-                  data-staff-title="${escAttr(c.staffTitle || '')}">Edit</button>
+                  data-staff-title="${escAttr(c.staffTitle || '')}"
+                  data-base-salary="${escAttr(c.baseSalary != null ? String(c.baseSalary) : '')}"
+                  data-fringe="${escAttr(c.fringe != null ? String(c.fringe) : '')}">Edit</button>
                 <button class="btn btn-sm btn-secondary" data-toggle="${d.id}" data-active="${isActive}" style="margin-left:4px;">${isActive ? 'Mark Inactive' : 'Mark Active'}</button>
                 <button class="btn btn-sm btn-danger" data-delete="${d.id}" style="margin-left:4px;">Remove</button>
               </td>
@@ -123,6 +125,8 @@ async function loadCounselors() {
         btn.dataset.name,
         btn.dataset.staffNum,
         btn.dataset.staffTitle,
+        btn.dataset.baseSalary,
+        btn.dataset.fringe,
       ));
     });
     container.querySelectorAll('button[data-toggle]').forEach(btn => {
@@ -200,11 +204,13 @@ async function removeCounselor(id, btn) {
   }
 }
 
-function openEditCounselor(id, name, staffNum, staffTitle) {
-  document.getElementById('editCounselorId').value       = id;
-  document.getElementById('editCounselorName').value     = name;
-  document.getElementById('editCounselorStaffNum').value = staffNum;
-  document.getElementById('editCounselorTitle').value    = staffTitle;
+function openEditCounselor(id, name, staffNum, staffTitle, baseSalary, fringe) {
+  document.getElementById('editCounselorId').value           = id;
+  document.getElementById('editCounselorName').value         = name;
+  document.getElementById('editCounselorStaffNum').value     = staffNum;
+  document.getElementById('editCounselorTitle').value        = staffTitle;
+  document.getElementById('editCounselorBaseSalary').value   = baseSalary || '';
+  document.getElementById('editCounselorFringe').value       = fringe     || '';
   document.getElementById('editCounselorError').classList.add('hidden');
   document.getElementById('editCounselorSaveBtn').disabled    = false;
   document.getElementById('editCounselorSaveBtn').textContent = 'Save';
@@ -233,8 +239,12 @@ async function saveEditCounselor() {
   errorEl.classList.add('hidden');
 
   try {
+    const baseSalaryRaw = document.getElementById('editCounselorBaseSalary').value.trim();
+    const fringeRaw     = document.getElementById('editCounselorFringe').value.trim();
     const update = { name, staffTitle: staffTitle || '', updatedAt: serverTimestamp() };
     update.staffNumber = staffNum !== null ? staffNum : null;
+    update.baseSalary  = baseSalaryRaw !== '' ? parseFloat(baseSalaryRaw) : null;
+    update.fringe      = fringeRaw     !== '' ? parseFloat(fringeRaw)     : null;
 
     await updateDoc(doc(db, 'counselors', id), update);
     document.getElementById('editCounselorModal').classList.add('hidden');
