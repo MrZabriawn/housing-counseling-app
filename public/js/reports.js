@@ -1,5 +1,4 @@
 import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
 import { MONTHS, AMI_LEVELS, RE_CODES, RE_CODE_LABELS } from './data.js';
 import {
   collection, collectionGroup, getDocs, query, where, orderBy
@@ -7,9 +6,7 @@ import {
 
 let reportData = null; // { unique, rows, month, year }
 
-requireAuth(async (user, profile) => {
-  setupNav(profile, 'reports');
-
+export async function initCdbgReports(user, profile) {
   // Populate month select
   const monthSel = document.getElementById('reportMonth');
   MONTHS.forEach(m => {
@@ -31,7 +28,7 @@ requireAuth(async (user, profile) => {
   // Court report
   document.getElementById('courtReportYear').value = new Date().getFullYear();
   document.getElementById('loadCourtReportBtn').addEventListener('click', loadCourtReport);
-});
+}
 
 // ── Load & render CDBG data ───────────────────────────────────────────────────
 

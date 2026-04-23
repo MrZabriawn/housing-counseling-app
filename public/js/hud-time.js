@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import {
   collection, collectionGroup, addDoc, deleteDoc, updateDoc,
-  getDocs, doc, query, where, serverTimestamp,
+  getDocs, doc, query, where, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── PAR section → row options ──────────────────────────────────────────────
@@ -35,6 +35,11 @@ let _openDays   = new Set();
 let _pendingDeleteId = null;
 let _editingEntry    = null;
 
+// ED-only state
+let _isED               = false;
+let _edCounselors       = [];
+let _counselorDataCache = {}; // `${counselorId}-${month}` → entries array
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 requireAuth(async (user, profile) => {
   _user   = user;
@@ -55,8 +60,12 @@ requireAuth(async (user, profile) => {
     _month = e.target.value;
     _openDays.clear();
     _openAddDay = null;
+    _counselorDataCache = {};
     await loadData();
     renderAll();
+    if (_activeTab.startsWith('counselor-')) {
+      loadCounselorTab(_activeTab.replace('counselor-', ''));
+    }
   });
 
   document.querySelectorAll('.hud-tab').forEach(btn => {
@@ -75,6 +84,12 @@ requireAuth(async (user, profile) => {
 
   await loadData();
   renderAll();
+
+  if (profile.role === 'executive_director') {
+    _isED = true;
+    await loadEdCounselors();
+    renderCounselorTabs();
+  }
 });
 
 // ── Data loading ─────────────────────────────────────────────────────────────
@@ -190,6 +205,12 @@ function switchTab(tab) {
   document.querySelectorAll('.hud-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tabPar').classList.toggle('hidden', tab !== 'par');
   document.getElementById('tabEntries').classList.toggle('hidden', tab !== 'entries');
+  document.querySelectorAll('.counselor-panel').forEach(p => p.classList.add('hidden'));
+  if (tab.startsWith('counselor-')) {
+    const panel = document.getElementById(`tab-${tab}`);
+    if (panel) panel.classList.remove('hidden');
+    loadCounselorTab(tab.replace('counselor-', ''));
+  }
 }
 
 // ── PAR Log tab ──────────────────────────────────────────────────────────────
@@ -535,6 +556,114 @@ function renderMyEntries() {
   body.querySelectorAll('.entry-chip-del').forEach(btn => {
     btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
   });
+}
+
+// ── ED: counselor tabs ────────────────────────────────────────────────────────
+async function loadEdCounselors() {
+  try {
+    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    _edCounselors = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => c.active !== false && c.id !== _myId);
+  } catch (_) { _edCounselors = []; }
+}
+
+function renderCounselorTabs() {
+  const tabBar   = document.querySelector('.hud-tabs');
+  const lastPanel = document.getElementById('tabEntries');
+
+  _edCounselors.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className    = 'hud-tab';
+    btn.dataset.tab  = `counselor-${c.id}`;
+    btn.textContent  = c.name || c.id;
+    tabBar.appendChild(btn);
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+
+    const panel = document.createElement('div');
+    panel.id        = `tab-counselor-${c.id}`;
+    panel.className = 'counselor-panel hidden';
+    panel.innerHTML = `
+      <div class="card" style="padding:0;max-width:960px;">
+        <div style="padding:0.6rem 1rem;border-bottom:1px solid var(--border);font-size:0.8125rem;font-weight:600;display:flex;align-items:center;gap:0.75rem;">
+          <span>${esc(c.name)}</span>
+          <span id="counselorStatus-${esc(c.id)}" style="font-weight:400;color:var(--text-muted);"></span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="font-size:0.85rem;width:100%;">
+            <thead>
+              <tr>
+                <th>Date</th><th>Section</th><th>PAR Row</th><th>Description</th>
+                <th style="text-align:right;">Hours</th>
+              </tr>
+            </thead>
+            <tbody id="counselorBody-${esc(c.id)}">
+              <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Select this tab to load.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    lastPanel.insertAdjacentElement('afterend', panel);
+  });
+}
+
+async function loadCounselorTab(counselorId) {
+  const cacheKey = `${counselorId}-${_month}`;
+  if (_counselorDataCache[cacheKey]) {
+    renderCounselorEntries(counselorId, _counselorDataCache[cacheKey]);
+    return;
+  }
+
+  const statusEl = document.getElementById(`counselorStatus-${counselorId}`);
+  const bodyEl   = document.getElementById(`counselorBody-${counselorId}`);
+  if (statusEl) statusEl.textContent = 'Loading…';
+  if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>';
+
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'hudTimeEntries'),
+      where('counselorId', '==', counselorId),
+      where('month', '==', _month),
+    ));
+    const entries = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    _counselorDataCache[cacheKey] = entries;
+    renderCounselorEntries(counselorId, entries);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Error loading.';
+    if (bodyEl) bodyEl.innerHTML = `<tr><td colspan="5" style="color:var(--danger);padding:1rem;">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderCounselorEntries(counselorId, entries) {
+  const statusEl = document.getElementById(`counselorStatus-${counselorId}`);
+  const bodyEl   = document.getElementById(`counselorBody-${counselorId}`);
+  if (!bodyEl) return;
+
+  const total = entries.reduce((s, e) => s + (e.hours || 0), 0);
+  if (statusEl) statusEl.textContent = entries.length
+    ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${total}h`
+    : 'No entries this month';
+
+  if (!entries.length) {
+    bodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No entries for this month.</td></tr>';
+    return;
+  }
+
+  bodyEl.innerHTML = entries.map(e => {
+    const dateObj  = new Date(e.date + 'T12:00:00');
+    const dateDisp = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short', timeZone: 'UTC' });
+    const isAuto   = !!e.autoCreated;
+    const autoBadge = isAuto ? `<span class="derived-badge" style="margin-left:4px;">NOFA</span>` : '';
+    return `<tr>
+      <td style="white-space:nowrap;">${dateDisp}</td>
+      <td>${esc(SECTION_LABELS[e.section] || e.section || '')}${autoBadge}</td>
+      <td>${esc(e.parRow || '—')}</td>
+      <td style="max-width:320px;">${esc(e.activityDescription || '')}</td>
+      <td style="text-align:right;">${e.hours || 0}h</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────

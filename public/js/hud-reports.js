@@ -1,5 +1,4 @@
 import { db } from './firebase-config.js';
-import { requireED, setupNav } from './auth.js';
 import {
   collection, collectionGroup, getDocs, query, where, orderBy,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -45,9 +44,7 @@ let _dataCache  = null;
 let _cacheKey   = '';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
-requireED(async (user, profile) => {
-  setupNav(profile, 'hud-reports');
-
+export async function initHudReports(user, profile) {
   const now = new Date();
   _year = now.getFullYear();
   _mon  = now.getMonth() + 1;
@@ -70,7 +67,7 @@ requireED(async (user, profile) => {
   document.getElementById('genAllBtn').addEventListener('click',     () => runExport(genAll));
 
   await refreshStatus();
-});
+}
 
 // ── Status table ──────────────────────────────────────────────────────────────
 async function refreshStatus() {

@@ -85,18 +85,16 @@ function calcScore(r, weights) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS = {
-  waitlisted:   'Waitlisted',
-  under_review: 'Under Review',
-  approved:     'Approved',
-  in_progress:  'In Progress',
+  needs_scope:  'Needs Scope',
+  er_review:    'ER Review',
+  repair_ready: 'Repair Ready',
   complete:     'Complete',
 };
 
 const STATUS_COLORS = {
-  waitlisted:   'badge-blue',
-  under_review: 'badge-yellow',
-  approved:     'badge-green',
-  in_progress:  'badge-yellow',
+  needs_scope:  'badge-yellow',
+  er_review:    'badge-blue',
+  repair_ready: 'badge-green',
   complete:     'badge-gray',
 };
 
@@ -535,7 +533,7 @@ async function addClientToList(clientId) {
       scopeOfWork:     '',
       estimatedBudget: 0,
       estimatedDays:   0,
-      status:          'waitlisted',
+      status:          'needs_scope',
       notes:           '',
       enrolledAt:      serverTimestamp(),
       updatedAt:       serverTimestamp(),
@@ -543,7 +541,7 @@ async function addClientToList(clientId) {
 
     // Add to local list immediately
     allRows.push({ id: newDoc.id, clientId, clientName: client.clientName,
-      amiPercent: client.amiPercent, status: 'waitlisted', enrolledAt: new Date() });
+      amiPercent: client.amiPercent, status: 'needs_scope', enrolledAt: new Date() });
     closeClientSelector();
     render();
   } catch (err) {

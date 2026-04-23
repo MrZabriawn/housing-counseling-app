@@ -59,14 +59,175 @@
     </div>
 
     <div class="ops-tabs">
-      <button class="ops-tab active" data-panel="pre">Pre-Purchase</button>
+      <button class="ops-tab active" data-panel="overview">Overview</button>
+      <button class="ops-tab" data-panel="intake">Intake</button>
+      <button class="ops-tab" data-panel="pre">Pre-Purchase</button>
       <button class="ops-tab" data-panel="post">Post-Purchase</button>
       <button class="ops-tab" data-panel="outstanding">Outstanding</button>
-      <button class="ops-tab" data-panel="intake">Intake</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div id="panel-overview" class="ops-panel active">
+
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;">
+        <div class="card-title">What This App Does</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">This replaces paper logs, spreadsheets, and disconnected tracking. Everything lives in one place — client profiles, session history, financials, HUD time, billing, and reports.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:0.75rem;">
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">Counseling Log</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Central record of every session. Anyone can view and edit entries. Admins can delete.</div>
+          </div>
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">Client Profiles</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Full profile per client — identity, intake details, financials, session history, Rx numbers, and Drive folder.</div>
+          </div>
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">My HUD Time</div>
+            <div style="color:var(--text-muted);line-height:1.55;">PAR log and CML tracking. NOFA In-Person sessions auto-import as Counseling entries — you only need to add non-session time manually.</div>
+          </div>
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">Buyer Ready / Repair Ready</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Ranked lists for pre-purchase and repair grant clients. Priority score auto-calculated by AMI, budget, and wait time.</div>
+          </div>
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">Reports</div>
+            <div style="color:var(--text-muted);line-height:1.55;">CDBG monthly reports and court appearance summaries. Executive Director also has the HUD Reports tab to generate CAL, PAR, CML, TAL, INV, and full ZIP submissions.</div>
+          </div>
+          <div style="background:#f0f4ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:var(--primary);">Outreach</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Log outreach events, track contacts, and record follow-up activity.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;">
+        <div class="card-title">Transition Checklist — What Every Counselor Needs to Do</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Complete these steps to get fully set up. Ongoing tasks are marked separately.</p>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.5rem;">One-time setup</div>
+        <div class="ops-step">
+          <span class="step-badge">1</span>
+          <div class="step-text"><strong>Create a client profile for every active client.</strong> Go to Counseling Log → open each client → a profile will exist if it was already created, or use "+ New Client" to create one. Fill in the Overview tab (name, counseling type, billing type, AMI, RE code) and the Intake tab (contact info, household).</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2</span>
+          <div class="step-text"><strong>Fill in the Financials tab for each active client.</strong> Enter their employment history, other income sources, monthly expenses, and liabilities. This data is captured in session snapshots going forward so the record stays current.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3</span>
+          <div class="step-text"><strong>Link Rx numbers on the client's Overview tab.</strong> If a client has existing NOFA or HEMAP Rx numbers, add them under the Rx Numbers panel. Use the "→ Add" buttons to pull any Rx numbers already found in session history.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">4</span>
+          <div class="step-text"><strong>Link the client's Google Drive folder</strong> on the Overview tab. This keeps documents accessible directly from the profile.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">5</span>
+          <div class="step-text"><strong>Add any Buyer Ready clients to the Buyer Ready list</strong> and any POST repair clients to the Repair Ready list. Both pages have an "+ Add Client" button that pulls from existing profiles.</div>
+        </div>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:1.25rem 0 0.5rem;">Every session (ongoing)</div>
+        <div class="ops-step">
+          <span class="step-badge">A</span>
+          <div class="step-text"><strong>Log the session on the client's Sessions tab</strong> — date, hours, Rx number, case status, notes. This is the primary billing and activity record. The session automatically creates a snapshot of the client's current profile and financials at that point in time.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">B</span>
+          <div class="step-text"><strong>Log any non-session HUD time in My HUD Time</strong> — processing, billing, supervision, management, training, marketing. NOFA In-Person and Case Management sessions import automatically; only add entries for time that isn't tied to a specific session.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">C</span>
+          <div class="step-text"><strong>Keep client financials current.</strong> Update the Financials tab whenever income, expenses, or liabilities change. The next session snapshot will capture the updated figures.</div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Key Things to Know</div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>Session snapshots are permanent.</strong> When a new session is saved, it captures the client's full profile and financials at that moment. Editing the session later does not overwrite the snapshot — it is a point-in-time record.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>Rx numbers live on client profiles, not sessions.</strong> A single client may have multiple Rx numbers (NOFA, HEMAP, etc.) each with their own guarantor. Add them under the Rx Numbers panel on the Overview tab.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>HUD Time auto-imports NOFA sessions.</strong> Any session logged for an In-Person client with an active NOFA Rx number will appear automatically in My HUD Time as a Counseling entry. You do not need to enter those manually.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>Client profiles export to PDF.</strong> Use the "Export PDF" button on any client profile and select which tabs to include — Overview, Intake, Financials, and/or Sessions.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>Appointment letters are generated here.</strong> Go to the Intake tab on this page, fill in the client details, check off the relevant documents, and click Print — a formatted confirmation letter opens ready to print or save as PDF.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- INTAKE -->
+    <div id="panel-intake" class="ops-panel">
+      <div class="card" style="max-width:760px;">
+        <div class="card-title">Appointment Confirmation Letter</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Fill in the client details and uncheck any items that do not apply, then print.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1.5rem;margin-bottom:1rem;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Name</label>
+            <input type="text" id="intakeClientName" placeholder="Full name" style="font-size:0.875rem;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Address</label>
+            <input type="text" id="intakeClientAddr" placeholder="Street address, City ST ZIP" style="font-size:0.875rem;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Date</label>
+            <input type="date" id="intakeApptDate" style="font-size:0.875rem;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Time</label>
+            <input type="time" id="intakeApptTime" style="font-size:0.875rem;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counseling Type</label>
+            <select id="intakeCounselingType" style="font-size:0.875rem;">
+              <option value="first time homebuyers' evaluation">First Time Homebuyer</option>
+              <option value="default and delinquency counseling">Default &amp; Delinquency</option>
+              <option value="post-purchase counseling">Post-Purchase</option>
+              <option value="BC Conciliation Program appointment">BC Conciliation</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor Name</label>
+            <input type="text" id="intakeCounselorName" style="font-size:0.875rem;" placeholder="Counselor name">
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">
+          <p style="font-size:0.8rem;font-weight:700;margin:0 0 0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Documents Checklist</p>
+          <div id="intakeChecklist" style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.875rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 most recent years federal tax return"> 2 most recent years federal tax return</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 months paystubs and any other income documentation"> 2 months paystubs and any other income documentation</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="2 most recent months of Bank Statements (all pages, even if blank)"> 2 most recent months of Bank Statements (all pages, even if blank)</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="1 most recent months utility bill"> 1 most recent months utility bill</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Photo Identification (Driver's License, etc.)"> Photo Identification (Driver's License, etc.)</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="Completed enclosed budget and employment history sheets"> Completed enclosed budget and employment history sheets</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Copy of all charge accounts, car payments and personal loans"> Copy of all charge accounts, car payments and personal loans</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="PHFA referral sheet (if applicable)"> PHFA referral sheet (if applicable)</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Loan estimate from lender"> Loan estimate from lender</label>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-primary" id="printConfirmBtn">Print Confirmation Letter</button>
+        </div>
+      </div>
     </div>
 
     <!-- PRE-PURCHASE -->
-    <div id="panel-pre" class="ops-panel active">
+    <div id="panel-pre" class="ops-panel">
       <div class="card">
         <div class="card-title">Pre-Purchase Counseling — Buying Power</div>
 
@@ -186,66 +347,6 @@
 
   </main>
 
-    <!-- INTAKE -->
-    <div id="panel-intake" class="ops-panel">
-      <div class="card" style="max-width:760px;">
-        <div class="card-title">Appointment Confirmation Letter</div>
-        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Fill in the client details and uncheck any items that do not apply, then print.</p>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1.5rem;margin-bottom:1rem;">
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Name</label>
-            <input type="text" id="intakeClientName" placeholder="Angela Brown" style="font-size:0.875rem;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Address</label>
-            <input type="text" id="intakeClientAddr" placeholder="510 Highland Avenue, Aliquippa PA 15001" style="font-size:0.875rem;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Date</label>
-            <input type="date" id="intakeApptDate" style="font-size:0.875rem;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Time</label>
-            <input type="time" id="intakeApptTime" style="font-size:0.875rem;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counseling Type</label>
-            <select id="intakeCounselingType" style="font-size:0.875rem;">
-              <option value="first time homebuyers' evaluation">First Time Homebuyer</option>
-              <option value="default and delinquency counseling">Default &amp; Delinquency</option>
-              <option value="post-purchase counseling">Post-Purchase</option>
-              <option value="BC Conciliation Program appointment">BC Conciliation</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor Name</label>
-            <input type="text" id="intakeCounselorName" style="font-size:0.875rem;" placeholder="Your name">
-          </div>
-        </div>
-
-        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">
-          <p style="font-size:0.8rem;font-weight:700;margin:0 0 0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Documents Checklist</p>
-          <div id="intakeChecklist" style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.875rem;">
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 most recent years federal tax return"> 2 most recent years federal tax return</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 months paystubs and any other income documentation"> 2 months paystubs and any other income documentation</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="2 most recent months of Bank Statements (all pages, even if blank)"> 2 most recent months of Bank Statements (all pages, even if blank)</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="1 most recent months utility bill"> 1 most recent months utility bill</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Photo Identification (Driver's License, etc.)"> Photo Identification (Driver's License, etc.)</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="Completed enclosed budget and employment history sheets"> Completed enclosed budget and employment history sheets</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Copy of all charge accounts, car payments and personal loans"> Copy of all charge accounts, car payments and personal loans</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="PHFA referral sheet (if applicable)"> PHFA referral sheet (if applicable)</label>
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Loan estimate from lender"> Loan estimate from lender</label>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:0.5rem;">
-          <button class="btn btn-primary" id="printConfirmBtn">Print Confirmation Letter</button>
-        </div>
-      </div>
-    </div>
-
-  <script type="module" src="js/auth.js"></script>
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     requireAuth((user, profile) => {

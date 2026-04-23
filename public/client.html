@@ -91,6 +91,26 @@
     }
     .exp-total-label { font-size: 0.8125rem; font-weight: 700; flex: 1; }
     .exp-total-val { font-weight: 700; color: var(--primary); width: 90px; text-align: right; font-size: 0.875rem; }
+
+    /* ── Ratio / financial summary ───────────────────────────────────── */
+    .ratio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.6rem; }
+    .ratio-item {
+      background: #f8f9fb; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.65rem 0.875rem;
+    }
+    .ratio-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.25rem;
+    }
+    .ratio-val { font-size: 1.15rem; font-weight: 800; margin-bottom: 0.15rem; line-height: 1.2; }
+    .ratio-note { font-size: 0.68rem; color: var(--text-muted); line-height: 1.4; }
+    .ratio-ok      { color: #16a34a; }
+    .ratio-warn    { color: #d97706; }
+    .ratio-bad     { color: #dc2626; }
+    .ratio-neutral { color: var(--text-muted); }
+    .credit-middle-val {
+      font-size: 2rem; font-weight: 900; line-height: 1;
+    }
   </style>
 </head>
 <body>
@@ -388,6 +408,39 @@
     ══════════════════════════════════════════════════════════ -->
     <div id="tab-financials" class="client-tab-panel">
 
+      <!-- Financial Summary (auto-calculated) -->
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-title">Financial Summary</div>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin:-0.25rem 0 1rem;">Auto-calculated from income, expenses, and liabilities. Updates live as you type.</p>
+        <div class="ratio-grid">
+          <div class="ratio-item">
+            <div class="ratio-label">Gross Monthly Income</div>
+            <div class="ratio-val ratio-neutral" id="rGrossIncome">—</div>
+            <div class="ratio-note">Employment + other income</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Front-End Ratio</div>
+            <div class="ratio-val ratio-neutral" id="rFrontEnd">—</div>
+            <div class="ratio-note">Housing ÷ Income · target ≤28%</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Back-End Ratio</div>
+            <div class="ratio-val ratio-neutral" id="rBackEnd">—</div>
+            <div class="ratio-note">All debt ÷ Income · target ≤36%</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Non-Housing DTI</div>
+            <div class="ratio-val ratio-neutral" id="rNonHousing">—</div>
+            <div class="ratio-note">Liabilities only ÷ Income · ≤15%</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Discretionary Income</div>
+            <div class="ratio-val ratio-neutral" id="rDiscretionary">—</div>
+            <div class="ratio-note">After housing &amp; debt payments</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Employment History -->
       <div class="card" style="padding:0;margin-bottom:1.25rem;">
         <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
@@ -526,6 +579,7 @@
                 <th>Account Name</th>
                 <th style="min-width:130px;">Monthly Payment ($)</th>
                 <th style="min-width:130px;">Balance ($)</th>
+                <th style="min-width:130px;">Credit Limit ($)</th>
                 <th style="width:32px;"></th>
               </tr>
             </thead>
@@ -535,6 +589,7 @@
                 <td>Totals</td>
                 <td id="liabilityPaymentTotal">$0.00</td>
                 <td id="liabilityBalanceTotal">$0.00</td>
+                <td id="liabilityCreditLimitTotal">$0.00</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -542,6 +597,96 @@
         </div>
         <div style="padding:0.6rem 1.25rem 1rem;">
           <button type="button" id="addLiabilityRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        </div>
+      </div>
+
+      <!-- Liquidity & Reserves -->
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-title">Liquidity &amp; Reserves</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.25rem;">
+          <div class="form-group" style="margin:0;">
+            <label for="finLiquidAssets">Liquid Assets ($)</label>
+            <input type="number" id="finLiquidAssets" min="0" step="1" placeholder="Checking, savings, etc.">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label for="finMonthlySavings">Monthly Savings ($)</label>
+            <input type="number" id="finMonthlySavings" min="0" step="1" placeholder="Amount saved per month">
+          </div>
+        </div>
+        <div class="ratio-grid">
+          <div class="ratio-item">
+            <div class="ratio-label">Months of Reserves</div>
+            <div class="ratio-val ratio-neutral" id="rMonthsReserves">—</div>
+            <div class="ratio-note">Liquid assets ÷ total expenses · 3–6 mo ideal</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Emergency Fund</div>
+            <div class="ratio-val ratio-neutral" id="rEmergencyFund">—</div>
+            <div class="ratio-note">Liquid assets ÷ gross income · 3 mo target</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Savings Rate</div>
+            <div class="ratio-val ratio-neutral" id="rSavingsRate">—</div>
+            <div class="ratio-note">Monthly savings ÷ gross income · ≥10% goal</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Credit Health -->
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-title">Credit Health</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.25rem;">
+          <div class="form-group" style="margin:0;">
+            <label>Equifax</label>
+            <div style="display:flex;gap:0.4rem;align-items:center;">
+              <input type="number" class="credit-score-input" id="finScoreEq" min="300" max="850" step="1" placeholder="Score" style="width:90px;">
+              <input type="date" id="finScoreEqDate" style="flex:1;">
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Experian</label>
+            <div style="display:flex;gap:0.4rem;align-items:center;">
+              <input type="number" class="credit-score-input" id="finScoreEx" min="300" max="850" step="1" placeholder="Score" style="width:90px;">
+              <input type="date" id="finScoreExDate" style="flex:1;">
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>TransUnion</label>
+            <div style="display:flex;gap:0.4rem;align-items:center;">
+              <input type="number" class="credit-score-input" id="finScoreTu" min="300" max="850" step="1" placeholder="Score" style="width:90px;">
+              <input type="date" id="finScoreTuDate" style="flex:1;">
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label for="finDerogatoryCount">Derogatory Accounts</label>
+            <input type="number" id="finDerogatoryCount" min="0" step="1" placeholder="# of accounts">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label for="finMonthsSinceLate">Months Since Last Late</label>
+            <input type="number" id="finMonthsSinceLate" min="0" step="1" placeholder="Enter months">
+          </div>
+        </div>
+        <div class="ratio-grid">
+          <div class="ratio-item">
+            <div class="ratio-label">Middle Score</div>
+            <div class="credit-middle-val ratio-neutral" id="rMiddleScore">—</div>
+            <div class="ratio-note" id="rMiddleScoreNote">Enter at least one bureau score</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Credit Utilization</div>
+            <div class="ratio-val ratio-neutral" id="rCreditUtil">—</div>
+            <div class="ratio-note">Revolving balance ÷ limit · ≤30% target</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Derogatory Accounts</div>
+            <div class="ratio-val ratio-neutral" id="rDerogatory">—</div>
+            <div class="ratio-note">Collections, charge-offs, judgments</div>
+          </div>
+          <div class="ratio-item">
+            <div class="ratio-label">Last Late Payment</div>
+            <div class="ratio-val ratio-neutral" id="rLastLate">—</div>
+            <div class="ratio-note">Months since most recent late · ≥24 mo ideal</div>
+          </div>
         </div>
       </div>
 

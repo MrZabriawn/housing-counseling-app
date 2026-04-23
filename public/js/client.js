@@ -355,12 +355,20 @@ function wireClientForm() {
   document.getElementById('addIncomeRowBtn').addEventListener('click', addIncomeRow);
   document.getElementById('addLiabilityRowBtn').addEventListener('click', addLiabilityRow);
 
-  // Expense sheet auto-totals
+  // Expense sheet auto-totals + ratio updates
   document.getElementById('tab-financials').addEventListener('input', e => {
     if (e.target.classList.contains('housing-exp')) updateHousingTotal();
     if (e.target.classList.contains('living-exp'))  updateLivingTotal();
-    if (e.target.classList.contains('liability-payment')) updateLiabilityTotals();
-    if (e.target.classList.contains('liability-balance'))  updateLiabilityTotals();
+    if (e.target.classList.contains('liability-payment') ||
+        e.target.classList.contains('liability-balance')  ||
+        e.target.classList.contains('liability-limit'))   updateLiabilityTotals();
+    if (e.target.classList.contains('emp-gross') || e.target.classList.contains('inc-amount')) {
+      updateRatioSummary(); updateLiquidityCalcs();
+    }
+    if (e.target.id === 'finLiquidAssets' || e.target.id === 'finMonthlySavings') updateLiquidityCalcs();
+    if (e.target.classList.contains('credit-score-input')) updateMiddleScore();
+    if (e.target.id === 'finDerogatoryCount') updateDerogatoryDisplay();
+    if (e.target.id === 'finMonthsSinceLate') updateLastLateDisplay();
   });
 
   // Close File button
@@ -1398,12 +1406,15 @@ function updateHousingTotal() {
   const total = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
   document.getElementById('housingTotal').textContent = fmtMoney2(total);
   updateGrandExpTotal();
+  updateRatioSummary();
+  updateLiquidityCalcs();
 }
 
 function updateLivingTotal() {
   const total = LIVING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
   document.getElementById('livingTotal').textContent = fmtMoney2(total);
   updateGrandExpTotal();
+  updateLiquidityCalcs();
 }
 
 function updateGrandExpTotal() {
@@ -1413,13 +1424,167 @@ function updateGrandExpTotal() {
 }
 
 function updateLiabilityTotals() {
-  let payments = 0, balances = 0;
+  let payments = 0, balances = 0, limits = 0;
   document.querySelectorAll('#liabilityBody tr').forEach(row => {
     payments += parseFloat(row.querySelector('.liability-payment')?.value || '0') || 0;
     balances += parseFloat(row.querySelector('.liability-balance')?.value  || '0') || 0;
+    limits   += parseFloat(row.querySelector('.liability-limit')?.value    || '0') || 0;
   });
   document.getElementById('liabilityPaymentTotal').textContent = fmtMoney2(payments);
-  document.getElementById('liabilityBalanceTotal').textContent = fmtMoney2(balances);
+  document.getElementById('liabilityBalanceTotal').textContent  = fmtMoney2(balances);
+  const limitTotalEl = document.getElementById('liabilityCreditLimitTotal');
+  if (limitTotalEl) limitTotalEl.textContent = fmtMoney2(limits);
+  updateRatioSummary();
+  updateLiquidityCalcs();
+  updateCreditUtilization();
+}
+
+// ── Financial ratio calculations ──────────────────────────────────────────────
+
+function setRatioEl(id, text, status) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-' + status;
+}
+
+function updateRatioSummary() {
+  const empGross  = [...document.querySelectorAll('.emp-gross')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const otherInc  = [...document.querySelectorAll('.inc-amount')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const gross     = empGross + otherInc;
+  const housing   = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  const liabPay   = [...document.querySelectorAll('.liability-payment')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+
+  const grossEl = document.getElementById('rGrossIncome');
+  if (grossEl) {
+    grossEl.textContent = gross > 0 ? fmtMoney2(gross) : '—';
+    grossEl.className   = grossEl.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral';
+  }
+
+  if (gross <= 0) {
+    ['rFrontEnd','rBackEnd','rNonHousing','rDiscretionary'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '—'; el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral'; }
+    });
+    return;
+  }
+
+  const fe = housing / gross;
+  setRatioEl('rFrontEnd', (fe * 100).toFixed(1) + '%', fe <= 0.28 ? 'ok' : fe <= 0.35 ? 'warn' : 'bad');
+
+  const be = (housing + liabPay) / gross;
+  setRatioEl('rBackEnd', (be * 100).toFixed(1) + '%', be <= 0.36 ? 'ok' : be <= 0.43 ? 'warn' : 'bad');
+
+  const nh = liabPay / gross;
+  setRatioEl('rNonHousing', (nh * 100).toFixed(1) + '%', nh <= 0.15 ? 'ok' : nh <= 0.25 ? 'warn' : 'bad');
+
+  const disc = gross - housing - liabPay;
+  setRatioEl('rDiscretionary', fmtMoney2(disc), disc >= 500 ? 'ok' : disc >= 0 ? 'warn' : 'bad');
+}
+
+function updateLiquidityCalcs() {
+  const liquid   = parseFloat(document.getElementById('finLiquidAssets')?.value  || '0') || 0;
+  const savings  = parseFloat(document.getElementById('finMonthlySavings')?.value || '0') || 0;
+  const housing  = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  const living   = LIVING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  const liabPay  = [...document.querySelectorAll('.liability-payment')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const totalExp = housing + living + liabPay;
+  const empGross = [...document.querySelectorAll('.emp-gross')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const otherInc = [...document.querySelectorAll('.inc-amount')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const gross = empGross + otherInc;
+
+  if (totalExp > 0) {
+    const mo = liquid / totalExp;
+    setRatioEl('rMonthsReserves', mo.toFixed(1) + ' mo', mo >= 3 ? 'ok' : mo >= 1 ? 'warn' : 'bad');
+  } else {
+    const el = document.getElementById('rMonthsReserves');
+    if (el) { el.textContent = '—'; el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral'; }
+  }
+
+  if (gross > 0) {
+    const ef = liquid / gross;
+    setRatioEl('rEmergencyFund', ef.toFixed(1) + ' mo', ef >= 3 ? 'ok' : ef >= 1 ? 'warn' : 'bad');
+    const sr = savings / gross;
+    setRatioEl('rSavingsRate', (sr * 100).toFixed(1) + '%', sr >= 0.10 ? 'ok' : sr >= 0.05 ? 'warn' : 'bad');
+  } else {
+    ['rEmergencyFund','rSavingsRate'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '—'; el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral'; }
+    });
+  }
+}
+
+function updateCreditUtilization() {
+  let totalBalance = 0, totalLimit = 0;
+  document.querySelectorAll('#liabilityBody tr').forEach(row => {
+    const limit = parseFloat(row.querySelector('.liability-limit')?.value || '0') || 0;
+    if (limit > 0) {
+      totalBalance += parseFloat(row.querySelector('.liability-balance')?.value || '0') || 0;
+      totalLimit   += limit;
+    }
+  });
+  const el = document.getElementById('rCreditUtil');
+  if (!el) return;
+  if (totalLimit <= 0) {
+    el.textContent = '—';
+    el.className   = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral';
+    return;
+  }
+  const util = totalBalance / totalLimit;
+  setRatioEl('rCreditUtil', (util * 100).toFixed(1) + '%', util <= 0.30 ? 'ok' : util <= 0.50 ? 'warn' : 'bad');
+}
+
+function updateMiddleScore() {
+  const scores = ['finScoreEq','finScoreEx','finScoreTu']
+    .map(id => { const v = parseFloat(document.getElementById(id)?.value || ''); return isNaN(v) ? null : v; })
+    .filter(v => v !== null && v > 0);
+
+  const midEl  = document.getElementById('rMiddleScore');
+  const noteEl = document.getElementById('rMiddleScoreNote');
+  if (!midEl) return;
+
+  if (scores.length === 0) {
+    midEl.textContent  = '—';
+    midEl.className    = 'credit-middle-val ratio-neutral';
+    if (noteEl) noteEl.textContent = 'Enter at least one bureau score';
+    return;
+  }
+
+  scores.sort((a, b) => a - b);
+  const mid = scores.length === 1 ? scores[0] : scores.length === 2 ? scores[0] : scores[1];
+  const status = mid >= 680 ? 'ok' : mid >= 620 ? 'warn' : 'bad';
+  midEl.textContent = String(mid);
+  midEl.className   = 'credit-middle-val ratio-' + status;
+  if (noteEl) noteEl.textContent = scores.length === 1 ? 'Only score' : scores.length === 2 ? 'Lower of 2 scores' : 'Middle of 3 scores';
+}
+
+function updateDerogatoryDisplay() {
+  const input = document.getElementById('finDerogatoryCount');
+  const el    = document.getElementById('rDerogatory');
+  if (!el) return;
+  if (!input?.value && input?.value !== '0') {
+    el.textContent = '—'; el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral'; return;
+  }
+  const count = parseInt(input.value) || 0;
+  el.textContent = count;
+  setRatioEl('rDerogatory', String(count), count === 0 ? 'ok' : count <= 2 ? 'warn' : 'bad');
+}
+
+function updateLastLateDisplay() {
+  const input = document.getElementById('finMonthsSinceLate');
+  const el    = document.getElementById('rLastLate');
+  if (!el) return;
+  if (!input?.value && input?.value !== '0') {
+    el.textContent = '—'; el.className = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ratio-neutral'; return;
+  }
+  const mo = parseInt(input.value) || 0;
+  setRatioEl('rLastLate', mo + ' mo', mo >= 24 ? 'ok' : mo >= 12 ? 'warn' : 'bad');
 }
 
 // ── Employment rows ───────────────────────────────────────────────────────────
@@ -1442,7 +1607,7 @@ function makeEmpRow(r = {}) {
     <td><input type="number" class="emp-gross" value="${r.grossMonthly || ''}" min="0" step="0.01"></td>
     <td><input type="number" class="emp-net" value="${r.netMonthly || ''}" min="0" step="0.01"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
-  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); });
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateRatioSummary(); updateLiquidityCalcs(); });
   return tr;
 }
 
@@ -1479,7 +1644,7 @@ function makeIncomeRow(r = {}) {
     <td><input type="number" class="inc-amount" value="${r.monthlyAmount || ''}" min="0" step="0.01"></td>
     <td><input type="text" class="inc-desc" value="${escAttr(r.description || '')}"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
-  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); });
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateRatioSummary(); updateLiquidityCalcs(); });
   return tr;
 }
 
@@ -1511,10 +1676,12 @@ function makeLiabilityRow(r = {}) {
     <td><input type="text" class="liab-name" value="${escAttr(r.accountName || '')}"></td>
     <td><input type="number" class="liability-payment" value="${r.monthlyPayment || ''}" min="0" step="0.01"></td>
     <td><input type="number" class="liability-balance" value="${r.balance || ''}" min="0" step="0.01"></td>
+    <td><input type="number" class="liability-limit" value="${r.creditLimit || ''}" min="0" step="0.01" placeholder="Revolving only"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
   tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateLiabilityTotals(); });
   tr.querySelector('.liability-payment').addEventListener('input', updateLiabilityTotals);
   tr.querySelector('.liability-balance').addEventListener('input', updateLiabilityTotals);
+  tr.querySelector('.liability-limit').addEventListener('input', updateLiabilityTotals);
   return tr;
 }
 
@@ -1530,6 +1697,7 @@ function readLiabilityRows() {
     accountName:    row.querySelector('.liab-name')?.value.trim()           || '',
     monthlyPayment: parseFloat(row.querySelector('.liability-payment')?.value || '0') || 0,
     balance:        parseFloat(row.querySelector('.liability-balance')?.value  || '0') || 0,
+    creditLimit:    parseFloat(row.querySelector('.liability-limit')?.value    || '0') || 0,
   })).filter(r => r.accountName || r.monthlyPayment || r.balance);
 }
 
@@ -1549,9 +1717,22 @@ function loadFinancials(c) {
     if (el && c[id] != null) el.value = c[id];
   });
 
+  // Liquidity & credit health fields (null-safe — null values leave inputs blank)
+  ['finLiquidAssets','finMonthlySavings',
+   'finScoreEq','finScoreEqDate','finScoreEx','finScoreExDate','finScoreTu','finScoreTuDate',
+   'finDerogatoryCount','finMonthsSinceLate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && c[id] != null) el.value = c[id];
+  });
+
   updateHousingTotal();
   updateLivingTotal();
   updateLiabilityTotals();
+  updateLiquidityCalcs();
+  updateCreditUtilization();
+  updateMiddleScore();
+  updateDerogatoryDisplay();
+  updateLastLateDisplay();
 }
 
 function readExpFields() {
@@ -1574,6 +1755,16 @@ async function saveFinancials() {
       otherIncome:        readIncomeRows(),
       monthlyLiabilities: readLiabilityRows(),
       ...readExpFields(),
+      finLiquidAssets:    parseFloat(document.getElementById('finLiquidAssets')?.value)   || 0,
+      finMonthlySavings:  parseFloat(document.getElementById('finMonthlySavings')?.value) || 0,
+      finScoreEq:         parseFloat(document.getElementById('finScoreEq')?.value)   || null,
+      finScoreEqDate:     document.getElementById('finScoreEqDate')?.value            || '',
+      finScoreEx:         parseFloat(document.getElementById('finScoreEx')?.value)   || null,
+      finScoreExDate:     document.getElementById('finScoreExDate')?.value            || '',
+      finScoreTu:         parseFloat(document.getElementById('finScoreTu')?.value)   || null,
+      finScoreTuDate:     document.getElementById('finScoreTuDate')?.value            || '',
+      finDerogatoryCount: document.getElementById('finDerogatoryCount')?.value !== '' ? (parseInt(document.getElementById('finDerogatoryCount')?.value) || 0) : null,
+      finMonthsSinceLate: document.getElementById('finMonthsSinceLate')?.value !== '' ? (parseInt(document.getElementById('finMonthsSinceLate')?.value) || 0) : null,
       updatedAt: serverTimestamp(),
     };
     await updateDoc(doc(db, 'clients', clientId), data);

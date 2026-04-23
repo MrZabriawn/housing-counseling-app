@@ -239,13 +239,11 @@ function renderTable(rows) {
       ? `<span class="badge badge-${type.toLowerCase()}">${type}</span>`
       : '—';
 
-    const isOwn    = (r.counselor || '').toLowerCase() === (currentProfile?.name || '').toLowerCase();
     const adminAccess = isAdmin(currentProfile);
-    const canEdit  = adminAccess || isOwn;
 
     const actions = [
-      canEdit      ? `<a class="btn btn-sm btn-secondary" href="edit-entry.html?id=${r.id}">Edit</a>` : '',
-      adminAccess  ? `<button class="btn btn-sm btn-danger" data-delete="${r.id}">Del</button>` : ''
+      `<a class="btn btn-sm btn-secondary" href="edit-entry.html?id=${r.id}">Edit</a>`,
+      adminAccess ? `<button class="btn btn-sm btn-danger" data-delete="${r.id}">Del</button>` : ''
     ].join('');
 
     return `<tr class="clickable-row" data-id="${r.id}">

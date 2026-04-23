@@ -6,84 +6,68 @@
   <title>Reports — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
   <style>
-    /* ── Print styles ───────────────────────────────────────────────────────── */
+    /* ── Tab system ──────────────────────────────────────────────────────────── */
+    .reports-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+    }
+    .reports-tab {
+      padding: 0.5rem 1.1rem; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+      border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color 0.15s;
+    }
+    .reports-tab:hover { color: var(--text); }
+    .reports-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .reports-panel { display: none; }
+    .reports-panel.active { display: block; }
+
+    /* ── HUD reports styles ──────────────────────────────────────────────────── */
+    .report-section { margin-bottom: 1.5rem; }
+    .report-section-title {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.6rem;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .status-table th {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 700; padding: 0.4rem 0.75rem;
+      border-bottom: 2px solid var(--border); text-align: left; white-space: nowrap;
+    }
+    .status-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .warn-badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      background: #fff3e0; color: #e65100; border: 1px solid #ffcc80;
+      border-radius: 3px; padding: 0.1rem 0.45rem; margin-left: 0.4rem;
+    }
+    #exportArea { max-width: 860px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+    #statusMsg { font-size: 0.8125rem; margin-top: 0.5rem; }
+
+    /* ── Print styles ────────────────────────────────────────────────────────── */
     @media print {
-      /* Hide everything we don't want in the printout */
-      .nav,
-      .no-print,
-      #cdbgControls,
-      #courtSection { display: none !important; }
-
+      .nav, .no-print, .reports-tabs, #cdbgControls, #courtSection { display: none !important; }
       main.page { padding: 0 !important; margin: 0 !important; }
-
-      /* The combined card wrapper — keep it, but strip card chrome */
-      #cdbgCard {
-        box-shadow: none !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-
-      #cdbgPrintArea {
-        display: block !important;
-        padding: 0;
-      }
-
-      .cdbg-print-header {
-        margin-bottom: 1.5rem;
-      }
-
-      .cdbg-print-header h2 {
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin-bottom: 0.2rem;
-      }
-
-      .cdbg-print-header p {
-        font-size: 0.85rem;
-        color: #555;
-        margin: 0.15rem 0;
-      }
-
-      .cdbg-report-section {
-        margin-bottom: 2rem;
-        page-break-inside: avoid;
-      }
-
+      #cdbgCard { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
+      #cdbgPrintArea { display: block !important; padding: 0; }
+      .reports-panel { display: block !important; }
+      .cdbg-print-header { margin-bottom: 1.5rem; }
+      .cdbg-print-header h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
+      .cdbg-print-header p { font-size: 0.85rem; color: #555; margin: 0.15rem 0; }
+      .cdbg-report-section { margin-bottom: 2rem; page-break-inside: avoid; }
       .cdbg-report-section h3 {
-        font-size: 0.95rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 0.25rem;
+        font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;
+        border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;
       }
-
-      .print-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.85rem;
-      }
-
-      .print-table th,
-      .print-table td {
-        border: 1px solid #999;
-        padding: 0.3rem 0.5rem;
-      }
-
-      .print-table th {
-        background: #f0f0f0;
-        font-weight: 700;
-        text-align: left;
-      }
-
-      .print-table td.num {
-        text-align: right;
-      }
-
-      /* Force page to show the print area which is normally hidden on-screen */
-      #cdbgPrintArea { display: block !important; }
+      .print-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      .print-table th, .print-table td { border: 1px solid #999; padding: 0.3rem 0.5rem; }
+      .print-table th { background: #f0f0f0; font-weight: 700; text-align: left; }
+      .print-table td.num { text-align: right; }
     }
   </style>
+
+  <!-- CDN libraries for HUD report generation (globals required before ES module) -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -92,149 +76,242 @@
     <div class="page-header no-print">
       <div class="page-header-text">
         <h2>Reports</h2>
-        <p>Monthly CDBG reports, court appearances, and other program summaries.</p>
+        <p>CDBG monthly reports, court appearances, and HUD submissions.</p>
       </div>
     </div>
 
-    <!-- ── CDBG Monthly Reports ─────────────────────────────────────────────── -->
-    <div style="margin-bottom:0.5rem;" class="no-print">
-      <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
-        CDBG Monthly Reports — Home Stabilization
-      </h3>
+    <!-- Tab bar -->
+    <div class="reports-tabs no-print">
+      <button class="reports-tab active" data-tab="tab-cdbg">CDBG &amp; Court</button>
+      <button class="reports-tab hidden" id="hudTabBtn" data-tab="tab-hud">HUD Reports</button>
     </div>
 
-    <!-- Controls (hidden when printing) -->
-    <div id="cdbgControls" class="card no-print" style="margin-bottom:1.25rem;">
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));align-items:end;">
-        <div class="form-group">
-          <label for="reportMonth">Report Month *</label>
-          <select id="reportMonth">
-            <option value="">— Select Month —</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="reportYear">Year *</label>
-          <input type="number" id="reportYear" min="2000" max="2100" style="max-width:120px;">
-        </div>
-        <div class="form-group" style="flex:1;min-width:160px;">
-          <label for="reportPerson">Person Completing Form</label>
-          <input type="text" id="reportPerson">
-        </div>
-      </div>
-      <p id="reportStatus" style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;min-height:1.2em;"></p>
-    </div>
+    <!-- ══ CDBG & Court panel ════════════════════════════════════════════════════ -->
+    <div class="reports-panel active" id="tab-cdbg">
 
-    <!-- Combined CDBG report card — visible on screen AND when printing -->
-    <div class="card" id="cdbgCard" style="margin-bottom:1.25rem;display:none;">
-
-      <!-- On-screen header row with Print button -->
-      <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
-        <div>
-          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.15rem;">CDBG Direct Benefit Report</div>
-          <div id="cdbgCardSubtitle" style="font-size:0.95rem;font-weight:600;"></div>
-        </div>
-        <button id="printCdbgBtn" class="btn btn-primary">Print / Save as PDF</button>
-      </div>
-
-      <!-- Hidden-on-screen print header (shows when printing) -->
-      <div id="cdbgPrintArea" style="display:none;">
-        <div class="cdbg-print-header">
-          <h2>CDBG Direct Benefit Report — Home Stabilization</h2>
-          <p id="printMonthLine"></p>
-          <p id="printPersonLine"></p>
-          <p id="printDateLine"></p>
-        </div>
-
-        <div class="cdbg-report-section">
-          <h3>Report 1 — Income (Owner Households)<br>
-            <span style="font-weight:400;font-size:0.82rem;">Project: BC Home Stabilization &nbsp;·&nbsp; CD255505 2419-PRO-SUBR</span>
-          </h3>
-          <table class="print-table">
-            <thead>
-              <tr><th style="width:70px;">Count</th><th>AMI Category</th></tr>
-            </thead>
-            <tbody id="r1PrintBody"></tbody>
-          </table>
-        </div>
-
-        <div class="cdbg-report-section">
-          <h3>Report 2 — Race &amp; Ethnicity (Owner Households)<br>
-            <span style="font-weight:400;font-size:0.82rem;">Project: Home Stabilization Program &nbsp;·&nbsp; CD255505 2419-PRO</span>
-          </h3>
-          <table class="print-table">
-            <thead>
-              <tr><th style="width:60px;">Count</th><th>Race / Ethnicity</th><th style="width:80px;">Hispanic</th></tr>
-            </thead>
-            <tbody id="r2PrintBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- On-screen preview tables (same data, styled for screen) -->
-      <div class="no-print" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;flex-wrap:wrap;">
-
-        <div>
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 1 — Income</div>
-          <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
-            <thead>
-              <tr>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Count</th>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">AMI Category</th>
-              </tr>
-            </thead>
-            <tbody id="r1PreviewBody"></tbody>
-          </table>
-        </div>
-
-        <div>
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 2 — Race &amp; Ethnicity</div>
-          <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
-            <thead>
-              <tr>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:60px;">Count</th>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">Race / Ethnicity</th>
-                <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Hispanic</th>
-              </tr>
-            </thead>
-            <tbody id="r2PreviewBody"></tbody>
-          </table>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ── Court Appearances Summary ─────────────────────────────────────────── -->
-    <div id="courtSection">
-      <div style="margin-top:2rem;margin-bottom:0.5rem;">
+      <div style="margin-bottom:0.5rem;" class="no-print">
         <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
-          Court Appearances
+          CDBG Monthly Reports — Home Stabilization
         </h3>
       </div>
 
-      <div class="card">
-        <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
-          Court Appearance Summary
-        </h3>
-        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
-          Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
-        </p>
-
-        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="courtReportYear">Year</label>
-            <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
+      <div id="cdbgControls" class="card no-print" style="margin-bottom:1.25rem;">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));align-items:end;">
+          <div class="form-group">
+            <label for="reportMonth">Report Month *</label>
+            <select id="reportMonth">
+              <option value="">— Select Month —</option>
+            </select>
           </div>
-          <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
+          <div class="form-group">
+            <label for="reportYear">Year *</label>
+            <input type="number" id="reportYear" min="2000" max="2100" style="max-width:120px;">
+          </div>
+          <div class="form-group" style="flex:1;min-width:160px;">
+            <label for="reportPerson">Person Completing Form</label>
+            <input type="text" id="reportPerson">
+          </div>
+        </div>
+        <p id="reportStatus" style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;min-height:1.2em;"></p>
+      </div>
+
+      <div class="card" id="cdbgCard" style="margin-bottom:1.25rem;display:none;">
+        <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
+          <div>
+            <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.15rem;">CDBG Direct Benefit Report</div>
+            <div id="cdbgCardSubtitle" style="font-size:0.95rem;font-weight:600;"></div>
+          </div>
+          <button id="printCdbgBtn" class="btn btn-primary">Print / Save as PDF</button>
         </div>
 
-        <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
-          Select a year and click Load.
+        <div id="cdbgPrintArea" style="display:none;">
+          <div class="cdbg-print-header">
+            <h2>CDBG Direct Benefit Report — Home Stabilization</h2>
+            <p id="printMonthLine"></p>
+            <p id="printPersonLine"></p>
+            <p id="printDateLine"></p>
+          </div>
+          <div class="cdbg-report-section">
+            <h3>Report 1 — Income (Owner Households)<br>
+              <span style="font-weight:400;font-size:0.82rem;">Project: BC Home Stabilization &nbsp;·&nbsp; CD255505 2419-PRO-SUBR</span>
+            </h3>
+            <table class="print-table">
+              <thead><tr><th style="width:70px;">Count</th><th>AMI Category</th></tr></thead>
+              <tbody id="r1PrintBody"></tbody>
+            </table>
+          </div>
+          <div class="cdbg-report-section">
+            <h3>Report 2 — Race &amp; Ethnicity (Owner Households)<br>
+              <span style="font-weight:400;font-size:0.82rem;">Project: Home Stabilization Program &nbsp;·&nbsp; CD255505 2419-PRO</span>
+            </h3>
+            <table class="print-table">
+              <thead><tr><th style="width:60px;">Count</th><th>Race / Ethnicity</th><th style="width:80px;">Hispanic</th></tr></thead>
+              <tbody id="r2PrintBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="no-print" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 1 — Income</div>
+            <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
+              <thead>
+                <tr>
+                  <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Count</th>
+                  <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">AMI Category</th>
+                </tr>
+              </thead>
+              <tbody id="r1PreviewBody"></tbody>
+            </table>
+          </div>
+          <div>
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">Report 2 — Race &amp; Ethnicity</div>
+            <table style="font-size:0.875rem;border-collapse:collapse;width:100%;">
+              <thead>
+                <tr>
+                  <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:60px;">Count</th>
+                  <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;">Race / Ethnicity</th>
+                  <th style="border:1px solid var(--border);padding:0.4rem 0.6rem;text-align:right;width:70px;">Hispanic</th>
+                </tr>
+              </thead>
+              <tbody id="r2PreviewBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <div id="courtSection">
+        <div style="margin-top:2rem;margin-bottom:0.5rem;">
+          <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
+            Court Appearances
+          </h3>
+        </div>
+        <div class="card">
+          <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
+            Court Appearance Summary
+          </h3>
+          <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
+            Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
+          </p>
+          <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="courtReportYear">Year</label>
+              <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
+            </div>
+            <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
+          </div>
+          <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
+            Select a year and click Load.
+          </div>
+        </div>
+      </div>
+
     </div>
 
+    <!-- ══ HUD Reports panel ══════════════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-hud">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Generate monthly HUD submission files. Executive Director only.</p>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <div class="form-group" style="margin:0;">
+            <label for="monthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
+            <input type="month" id="monthPicker" style="font-size:0.875rem;">
+          </div>
+          <button id="refreshBtn" class="btn btn-secondary btn-sm" style="margin-top:18px;">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Counselor Status</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Entry counts for selected month. ⚠ = missing Staff # or Title — blocks export for that counselor.
+        </p>
+        <div id="statusTableWrap">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Select a month and click Refresh.</p>
+        </div>
+      </div>
+
+      <div class="card" id="exportArea" style="margin-top:1.25rem;">
+        <div class="card-title">Generate Reports</div>
+        <p id="statusMsg" class="hidden"></p>
+
+        <div class="report-section">
+          <div class="report-section-title">Client Activity Log</div>
+          <div class="btn-group">
+            <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Personnel Activity Report (PAR) — per counselor</div>
+          <div class="btn-group" id="parButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllParsBtn" class="btn btn-secondary btn-sm">Generate All PARs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Case Management Log (CML) — per counselor</div>
+          <div class="btn-group" id="cmlButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllCmlsBtn" class="btn btn-secondary btn-sm">Generate All CMLs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Training Activity Log &amp; Invoice</div>
+          <div class="btn-group">
+            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Full Submission Package</div>
+          <div class="btn-group">
+            <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent);">Generate All → ZIP</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </main>
 
-  <script type="module" src="js/reports.js"></script>
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    import { initCdbgReports } from './js/reports.js';
+    import { initHudReports } from './js/hud-reports.js';
+
+    document.querySelectorAll('.reports-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.reports-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    requireAuth(async (user, profile) => {
+      setupNav(profile, 'reports');
+      await initCdbgReports(user, profile);
+      if (profile.role === 'executive_director') {
+        document.getElementById('hudTabBtn').classList.remove('hidden');
+        await initHudReports(user, profile);
+      }
+    });
+  </script>
 </body>
 </html>
