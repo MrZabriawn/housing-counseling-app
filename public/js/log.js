@@ -31,9 +31,10 @@ requireAuth(async (user, profile) => {
 
 function printReport() {
   const filterDesc = getFilterDescription();
-  const unique  = uniqueHouseholds(currentRows());
-  const rows    = currentRows();
-  const dollars = rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0);
+  const unique      = uniqueHouseholds(currentRows());
+  const rows        = currentRows();
+  const dollars     = rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0);
+  const totalHours  = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
 
   const breakdowns = [
     { title: 'Households by AMI Level',        field: 'amiPercent',     data: unique },
@@ -78,6 +79,7 @@ function printReport() {
   <div class="stats">
     <div class="stat"><div class="stat-val">${unique.length}</div><div class="stat-lbl">Unique Households</div></div>
     <div class="stat"><div class="stat-val">${rows.length}</div><div class="stat-lbl">Total Sessions</div></div>
+    <div class="stat"><div class="stat-val">${totalHours % 1 === 0 ? totalHours.toLocaleString() : totalHours.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:2})}</div><div class="stat-lbl">Total Hours</div></div>
     <div class="stat"><div class="stat-val">$${dollars.toLocaleString('en-US',{minimumFractionDigits:2})}</div><div class="stat-lbl">Dollars Awarded</div></div>
   </div>
   <div class="rpt-grid">${breakdownHtml}</div>
@@ -180,11 +182,16 @@ function uniqueHouseholds(rows) {
 }
 
 function renderStats(rows) {
-  const unique  = uniqueHouseholds(rows);
-  const dollars = rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0);
+  const unique      = uniqueHouseholds(rows);
+  const dollars     = rows.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0);
+  const totalHours  = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
 
   document.getElementById('statHouseholds').textContent = unique.length;
   document.getElementById('statSessions').textContent   = rows.length;
+  document.getElementById('statHours').textContent      =
+    totalHours % 1 === 0
+      ? totalHours.toLocaleString()
+      : totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
   document.getElementById('statDollars').textContent    =
     '$' + dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
