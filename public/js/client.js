@@ -151,20 +151,16 @@ function setSelectValue(id, val) {
 
 function populateClientForm(c) {
   setValue('clientName',    c.clientName);
-  setSelectValue('guarantor', c.guarantor);
   setValue('zipCode',       c.zipCode);
   setSelectValue('counselingType', c.counselingType);
   setSelectValue('billingType',    c.billingType);
   setSelectValue('amiPercent',     c.amiPercent);
   setSelectValue('reCode',         c.reCode);
 
-  // Counselor — inject custom option if not in list
   setSelectValue('counselor', c.counselor);
 
   document.getElementById('hispanic').checked     = !!c.hispanic;
   document.getElementById('femaleHeaded').checked = !!c.femaleHeaded;
-
-  // rxPanel is populated by loadRxNumbers() after subcollection loads
 
   // PRE-specific: home search notes
   const isPre = c.counselingType === 'PRE';
@@ -172,17 +168,63 @@ function populateClientForm(c) {
   const notesEl = document.getElementById('homeSearchNotes');
   if (notesEl) notesEl.value = c.homeSearchNotes || '';
 
+  // Intake — Contact
+  setValue('streetAddress', c.streetAddress);
+  setValue('city',          c.city);
+  setValue('county',        c.county);
+  setValue('dateOfBirth',   c.dateOfBirth);
+  setValue('email',         c.email);
+  setValue('homePhone',     c.homePhone);
+  setValue('workPhone',     c.workPhone);
+  setValue('cellPhone',     c.cellPhone);
+
+  // Intake — Co-Applicant
+  setValue('coApplicantName',      c.coApplicantName);
+  setValue('coApplicantDob',       c.coApplicantDob);
+  setValue('coApplicantEmail',     c.coApplicantEmail);
+  setValue('coApplicantHomePhone', c.coApplicantHomePhone);
+  setValue('coApplicantWorkPhone', c.coApplicantWorkPhone);
+  setValue('coApplicantCellPhone', c.coApplicantCellPhone);
+
+  // Intake — Household
+  setSelectValue('maritalStatus',   c.maritalStatus);
+  setValue('adultsInHousehold',     c.adultsInHousehold);
+  setValue('childrenInHousehold',   c.childrenInHousehold);
+
+  // Intake — Property & Mortgage
+  setSelectValue('propertyType', c.propertyType);
+  setSelectValue('mortgageType', c.mortgageType);
+  document.getElementById('primaryResidence').checked = !!c.primaryResidence;
+  setValue('mortgage1Company', c.mortgage1Company);
+  setValue('mortgage2Company', c.mortgage2Company);
+  setValue('mortgage3Company', c.mortgage3Company);
+  document.getElementById('bankruptcyFiled').checked = !!c.bankruptcyFiled;
+  setValue('bankruptcyAccount',     c.bankruptcyAccount);
+  setValue('conciliationStampDate', c.conciliationStampDate);
+
+  updateIntakeSections(c.counselingType);
+  updateBankruptcyAccountState();
+
   // Drive folder
   if (c.driveFolderId) {
     _driveFolder = { id: c.driveFolderId, name: c.driveFolderName, url: c.driveFolderUrl };
   }
   renderFolderUI();
 
-  // Show/hide home search notes section when type changes
-  document.getElementById('counselingType').addEventListener('change', () => {
-    const pre = document.getElementById('counselingType').value === 'PRE';
-    document.getElementById('areasSection').classList.toggle('hidden', !pre);
-  });
+  // Financials
+  loadFinancials(c);
+}
+
+function updateIntakeSections(counselingType) {
+  const mortgageEnabled = counselingType === 'OUTSTANDING' || counselingType === 'COURT';
+  document.getElementById('mortgageSection').classList.toggle('intake-disabled', !mortgageEnabled);
+  document.getElementById('mortgageNote').classList.toggle('hidden', mortgageEnabled);
+  document.getElementById('conciliationGroup').classList.toggle('hidden', counselingType !== 'COURT');
+}
+
+function updateBankruptcyAccountState() {
+  const filed = document.getElementById('bankruptcyFiled')?.checked;
+  document.getElementById('bankruptcyAccountGroup')?.classList.toggle('intake-disabled', !filed);
 }
 
 function setValue(id, val) {
@@ -278,8 +320,48 @@ function updateClosureCcaPercent() {
 // ── Wire client form ──────────────────────────────────────────────────────────
 
 function wireClientForm() {
-  // Save client
+  // Tab switching
+  document.querySelectorAll('.client-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.client-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.client-tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Counseling type change — update reactive sections
+  document.getElementById('counselingType').addEventListener('change', () => {
+    const type = document.getElementById('counselingType').value;
+    document.getElementById('areasSection').classList.toggle('hidden', type !== 'PRE');
+    updateIntakeSections(type);
+  });
+
+  // Primary save button (Overview tab)
   document.getElementById('saveClientBtn').addEventListener('click', saveClient);
+
+  // Secondary save button (Intake tab) — same action, different msg element
+  document.getElementById('saveClientBtn2').addEventListener('click', () => saveClient('clientSaveMsg2'));
+
+  // Print intake — both tabs
+  document.getElementById('printIntakeBtn').addEventListener('click', printIntakeForm);
+  document.getElementById('printIntakeBtn2').addEventListener('click', printIntakeForm);
+
+  // Financials save
+  document.getElementById('saveFinancialsBtn').addEventListener('click', saveFinancials);
+
+  // Financials dynamic rows
+  document.getElementById('addEmpRowBtn').addEventListener('click', addEmpRow);
+  document.getElementById('addIncomeRowBtn').addEventListener('click', addIncomeRow);
+  document.getElementById('addLiabilityRowBtn').addEventListener('click', addLiabilityRow);
+
+  // Expense sheet auto-totals
+  document.getElementById('tab-financials').addEventListener('input', e => {
+    if (e.target.classList.contains('housing-exp')) updateHousingTotal();
+    if (e.target.classList.contains('living-exp'))  updateLivingTotal();
+    if (e.target.classList.contains('liability-payment')) updateLiabilityTotals();
+    if (e.target.classList.contains('liability-balance'))  updateLiabilityTotals();
+  });
 
   // Close File button
   document.getElementById('closeFileBtn').addEventListener('click', () => {
@@ -333,11 +415,32 @@ function wireClientForm() {
 
   // Add Session
   document.getElementById('addSessionBtn').addEventListener('click', openAddSession);
+
+  // Bankruptcy account field enabled only when bankruptcy is checked
+  document.getElementById('bankruptcyFiled').addEventListener('change', updateBankruptcyAccountState);
+
+  // Print intake form
+  document.getElementById('printIntakeBtn').addEventListener('click', printIntakeForm);
+
+  // Export PDF
+  document.getElementById('exportPdfBtn').addEventListener('click', () => {
+    document.getElementById('exportModal').classList.remove('hidden');
+  });
+  document.getElementById('exportCancelBtn').addEventListener('click', () => {
+    document.getElementById('exportModal').classList.add('hidden');
+  });
+  document.getElementById('exportConfirmBtn').addEventListener('click', generateExportPdf);
+  document.getElementById('exportModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('exportModal'))
+      document.getElementById('exportModal').classList.add('hidden');
+  });
 }
 
-async function saveClient() {
-  const saveBtn = document.getElementById('saveClientBtn');
-  const msgEl   = document.getElementById('clientSaveMsg');
+async function saveClient(msgId = 'clientSaveMsg') {
+  const saveBtn = msgId === 'clientSaveMsg2'
+    ? document.getElementById('saveClientBtn2')
+    : document.getElementById('saveClientBtn');
+  const msgEl   = document.getElementById(msgId);
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving…';
   msgEl.classList.add('hidden');
@@ -351,7 +454,6 @@ async function saveClient() {
       counselingType,
       billingType:       document.getElementById('billingType').value,
       counselor:         document.getElementById('counselor').value,
-      guarantor:         document.getElementById('guarantor').value.trim(),
       zipCode:           document.getElementById('zipCode').value.trim(),
       amiPercent:        document.getElementById('amiPercent').value,
       reCode:            document.getElementById('reCode').value,
@@ -361,7 +463,37 @@ async function saveClient() {
       driveFolderId:     _driveFolder?.id   || '',
       driveFolderName:   _driveFolder?.name || '',
       driveFolderUrl:    _driveFolder?.url  || '',
-      updatedAt:         serverTimestamp(),
+      // Intake — Contact
+      streetAddress:     document.getElementById('streetAddress').value.trim(),
+      city:              document.getElementById('city').value.trim(),
+      county:            document.getElementById('county').value.trim(),
+      dateOfBirth:       document.getElementById('dateOfBirth').value,
+      email:             document.getElementById('email').value.trim(),
+      homePhone:         document.getElementById('homePhone').value.trim(),
+      workPhone:         document.getElementById('workPhone').value.trim(),
+      cellPhone:         document.getElementById('cellPhone').value.trim(),
+      // Intake — Co-Applicant
+      coApplicantName:      document.getElementById('coApplicantName').value.trim(),
+      coApplicantDob:       document.getElementById('coApplicantDob').value,
+      coApplicantEmail:     document.getElementById('coApplicantEmail').value.trim(),
+      coApplicantHomePhone: document.getElementById('coApplicantHomePhone').value.trim(),
+      coApplicantWorkPhone: document.getElementById('coApplicantWorkPhone').value.trim(),
+      coApplicantCellPhone: document.getElementById('coApplicantCellPhone').value.trim(),
+      // Intake — Household
+      maritalStatus:        document.getElementById('maritalStatus').value,
+      adultsInHousehold:    parseInt(document.getElementById('adultsInHousehold').value) || null,
+      childrenInHousehold:  parseInt(document.getElementById('childrenInHousehold').value) || null,
+      // Intake — Property & Mortgage
+      propertyType:         document.getElementById('propertyType').value,
+      mortgageType:         document.getElementById('mortgageType').value,
+      primaryResidence:     document.getElementById('primaryResidence').checked,
+      mortgage1Company:     document.getElementById('mortgage1Company').value.trim(),
+      mortgage2Company:     document.getElementById('mortgage2Company').value.trim(),
+      mortgage3Company:     document.getElementById('mortgage3Company').value.trim(),
+      bankruptcyFiled:      document.getElementById('bankruptcyFiled').checked,
+      bankruptcyAccount:    document.getElementById('bankruptcyAccount').value.trim(),
+      conciliationStampDate: document.getElementById('conciliationStampDate').value,
+      updatedAt:            serverTimestamp(),
     };
 
     await updateDoc(doc(db, 'clients', clientId), data);
@@ -433,10 +565,23 @@ function wireSessionModal() {
   document.getElementById('sessionModalCancel').addEventListener('click', closeSessionModal);
   document.getElementById('sessionModalSave').addEventListener('click', saveSession);
   document.getElementById('sessionModalDelete').addEventListener('click', deleteSession);
+  document.getElementById('sessionSnapshotBtn').addEventListener('click', () => {
+    const session = _sessions.find(s => s.id === _editingSessionId);
+    if (session?.clientSnapshot) openSnapshotView(session.clientSnapshot);
+  });
 
   // Close on overlay click
   document.getElementById('sessionModal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('sessionModal')) closeSessionModal();
+  });
+
+  // Snapshot modal close
+  document.getElementById('snapshotCloseBtn').addEventListener('click', () => {
+    document.getElementById('snapshotModal').classList.add('hidden');
+  });
+  document.getElementById('snapshotModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('snapshotModal'))
+      document.getElementById('snapshotModal').classList.add('hidden');
   });
 }
 
@@ -444,6 +589,7 @@ function openAddSession() {
   _editingSessionId = null;
   document.getElementById('sessionModalTitle').textContent = 'Add Session';
   document.getElementById('sessionModalDelete').classList.add('hidden');
+  document.getElementById('sessionSnapshotBtn').classList.add('hidden');
   clearSessionModal();
 
   // Defaults
@@ -468,6 +614,7 @@ function openEditSession(sessionId) {
   _editingSessionId = sessionId;
   document.getElementById('sessionModalTitle').textContent = 'Edit Session';
   document.getElementById('sessionModalDelete').classList.remove('hidden');
+  document.getElementById('sessionSnapshotBtn').classList.toggle('hidden', !session.clientSnapshot);
 
   // Populate
   document.getElementById('sDate').value         = toDateInputValue(session.date);
@@ -530,14 +677,15 @@ async function saveSession() {
     const data = readSessionForm();
 
     if (_editingSessionId) {
-      // Update existing
+      // Update existing — snapshot stays frozen from original session creation
       await updateDoc(
         doc(db, 'clients', clientId, 'sessions', _editingSessionId),
         data
       );
     } else {
-      // New session
-      data.createdAt = serverTimestamp();
+      // New session — embed point-in-time client snapshot (includes financials)
+      data.createdAt      = serverTimestamp();
+      data.clientSnapshot = buildClientSnapshot();
       await addDoc(collection(db, 'clients', clientId, 'sessions'), data);
     }
 
@@ -734,9 +882,16 @@ function renderRxPanel() {
   const sessionRxNums = [...new Set(_sessions.map(s => (s.rxNumber || '').trim()).filter(Boolean))]
     .filter(rx => !knownRxNums.has(rx));
   if (sessionRxNums.length) {
-    html += `<p style="font-size:0.8rem;margin-bottom:0.75rem;padding:0.45rem 0.75rem;background:#f0f4ff;border-left:3px solid var(--primary);border-radius:var(--radius);">
-      Found in session history (not yet on file): <strong>${sessionRxNums.map(escHtml).join(', ')}</strong> — add below to assign a guarantor.
-    </p>`;
+    html += `<div style="font-size:0.8rem;margin-bottom:0.75rem;padding:0.5rem 0.75rem;background:#f0f4ff;border-left:3px solid var(--primary);border-radius:var(--radius);">
+      <span style="font-weight:600;display:block;margin-bottom:0.45rem;">Found in session history — not yet on file:</span>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+        ${sessionRxNums.map(rx =>
+          `<button type="button" class="btn btn-sm btn-secondary rx-autofill-btn" data-rx="${escAttr(rx)}" style="font-size:0.75rem;">
+            ${escHtml(rx)} &rarr; Add
+          </button>`
+        ).join('')}
+      </div>
+    </div>`;
   }
 
   if (_rxDocs.length) {
@@ -823,6 +978,22 @@ function renderRxPanel() {
   panel.querySelectorAll('.rx-remove-btn').forEach(btn =>
     btn.addEventListener('click', () => deleteRxRow(btn.dataset.rxId))
   );
+
+  // Auto-fill buttons — open add form pre-filled with Rx from session history
+  panel.querySelectorAll('.rx-autofill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const addForm   = document.getElementById('rxAddForm');
+      const showBtn   = document.getElementById('rxShowAddBtn');
+      const numInput  = document.getElementById('rxNewNumber');
+      const guarSel   = document.getElementById('rxNewGuarantor');
+      addForm.classList.remove('hidden');
+      addForm.style.display = 'flex';
+      showBtn.classList.add('hidden');
+      numInput.value  = btn.dataset.rx;
+      guarSel.value   = '';
+      guarSel.focus();
+    });
+  });
 }
 
 function resetRxAddForm() {
@@ -995,4 +1166,872 @@ function renderFolderUI() {
     unlinkBtn.classList.add('hidden');
     linkBtn.textContent = 'Link Drive Folder';
   }
+}
+
+// ── Print Intake Form ──────────────────────────────────────────────────────────
+
+function printIntakeForm() {
+  const c = _client;
+  const logoUrl = new URL('img/logo.png', window.location.href).href;
+
+  const chk  = (val) => val ? '&#9745;' : '&#9744;';
+  const v    = (val) => escHtml(String(val ?? ''));
+  const fmtD = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso + 'T12:00:00');
+    return isNaN(d) ? iso : d.toLocaleDateString('en-US');
+  };
+
+  const typeLabel = {
+    OUTSTANDING: 'Default &amp; Delinquency',
+    PRE:         'First Time Homebuyers',
+    POST:        'Post-Purchase',
+    COURT:       'BC Conciliation Program',
+  };
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>Intake Form — ${v(c.clientName)}</title>
+<style>
+  @page { margin: 0.65in; size: letter portrait; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9.5pt; color: #000;
+    margin: 0; padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .header {
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 3px solid #1a3a8f; padding-bottom: 10px; margin-bottom: 12px;
+  }
+  .logo { height: 56px; width: auto; }
+  .header-text h1 {
+    font-size: 13pt; font-weight: bold; margin: 0 0 2px;
+    color: #1a3a8f; letter-spacing: 0.02em;
+  }
+  .header-text p { margin: 0; font-size: 8.5pt; color: #444; }
+  .row { display: flex; gap: 8px; margin-bottom: 5px; align-items: baseline; }
+  .lbl { font-weight: bold; font-size: 8.5pt; white-space: nowrap; flex-shrink: 0; }
+  .val { border-bottom: 1px solid #555; flex: 1; min-height: 14px; font-size: 9.5pt; padding-bottom: 1px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  .sec { font-weight: bold; text-decoration: underline; margin: 10px 0 5px; font-size: 9.5pt; }
+  .chk-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; font-size: 9.5pt; }
+  .chk { font-size: 11pt; line-height: 1; }
+  hr { border: none; border-top: 1px solid #aaa; margin: 8px 0; }
+  .inline { display: inline-flex; align-items: baseline; gap: 5px; }
+  .notes-line { border-bottom: 1px solid #000; min-height: 16px; margin-bottom: 5px; }
+  @media print { body { padding: 0; } }
+</style>
+</head><body>
+
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Housing Opportunities Inc." onerror="this.style.display='none'">
+  <div class="header-text">
+    <h1>Housing Counseling Intake Form</h1>
+    <p>Housing Opportunities Inc. &nbsp;&#8226;&nbsp; 293 Pinney Street, Rochester, PA 15074 &nbsp;&#8226;&nbsp; Phone: (724) 728-7511 &nbsp;&#8226;&nbsp; Fax: (724) 728-7202</p>
+  </div>
+</div>
+
+<div class="row">
+  <span class="lbl">DATE:</span>
+  <span class="val">${new Date().toLocaleDateString('en-US')}</span>
+  <span class="lbl" style="margin-left:24px;">COUNSELOR:</span>
+  <span class="val">${v(c.counselor)}</span>
+</div>
+
+<hr>
+
+<div class="two">
+  <div class="row"><span class="lbl">APPLICANT&rsquo;S NAME:</span> <span class="val">${v(c.clientName)}</span></div>
+  <div class="row"><span class="lbl">CO-APPLICANT&rsquo;S NAME:</span> <span class="val">${v(c.coApplicantName)}</span></div>
+</div>
+
+<div class="row"><span class="lbl">ADDRESS:</span> <span class="val">${v(c.streetAddress)}</span></div>
+
+<div class="two">
+  <div class="row"><span class="lbl">CITY / STATE / ZIP:</span> <span class="val">${v([c.city, 'PA', c.zipCode].filter(Boolean).join('  '))}</span></div>
+  <div class="row"><span class="lbl">COUNTY:</span> <span class="val">${v(c.county)}</span></div>
+</div>
+
+<div class="two">
+  <div class="row"><span class="lbl">Date of Birth:</span> <span class="val">${fmtD(c.dateOfBirth)}</span></div>
+  <div class="row"><span class="lbl">Date of Birth:</span> <span class="val">${fmtD(c.coApplicantDob)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl">HOME PHONE:</span> <span class="val">${v(c.homePhone)}</span></div>
+  <div class="row"><span class="lbl">HOME PHONE:</span> <span class="val">${v(c.coApplicantHomePhone)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl">WORK PHONE:</span> <span class="val">${v(c.workPhone)}</span></div>
+  <div class="row"><span class="lbl">WORK PHONE:</span> <span class="val">${v(c.coApplicantWorkPhone)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl">CELL PHONE:</span> <span class="val">${v(c.cellPhone)}</span></div>
+  <div class="row"><span class="lbl">CELL PHONE:</span> <span class="val">${v(c.coApplicantCellPhone)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl"># Adults in Household:</span> <span class="val">${v(c.adultsInHousehold)}</span></div>
+  <div class="row"><span class="lbl"># Children in Household:</span> <span class="val">${v(c.childrenInHousehold)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl">Email Address:</span> <span class="val">${v(c.email)}</span></div>
+  <div class="row"><span class="lbl">Email Address:</span> <span class="val">${v(c.coApplicantEmail)}</span></div>
+</div>
+<div class="two">
+  <div class="row"><span class="lbl">Marital Status:</span> <span class="val">${v(c.maritalStatus)}</span></div>
+  <div class="row"><span class="lbl">Race &amp; Ethnicity:</span> <span class="val">${v(c.reCode)}</span></div>
+</div>
+
+<hr>
+
+<div class="sec">TYPE OF APPT:</div>
+<div class="two">
+  <div>
+    <div class="chk-row"><span class="chk">${chk(c.counselingType === 'OUTSTANDING')}</span> Default &amp; Delinquency</div>
+    <div class="chk-row"><span class="chk">${chk(c.counselingType === 'PRE')}</span> First Time Homebuyers</div>
+    <div class="chk-row"><span class="chk">${chk(c.counselingType === 'POST')}</span> Post-Purchase</div>
+  </div>
+  <div>
+    <div class="chk-row"><span class="chk">${chk(c.counselingType === 'COURT')}</span> BC Conciliation Program</div>
+    <div class="row" style="margin-top:4px;"><span class="lbl">Conciliation Stamp Date:</span> <span class="val">${fmtD(c.conciliationStampDate)}</span></div>
+  </div>
+</div>
+
+<hr>
+
+<div class="sec">PRELIMINARY INFORMATION:</div>
+<div class="two">
+  <div>
+    <div class="chk-row"><span class="chk">${chk(true)}</span> Living in secured property</div>
+    <div class="chk-row"><span class="chk">${chk(c.primaryResidence)}</span> Primary Residence</div>
+    <div class="chk-row"><span class="chk">${chk(true)}</span> Located in Pennsylvania</div>
+  </div>
+  <div>
+    <div class="chk-row"><span class="chk">${chk(c.propertyType === 'Detached/Condo')}</span> Detached home or condominium</div>
+    <div class="chk-row"><span class="chk">${chk(c.propertyType === 'Mobile Home')}</span> Mobile home secured by mortgage</div>
+    <div class="row" style="margin-top:3px;">
+      <span class="lbl">Bankruptcy:</span>
+      <span class="chk">${chk(c.bankruptcyFiled)}</span> <span style="font-size:9pt;">YES</span>
+      &nbsp;
+      <span class="chk">${chk(!c.bankruptcyFiled)}</span> <span style="font-size:9pt;">NO</span>
+      &nbsp;&nbsp;
+      <span class="lbl">Account #</span> <span class="val" style="max-width:120px;">${v(c.bankruptcyAccount)}</span>
+    </div>
+  </div>
+</div>
+
+<div class="row" style="margin-top:6px;"><span class="lbl">1st Mortgage - Mortgage Company:</span> <span class="val">${v(c.mortgage1Company)}</span></div>
+<div class="row"><span class="lbl">2nd Mortgage - Mortgage Company:</span> <span class="val">${v(c.mortgage2Company)}</span></div>
+<div class="row"><span class="lbl">3rd Mortgage - Mortgage Company:</span> <span class="val">${v(c.mortgage3Company)}</span></div>
+
+<div style="display:flex;flex-wrap:wrap;gap:4px 20px;margin:6px 0;">
+  <div class="chk-row"><span class="chk">${chk(c.mortgageType === 'Conventional')}</span> Conventional Mortgage</div>
+  <div class="chk-row"><span class="chk">${chk(c.mortgageType === 'VA')}</span> VA Mortgage</div>
+  <div class="chk-row"><span class="chk">${chk(c.mortgageType === 'FHA')}</span> FHA Mortgage</div>
+  <div class="chk-row"><span class="chk">${chk(c.mortgageType === 'FmHA/USDA')}</span> FmHA Loan (USDA / Rural Housing / Farmer&rsquo;s Home Loan)</div>
+</div>
+
+<hr>
+
+<div class="two" style="margin-top:4px;">
+  <div class="row"><span class="lbl">FACE TO FACE MEETING — DATE:</span> <span class="val"></span></div>
+  <div class="row"><span class="lbl">TIME:</span> <span class="val"></span></div>
+</div>
+<div class="row"><span class="lbl">PHONE CALL NOTES:</span> <span class="val"></span></div>
+<div class="notes-line"></div>
+<div class="notes-line"></div>
+
+<script>window.addEventListener('load', () => window.print());<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups to print the intake form.'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+// ── Financials ────────────────────────────────────────────────────────────────
+
+const HOUSING_EXP_IDS = [
+  'expMortgage1','expMortgage2','expMortgage3','expPropertyTax','expHazardIns',
+  'expCondoFees','expAssocDues','expOtherHousing','expElectric','expGas',
+  'expOil','expWater','expSewer','expTrash',
+];
+const LIVING_EXP_IDS = [
+  'expGroceries','expLunches','expPetCare','expPetFood','expTobacco','expHairCuts',
+  'expLaundry','expClothing','expCellPhone','expHomePhone','expCableTV','expInternet',
+  'expHomeMaint','expAutoIns','expGasoline','expCarRepair','expBusParking',
+  'expPrescriptions','expCopays','expDayCare','expChurch','expEntertainment',
+  'expNewspaper','expClubs','expOtherLiving1','expOtherLiving2','expOtherLiving3',
+];
+const HOUSING_EXP_LABELS = {
+  expMortgage1:'Mortgage (1st) / Rent', expMortgage2:'Mortgage (2nd)', expMortgage3:'Mortgage (3rd)',
+  expPropertyTax:'Real Estate / Property Taxes', expHazardIns:'Hazard Insurance',
+  expCondoFees:'Condo Fees', expAssocDues:'Assoc. Dues', expOtherHousing:'Other',
+  expElectric:'Electric', expGas:'Gas', expOil:'Oil', expWater:'Water', expSewer:'Sewer', expTrash:'Trash',
+};
+const LIVING_EXP_LABELS = {
+  expGroceries:'Groceries / Toiletries', expLunches:'Lunches', expPetCare:'Pet Care',
+  expPetFood:'Pet Food', expTobacco:'Tobacco / Alcohol', expHairCuts:'Hair Cuts',
+  expLaundry:'Laundry / Dry Cleaning', expClothing:'Clothing', expCellPhone:'Cell Phone',
+  expHomePhone:'Home Phone', expCableTV:'Cable / Dish / TV', expInternet:'Internet Service',
+  expHomeMaint:'Home Maint / Alarm', expAutoIns:'Auto Insurance', expGasoline:'Gasoline',
+  expCarRepair:'Car Repair / Insp / Registration', expBusParking:'Bus / Parking / Tolls',
+  expPrescriptions:'Prescriptions / Med Supplies', expCopays:'Co-Pays', expDayCare:'Day Care',
+  expChurch:'Church / Donations', expEntertainment:'Entertainment',
+  expNewspaper:'Newspaper / Subscriptions', expClubs:'Clubs / Gifts',
+  expOtherLiving1:'Other (1)', expOtherLiving2:'Other (2)', expOtherLiving3:'Other (3)',
+};
+
+function numVal(id) {
+  return parseFloat(document.getElementById(id)?.value || '0') || 0;
+}
+
+function fmtMoney2(n) {
+  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function updateHousingTotal() {
+  const total = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  document.getElementById('housingTotal').textContent = fmtMoney2(total);
+  updateGrandExpTotal();
+}
+
+function updateLivingTotal() {
+  const total = LIVING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  document.getElementById('livingTotal').textContent = fmtMoney2(total);
+  updateGrandExpTotal();
+}
+
+function updateGrandExpTotal() {
+  const h = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  const l = LIVING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
+  document.getElementById('grandExpTotal').textContent = fmtMoney2(h + l);
+}
+
+function updateLiabilityTotals() {
+  let payments = 0, balances = 0;
+  document.querySelectorAll('#liabilityBody tr').forEach(row => {
+    payments += parseFloat(row.querySelector('.liability-payment')?.value || '0') || 0;
+    balances += parseFloat(row.querySelector('.liability-balance')?.value  || '0') || 0;
+  });
+  document.getElementById('liabilityPaymentTotal').textContent = fmtMoney2(payments);
+  document.getElementById('liabilityBalanceTotal').textContent = fmtMoney2(balances);
+}
+
+// ── Employment rows ───────────────────────────────────────────────────────────
+
+function renderEmpTable(rows) {
+  const tbody = document.getElementById('empBody');
+  tbody.innerHTML = '';
+  (rows || [{}]).forEach(r => tbody.appendChild(makeEmpRow(r)));
+}
+
+function makeEmpRow(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="emp-who" value="${escAttr(r.who || '')}"></td>
+    <td><input type="text" class="emp-employer" value="${escAttr(r.employer || '')}"></td>
+    <td><input type="text" class="emp-start" value="${escAttr(r.startDate || '')}" placeholder="MM/YY"></td>
+    <td><input type="text" class="emp-end" value="${escAttr(r.endDate || '')}" placeholder="MM/YY or Current"></td>
+    <td><input type="text" class="emp-position" value="${escAttr(r.position || '')}"></td>
+    <td><input type="text" class="emp-reason" value="${escAttr(r.reasonForLeaving || '')}"></td>
+    <td><input type="number" class="emp-gross" value="${r.grossMonthly || ''}" min="0" step="0.01"></td>
+    <td><input type="number" class="emp-net" value="${r.netMonthly || ''}" min="0" step="0.01"></td>
+    <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); });
+  return tr;
+}
+
+function addEmpRow() {
+  document.getElementById('empBody').appendChild(makeEmpRow());
+}
+
+function readEmpRows() {
+  return [...document.querySelectorAll('#empBody tr')].map(row => ({
+    who:              row.querySelector('.emp-who')?.value.trim()       || '',
+    employer:         row.querySelector('.emp-employer')?.value.trim()  || '',
+    startDate:        row.querySelector('.emp-start')?.value.trim()     || '',
+    endDate:          row.querySelector('.emp-end')?.value.trim()       || '',
+    position:         row.querySelector('.emp-position')?.value.trim()  || '',
+    reasonForLeaving: row.querySelector('.emp-reason')?.value.trim()    || '',
+    grossMonthly:     parseFloat(row.querySelector('.emp-gross')?.value || '0') || 0,
+    netMonthly:       parseFloat(row.querySelector('.emp-net')?.value   || '0') || 0,
+  })).filter(r => r.who || r.employer || r.position);
+}
+
+// ── Other income rows ─────────────────────────────────────────────────────────
+
+function renderIncomeTable(rows) {
+  const tbody = document.getElementById('incomeBody');
+  tbody.innerHTML = '';
+  (rows || [{}]).forEach(r => tbody.appendChild(makeIncomeRow(r)));
+}
+
+function makeIncomeRow(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="inc-who" value="${escAttr(r.who || '')}"></td>
+    <td><input type="text" class="inc-source" value="${escAttr(r.source || '')}"></td>
+    <td><input type="number" class="inc-amount" value="${r.monthlyAmount || ''}" min="0" step="0.01"></td>
+    <td><input type="text" class="inc-desc" value="${escAttr(r.description || '')}"></td>
+    <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); });
+  return tr;
+}
+
+function addIncomeRow() {
+  document.getElementById('incomeBody').appendChild(makeIncomeRow());
+}
+
+function readIncomeRows() {
+  return [...document.querySelectorAll('#incomeBody tr')].map(row => ({
+    who:           row.querySelector('.inc-who')?.value.trim()    || '',
+    source:        row.querySelector('.inc-source')?.value.trim() || '',
+    monthlyAmount: parseFloat(row.querySelector('.inc-amount')?.value || '0') || 0,
+    description:   row.querySelector('.inc-desc')?.value.trim()   || '',
+  })).filter(r => r.who || r.source || r.monthlyAmount);
+}
+
+// ── Liability rows ────────────────────────────────────────────────────────────
+
+function renderLiabilityTable(rows) {
+  const tbody = document.getElementById('liabilityBody');
+  tbody.innerHTML = '';
+  (rows || [{}]).forEach(r => tbody.appendChild(makeLiabilityRow(r)));
+  updateLiabilityTotals();
+}
+
+function makeLiabilityRow(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="liab-name" value="${escAttr(r.accountName || '')}"></td>
+    <td><input type="number" class="liability-payment" value="${r.monthlyPayment || ''}" min="0" step="0.01"></td>
+    <td><input type="number" class="liability-balance" value="${r.balance || ''}" min="0" step="0.01"></td>
+    <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateLiabilityTotals(); });
+  tr.querySelector('.liability-payment').addEventListener('input', updateLiabilityTotals);
+  tr.querySelector('.liability-balance').addEventListener('input', updateLiabilityTotals);
+  return tr;
+}
+
+function addLiabilityRow() {
+  const tbody = document.getElementById('liabilityBody');
+  const row = makeLiabilityRow();
+  tbody.appendChild(row);
+  updateLiabilityTotals();
+}
+
+function readLiabilityRows() {
+  return [...document.querySelectorAll('#liabilityBody tr')].map(row => ({
+    accountName:    row.querySelector('.liab-name')?.value.trim()           || '',
+    monthlyPayment: parseFloat(row.querySelector('.liability-payment')?.value || '0') || 0,
+    balance:        parseFloat(row.querySelector('.liability-balance')?.value  || '0') || 0,
+  })).filter(r => r.accountName || r.monthlyPayment || r.balance);
+}
+
+// ── Load / save financials ────────────────────────────────────────────────────
+
+function loadFinancials(c) {
+  renderEmpTable(c.employmentHistory);
+  renderIncomeTable(c.otherIncome);
+  renderLiabilityTable(c.monthlyLiabilities);
+
+  HOUSING_EXP_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && c[id] != null) el.value = c[id];
+  });
+  LIVING_EXP_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && c[id] != null) el.value = c[id];
+  });
+
+  updateHousingTotal();
+  updateLivingTotal();
+  updateLiabilityTotals();
+}
+
+function readExpFields() {
+  const out = {};
+  HOUSING_EXP_IDS.forEach(id => { out[id] = numVal(id); });
+  LIVING_EXP_IDS.forEach(id => { out[id] = numVal(id); });
+  return out;
+}
+
+async function saveFinancials() {
+  const btn   = document.getElementById('saveFinancialsBtn');
+  const msgEl = document.getElementById('finSaveMsg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msgEl.classList.add('hidden');
+
+  try {
+    const data = {
+      employmentHistory:  readEmpRows(),
+      otherIncome:        readIncomeRows(),
+      monthlyLiabilities: readLiabilityRows(),
+      ...readExpFields(),
+      updatedAt: serverTimestamp(),
+    };
+    await updateDoc(doc(db, 'clients', clientId), data);
+    Object.assign(_client, data);
+    msgEl.textContent = 'Saved.';
+    msgEl.style.color = 'var(--success, green)';
+    msgEl.classList.remove('hidden');
+    setTimeout(() => msgEl.classList.add('hidden'), 2500);
+  } catch (err) {
+    msgEl.textContent = 'Save failed: ' + err.message;
+    msgEl.style.color = 'var(--danger, red)';
+    msgEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Financials';
+  }
+}
+
+// ── Session snapshot ──────────────────────────────────────────────────────────
+
+// Fields excluded from snapshots — operational / computed / storage metadata
+const SNAPSHOT_EXCLUDE = new Set([
+  'id', 'updatedAt', 'createdAt', 'sessionCount', 'totalOutcomeValue',
+  'firstSessionDate', 'lastSessionDate', 'status', 'closureDate',
+  'closureOutcome', 'closureOutcomeValue', 'closureAwardType',
+  'totalDownPayment', 'ccaAmountProvided',
+  'driveFolderId', 'driveFolderName', 'driveFolderUrl',
+  'rxNumber',  // legacy field — subcollection is authoritative
+]);
+
+function buildClientSnapshot() {
+  const snapshot = { snapshotAt: new Date().toISOString() };
+  for (const [k, v] of Object.entries(_client)) {
+    if (!SNAPSHOT_EXCLUDE.has(k)) snapshot[k] = v;
+  }
+  return snapshot;
+}
+
+function openSnapshotView(snap) {
+  const fmtD = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso + (iso.length === 10 ? 'T12:00:00' : ''));
+    return isNaN(d) ? iso : d.toLocaleDateString('en-US');
+  };
+  const fmtN = (n, prefix = '$') => n > 0
+    ? prefix + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 })
+    : '—';
+  const v  = val => escHtml(String(val ?? '—'));
+  const row = (label, val) => val && val !== '—'
+    ? `<div style="display:flex;gap:0.5rem;padding:0.2rem 0;font-size:0.825rem;border-bottom:1px solid #f0f1f3;">
+        <span style="min-width:180px;font-weight:600;flex-shrink:0;color:var(--text-muted);">${label}</span>
+        <span>${val}</span>
+       </div>`
+    : '';
+
+  const sectionHdr = label =>
+    `<p style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:1rem 0 0.3rem;">${label}</p>`;
+
+  // Expense totals
+  const housingTotal = HOUSING_EXP_IDS.reduce((s, id) => s + (Number(snap[id]) || 0), 0);
+  const livingTotal  = LIVING_EXP_IDS.reduce((s, id) => s + (Number(snap[id]) || 0), 0);
+
+  // Employment rows
+  const empRows = (snap.employmentHistory || []).map(e =>
+    `<tr style="font-size:0.8rem;border-bottom:1px solid #f0f1f3;">
+      <td style="padding:0.25rem 0.4rem;">${escHtml(e.who || '')}</td>
+      <td style="padding:0.25rem 0.4rem;">${escHtml(e.employer || '')}</td>
+      <td style="padding:0.25rem 0.4rem;">${escHtml(e.position || '')}</td>
+      <td style="padding:0.25rem 0.4rem;text-align:right;">${fmtN(e.grossMonthly)}</td>
+      <td style="padding:0.25rem 0.4rem;text-align:right;">${fmtN(e.netMonthly)}</td>
+    </tr>`
+  ).join('');
+
+  const empTable = empRows
+    ? `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:0.5rem;">
+        <thead><tr style="background:#f8f9fb;">
+          <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Who</th>
+          <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Employer</th>
+          <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Position</th>
+          <th style="padding:0.25rem 0.4rem;text-align:right;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Gross/Mo</th>
+          <th style="padding:0.25rem 0.4rem;text-align:right;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Net/Mo</th>
+        </tr></thead>
+        <tbody>${empRows}</tbody>
+      </table>`
+    : '<p style="font-size:0.8rem;color:var(--text-muted);">No employment history recorded.</p>';
+
+  // Other income rows
+  const incRows = (snap.otherIncome || []).map(i =>
+    `<tr style="font-size:0.8rem;border-bottom:1px solid #f0f1f3;">
+      <td style="padding:0.25rem 0.4rem;">${escHtml(i.who || '')}</td>
+      <td style="padding:0.25rem 0.4rem;">${escHtml(i.source || '')}</td>
+      <td style="padding:0.25rem 0.4rem;text-align:right;">${fmtN(i.monthlyAmount)}</td>
+      <td style="padding:0.25rem 0.4rem;">${escHtml(i.description || '')}</td>
+    </tr>`
+  ).join('');
+
+  // Liability rows
+  const liabRows = (snap.monthlyLiabilities || []).map(l =>
+    `<tr style="font-size:0.8rem;border-bottom:1px solid #f0f1f3;">
+      <td style="padding:0.25rem 0.4rem;">${escHtml(l.accountName || '')}</td>
+      <td style="padding:0.25rem 0.4rem;text-align:right;">${fmtN(l.monthlyPayment)}</td>
+      <td style="padding:0.25rem 0.4rem;text-align:right;">${fmtN(l.balance)}</td>
+    </tr>`
+  ).join('');
+  const liabPayTotal = (snap.monthlyLiabilities || []).reduce((s, l) => s + (Number(l.monthlyPayment) || 0), 0);
+  const liabBalTotal = (snap.monthlyLiabilities || []).reduce((s, l) => s + (Number(l.balance) || 0), 0);
+
+  const html = `
+    ${sectionHdr('Profile')}
+    ${row('Client Name',      v(snap.clientName))}
+    ${row('Counseling Type',  v(snap.counselingType))}
+    ${row('Billing Type',     v(snap.billingType))}
+    ${row('Counselor',        v(snap.counselor))}
+    ${row('AMI Level',        v(snap.amiPercent))}
+    ${row('Race & Ethnicity', v(snap.reCode))}
+
+    ${sectionHdr('Contact')}
+    ${row('Address', [snap.streetAddress, snap.city, snap.county, snap.zipCode].filter(Boolean).map(escHtml).join(', '))}
+    ${row('Date of Birth',    fmtD(snap.dateOfBirth))}
+    ${row('Email',            v(snap.email))}
+    ${row('Home Phone',       v(snap.homePhone))}
+    ${row('Cell Phone',       v(snap.cellPhone))}
+    ${snap.coApplicantName ? sectionHdr('Co-Applicant') + row('Name', v(snap.coApplicantName)) + row('DOB', fmtD(snap.coApplicantDob)) : ''}
+
+    ${sectionHdr('Household')}
+    ${row('Marital Status',   v(snap.maritalStatus))}
+    ${row('Adults',           v(snap.adultsInHousehold))}
+    ${row('Children',         v(snap.childrenInHousehold))}
+
+    ${snap.mortgage1Company || snap.propertyType ? sectionHdr('Property & Mortgage') +
+      row('Property Type',    v(snap.propertyType)) +
+      row('Mortgage Type',    v(snap.mortgageType)) +
+      row('1st Mortgage',     v(snap.mortgage1Company)) +
+      row('2nd Mortgage',     v(snap.mortgage2Company)) +
+      row('3rd Mortgage',     v(snap.mortgage3Company))
+    : ''}
+
+    ${sectionHdr('Employment History')}
+    ${empTable}
+
+    ${incRows ? sectionHdr('Other Income') + `<table style="width:100%;border-collapse:collapse;margin-bottom:0.5rem;">
+      <thead><tr style="background:#f8f9fb;">
+        <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Who</th>
+        <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Source</th>
+        <th style="padding:0.25rem 0.4rem;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Monthly</th>
+        <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Description</th>
+      </tr></thead><tbody>${incRows}</tbody>
+    </table>` : ''}
+
+    ${sectionHdr('Monthly Expenses')}
+    <div style="display:flex;gap:2rem;font-size:0.825rem;margin-bottom:0.5rem;">
+      <div>${row('Housing Total', fmtN(housingTotal))}</div>
+      <div>${row('Living Total',  fmtN(livingTotal))}</div>
+      <div>${row('Grand Total',   fmtN(housingTotal + livingTotal))}</div>
+    </div>
+
+    ${liabRows ? sectionHdr('Monthly Liabilities') + `<table style="width:100%;border-collapse:collapse;margin-bottom:0.5rem;">
+      <thead><tr style="background:#f8f9fb;">
+        <th style="padding:0.25rem 0.4rem;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Account</th>
+        <th style="padding:0.25rem 0.4rem;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Monthly Pmt</th>
+        <th style="padding:0.25rem 0.4rem;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);">Balance</th>
+      </tr></thead>
+      <tbody>${liabRows}</tbody>
+      <tfoot><tr style="background:#f8f9fb;font-weight:700;font-size:0.8rem;">
+        <td style="padding:0.3rem 0.4rem;">Totals</td>
+        <td style="padding:0.3rem 0.4rem;text-align:right;">${fmtN(liabPayTotal)}</td>
+        <td style="padding:0.3rem 0.4rem;text-align:right;">${fmtN(liabBalTotal)}</td>
+      </tr></tfoot>
+    </table>` : ''}
+  `;
+
+  const takenAt = snap.snapshotAt
+    ? new Date(snap.snapshotAt).toLocaleString('en-US')
+    : 'unknown date';
+  document.getElementById('snapshotDateLine').textContent =
+    `Captured at time of session — ${takenAt}`;
+  document.getElementById('snapshotContent').innerHTML = html;
+  document.getElementById('snapshotModal').classList.remove('hidden');
+}
+
+// ── Export PDF ────────────────────────────────────────────────────────────────
+
+function generateExportPdf() {
+  const include = {
+    overview:   document.getElementById('exportOverview').checked,
+    intake:     document.getElementById('exportIntake').checked,
+    financials: document.getElementById('exportFinancials').checked,
+    sessions:   document.getElementById('exportSessions').checked,
+  };
+  if (!Object.values(include).some(Boolean)) {
+    alert('Select at least one section.');
+    return;
+  }
+
+  const c       = _client;
+  const logoUrl = new URL('img/logo.png', window.location.href).href;
+  const chk     = val => val ? '&#9745;' : '&#9744;';
+  const v       = val => escHtml(String(val ?? ''));
+  const fmtMon  = n => { const num = Number(n) || 0; return num > 0 ? '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''; };
+  const pdfRow  = (label, val) =>
+    `<div class="prow"><span class="plbl">${label}</span><span class="pval">${val ?? ''}</span></div>`;
+  const secHdr  = title => `<h2>${title}</h2>`;
+
+  let body = '';
+
+  // ── Overview ──────────────────────────────────────────────────────────────
+  if (include.overview) {
+    body += secHdr('Identity');
+    body += `<div class="two-col">
+      <div>
+        ${pdfRow('Client Name',     v(c.clientName))}
+        ${pdfRow('Counseling Type', v(c.counselingType))}
+        ${pdfRow('Billing Type',    v(c.billingType))}
+        ${pdfRow('Counselor',       v(c.counselor))}
+      </div>
+      <div>
+        ${pdfRow('AMI Level',        v(c.amiPercent))}
+        ${pdfRow('Race &amp; Ethnicity', v(c.reCode))}
+        <div class="prow"><span class="plbl">Hispanic / Latino</span><span class="pval"><span class="chk">${chk(c.hispanic)}</span></span></div>
+        <div class="prow"><span class="plbl">Female-Headed HH</span><span class="pval"><span class="chk">${chk(c.femaleHeaded)}</span></span></div>
+      </div>
+    </div>`;
+
+    if (_rxDocs.length) {
+      body += secHdr('Rx Numbers');
+      body += `<table>
+        <thead><tr><th>Rx #</th><th>Guarantor</th><th>Active</th></tr></thead>
+        <tbody>${_rxDocs.map(r => `<tr>
+          <td>${escHtml(r.rxNumber)}</td>
+          <td>${escHtml(r.guarantor || '—')}</td>
+          <td>${r.active !== false ? 'Yes' : 'No'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+  }
+
+  // ── Intake ────────────────────────────────────────────────────────────────
+  if (include.intake) {
+    body += secHdr('Contact Information');
+    body += `<div class="two-col">
+      <div>
+        ${pdfRow('Street Address',   v(c.streetAddress))}
+        ${pdfRow('City',             v(c.city))}
+        ${pdfRow('County',           v(c.county))}
+        ${pdfRow('Zip Code',         v(c.zipCode))}
+        ${pdfRow('Date of Birth',    fmtDate(c.dateOfBirth))}
+        ${pdfRow('Email',            v(c.email))}
+      </div>
+      <div>
+        ${pdfRow('Home Phone',       v(c.homePhone))}
+        ${pdfRow('Work Phone',       v(c.workPhone))}
+        ${pdfRow('Cell Phone',       v(c.cellPhone))}
+        ${pdfRow('Marital Status',   v(c.maritalStatus))}
+        ${pdfRow('Adults in HH',     v(c.adultsInHousehold))}
+        ${pdfRow('Children in HH',   v(c.childrenInHousehold))}
+      </div>
+    </div>`;
+
+    if (c.coApplicantName) {
+      body += secHdr('Co-Applicant');
+      body += `<div class="two-col">
+        <div>
+          ${pdfRow('Name',        v(c.coApplicantName))}
+          ${pdfRow('DOB',         fmtDate(c.coApplicantDob))}
+          ${pdfRow('Email',       v(c.coApplicantEmail))}
+        </div>
+        <div>
+          ${pdfRow('Home Phone',  v(c.coApplicantHomePhone))}
+          ${pdfRow('Work Phone',  v(c.coApplicantWorkPhone))}
+          ${pdfRow('Cell Phone',  v(c.coApplicantCellPhone))}
+        </div>
+      </div>`;
+    }
+
+    if (c.counselingType === 'OUTSTANDING' || c.counselingType === 'COURT') {
+      body += secHdr('Property &amp; Mortgage');
+      body += `<div class="two-col">
+        <div>
+          ${pdfRow('Property Type',    v(c.propertyType))}
+          ${pdfRow('Mortgage Type',    v(c.mortgageType))}
+          <div class="prow"><span class="plbl">Primary Residence</span><span class="pval"><span class="chk">${chk(c.primaryResidence)}</span></span></div>
+          ${pdfRow('1st Mortgage Co.', v(c.mortgage1Company))}
+          ${pdfRow('2nd Mortgage Co.', v(c.mortgage2Company))}
+          ${pdfRow('3rd Mortgage Co.', v(c.mortgage3Company))}
+        </div>
+        <div>
+          <div class="prow"><span class="plbl">Bankruptcy Filed</span><span class="pval"><span class="chk">${chk(c.bankruptcyFiled)}</span></span></div>
+          ${c.bankruptcyFiled ? pdfRow('Bankruptcy Acct #', v(c.bankruptcyAccount)) : ''}
+          ${c.counselingType === 'COURT' ? pdfRow('Conciliation Stamp', fmtDate(c.conciliationStampDate)) : ''}
+        </div>
+      </div>`;
+    }
+
+    if (c.counselingType === 'PRE' && c.homeSearchNotes) {
+      body += secHdr('Home Search Notes');
+      body += `<p style="font-size:8.5pt;border:1px solid #ccc;padding:6px;border-radius:3px;margin:0;">${v(c.homeSearchNotes)}</p>`;
+    }
+  }
+
+  // ── Financials ────────────────────────────────────────────────────────────
+  if (include.financials) {
+    const empRows  = c.employmentHistory  || [];
+    const incRows  = c.otherIncome        || [];
+    const liabRows = c.monthlyLiabilities || [];
+
+    body += secHdr('Employment History');
+    if (empRows.length) {
+      body += `<table>
+        <thead><tr><th>Applicant</th><th>Employer</th><th>Start</th><th>End</th><th>Position</th><th>Reason Left</th><th>Gross/Mo</th><th>Net/Mo</th></tr></thead>
+        <tbody>${empRows.map(e => `<tr>
+          <td>${escHtml(e.who || '')}</td>
+          <td>${escHtml(e.employer || '')}</td>
+          <td>${escHtml(e.startDate || '')}</td>
+          <td>${escHtml(e.endDate || '')}</td>
+          <td>${escHtml(e.position || '')}</td>
+          <td>${escHtml(e.reasonForLeaving || '')}</td>
+          <td>${fmtMon(e.grossMonthly)}</td>
+          <td>${fmtMon(e.netMonthly)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } else {
+      body += `<p class="empty">No employment history recorded.</p>`;
+    }
+
+    if (incRows.length) {
+      body += secHdr('Other Income Sources');
+      body += `<table>
+        <thead><tr><th>Applicant</th><th>Source</th><th>Monthly</th><th>Description</th></tr></thead>
+        <tbody>${incRows.map(i => `<tr>
+          <td>${escHtml(i.who || '')}</td>
+          <td>${escHtml(i.source || '')}</td>
+          <td>${fmtMon(i.monthlyAmount)}</td>
+          <td>${escHtml(i.description || '')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    const hTotal = HOUSING_EXP_IDS.reduce((s, id) => s + (Number(c[id]) || 0), 0);
+    const lTotal = LIVING_EXP_IDS.reduce((s,  id) => s + (Number(c[id]) || 0), 0);
+
+    body += secHdr('Monthly Expense Sheet');
+    body += `<div class="two-col">
+      <div>
+        <p class="col-hdr">Housing Expenses</p>
+        ${HOUSING_EXP_IDS.map(id => `<div class="erow">
+          <span>${HOUSING_EXP_LABELS[id]}</span>
+          <span>${fmtMon(c[id]) || '—'}</span>
+        </div>`).join('')}
+        <div class="erow etotal"><span>Total Housing</span><span>$${hTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+      </div>
+      <div>
+        <p class="col-hdr">Living Expenses</p>
+        ${LIVING_EXP_IDS.map(id => `<div class="erow">
+          <span>${LIVING_EXP_LABELS[id]}</span>
+          <span>${fmtMon(c[id]) || '—'}</span>
+        </div>`).join('')}
+        <div class="erow etotal"><span>Total Living</span><span>$${lTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+      </div>
+    </div>
+    <div class="grand-total">
+      <span>Total Monthly Expenses</span>
+      <span>$${(hTotal + lTotal).toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+    </div>`;
+
+    if (liabRows.length) {
+      const lpTotal = liabRows.reduce((s, l) => s + (Number(l.monthlyPayment) || 0), 0);
+      const lbTotal = liabRows.reduce((s, l) => s + (Number(l.balance)        || 0), 0);
+      body += secHdr('Monthly Liabilities');
+      body += `<table>
+        <thead><tr><th>Account Name</th><th>Monthly Payment</th><th>Balance</th></tr></thead>
+        <tbody>${liabRows.map(l => `<tr>
+          <td>${escHtml(l.accountName || '')}</td>
+          <td>${fmtMon(l.monthlyPayment)}</td>
+          <td>${fmtMon(l.balance)}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td><strong>Totals</strong></td>
+          <td><strong>$${lpTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></td>
+          <td><strong>$${lbTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></td>
+        </tr></tbody>
+      </table>`;
+    }
+  }
+
+  // ── Sessions ──────────────────────────────────────────────────────────────
+  if (include.sessions) {
+    body += secHdr('Session History');
+    if (_sessions.length) {
+      body += `<table>
+        <thead><tr><th>Date</th><th>Counselor</th><th>Rx #</th><th>Hrs</th><th>Status</th><th>Outcome</th><th>Notes</th></tr></thead>
+        <tbody>${_sessions.map(s => `<tr>
+          <td style="white-space:nowrap;">${fmtDate(s.date)}</td>
+          <td>${escHtml(s.counselor  || '')}</td>
+          <td>${escHtml(s.rxNumber   || '')}</td>
+          <td>${s.hours || ''}</td>
+          <td>${escHtml(s.caseStatus || '')}</td>
+          <td>${escHtml(s.outcome    || '')}</td>
+          <td>${escHtml(s.notes      || '')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } else {
+      body += `<p class="empty">No sessions on file.</p>`;
+    }
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>Client Record — ${v(c.clientName)}</title>
+<style>
+  @page { margin:0.65in; size:letter portrait; }
+  *  { box-sizing:border-box; }
+  body { font-family:Arial,Helvetica,sans-serif; font-size:9pt; color:#000; margin:0;
+         -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .header { display:flex; align-items:center; gap:12px;
+            border-bottom:3px solid #1a3a8f; padding-bottom:8px; margin-bottom:14px; }
+  .logo { height:50px; width:auto; }
+  .header-text h1 { font-size:12pt; font-weight:bold; margin:0 0 2px; color:#1a3a8f; }
+  .header-text p  { margin:0; font-size:8pt; color:#444; }
+  h2 { font-size:8.5pt; font-weight:bold; text-transform:uppercase; letter-spacing:0.06em;
+       color:#1a3a8f; border-bottom:1.5px solid #1a3a8f; padding-bottom:3px; margin:14px 0 6px; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:0 22px; }
+  .prow { display:flex; gap:5px; margin-bottom:3px; align-items:baseline; }
+  .plbl { font-weight:bold; font-size:8pt; white-space:nowrap; flex-shrink:0; min-width:130px; }
+  .pval { flex:1; border-bottom:1px solid #bbb; min-height:13px; font-size:9pt; padding-bottom:1px; }
+  .chk  { font-size:10pt; }
+  table { width:100%; border-collapse:collapse; font-size:8pt; margin-bottom:10px; }
+  th { background:#e8edf5; text-align:left; padding:4px 5px; border-bottom:2px solid #aaa;
+       font-size:7pt; text-transform:uppercase; letter-spacing:0.04em; }
+  td { padding:3px 5px; border-bottom:1px solid #eee; vertical-align:top; }
+  .total-row td { background:#f0f0f0; }
+  .col-hdr { font-weight:bold; font-size:8pt; text-transform:uppercase;
+             letter-spacing:0.04em; margin:0 0 4px; color:#555; }
+  .erow { display:flex; justify-content:space-between; padding:1.5px 0;
+          border-bottom:1px solid #f0f0f0; font-size:8.5pt; }
+  .etotal { font-weight:bold; border-top:2px solid #999; border-bottom:none;
+            padding-top:3px; margin-top:3px; }
+  .grand-total { display:flex; justify-content:space-between; font-weight:bold;
+                 font-size:9.5pt; border-top:2px solid #333; padding-top:5px;
+                 margin-top:6px; margin-bottom:4px; }
+  .empty { font-size:8.5pt; color:#666; margin:0; }
+  @media print { body { padding:0; } }
+</style>
+</head><body>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="" onerror="this.style.display='none'">
+  <div class="header-text">
+    <h1>${v(c.clientName)} — Client Record</h1>
+    <p>Housing Opportunities Inc. &nbsp;&#8226;&nbsp; 293 Pinney Street, Rochester, PA 15074 &nbsp;&#8226;&nbsp; Exported ${new Date().toLocaleDateString('en-US')}</p>
+  </div>
+</div>
+${body}
+<script>window.addEventListener('load', () => window.print());<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups to export.'); return; }
+  win.document.write(html);
+  win.document.close();
+  document.getElementById('exportModal').classList.add('hidden');
 }
