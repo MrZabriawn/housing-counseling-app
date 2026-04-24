@@ -15,6 +15,9 @@ let _client           = null;
 let _sessions         = [];
 let _rxDocs           = [];   // clients/{id}/rxNumbers subcollection
 let _profile          = null;
+let _user             = null;
+let _isED             = false;
+let _allUsers         = [];   // { uid, name } from users/{uid}
 let _driveFolder      = null;
 let _editingSessionId = null; // null = new session, else existing id
 
@@ -33,13 +36,16 @@ let _editingSessionId = null; // null = new session, else existing id
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 requireAuth(async (user, profile) => {
+  _user    = user;
   _profile = profile;
+  _isED    = profile.role === 'executive_director';
   setupNav(profile, 'clients');
 
   buildSelects();
   await Promise.all([
     loadCounselorOptions('counselor'),
     loadCounselorOptions('sCounselor'),
+    loadAllUsers(),
   ]);
 
   await loadClient();
@@ -53,6 +59,35 @@ requireAuth(async (user, profile) => {
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
+function canViewClient(c) {
+  const tier = c.confidentialityTier || 'standard';
+  if (tier === 'standard') return true;
+  if (_isED) return true;
+  return (_user != null) && (c.careTeam || []).includes(_user.uid);
+}
+
+function writeAccessLog(event, extra = {}) {
+  addDoc(collection(db, 'accessLog'), {
+    clientId,
+    event,
+    accessedBy:     _user.uid,
+    accessedByName: _profile.name || '',
+    tier:           _client.confidentialityTier || 'standard',
+    accessedAt:     serverTimestamp(),
+    ...extra,
+  }).catch(() => {});
+}
+
+async function loadAllUsers() {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    _allUsers = snap.docs.map(d => ({
+      uid:  d.id,
+      name: d.data().name || d.data().email || d.id,
+    }));
+  } catch (_) { _allUsers = []; }
+}
+
 async function loadClient() {
   const snap = await getDoc(doc(db, 'clients', clientId));
   if (!snap.exists()) {
@@ -61,8 +96,21 @@ async function loadClient() {
     return;
   }
   _client = { id: snap.id, ...snap.data() };
+
+  if (!canViewClient(_client)) {
+    alert('Access denied. You do not have permission to view this client.');
+    window.location.href = 'clients.html';
+    return;
+  }
+
+  const tier = _client.confidentialityTier || 'standard';
+  if (tier !== 'standard') {
+    writeAccessLog('view');
+  }
+
   populateClientForm(_client);
   renderHeader(_client);
+  renderConfidentialitySection();
 }
 
 async function loadSessions() {
@@ -241,7 +289,13 @@ function renderHeader(c) {
   const badge  = status === 'closed'
     ? `<span class="badge badge-outstanding" style="font-size:0.75rem;">Closed</span>`
     : `<span class="badge badge-pre" style="font-size:0.75rem;">Active</span>`;
-  document.getElementById('metaLine').innerHTML = `${badge} &nbsp; ${c.counselingType || ''} &nbsp; ${c.counselor || ''}`;
+  const tier = c.confidentialityTier || 'standard';
+  const tierBadge = tier === 'sealed'
+    ? `<span style="font-size:0.7rem;font-weight:700;background:#7c3aed15;color:#7c3aed;border:1px solid #7c3aed40;border-radius:20px;padding:0.15rem 0.65rem;margin-left:0.4rem;">Protected</span>`
+    : tier === 'restricted'
+    ? `<span style="font-size:0.7rem;font-weight:700;background:#b4590915;color:#b45309;border:1px solid #b4590940;border-radius:20px;padding:0.15rem 0.65rem;margin-left:0.4rem;">Confidential</span>`
+    : '';
+  document.getElementById('metaLine').innerHTML = `${badge} &nbsp; ${c.counselingType || ''} &nbsp; ${c.counselor || ''}${tierBadge}`;
 
   const closedBanner  = document.getElementById('closedBanner');
   const closeFileBtn  = document.getElementById('closeFileBtn');
@@ -501,7 +555,10 @@ async function saveClient(msgId = 'clientSaveMsg') {
       bankruptcyFiled:      document.getElementById('bankruptcyFiled').checked,
       bankruptcyAccount:    document.getElementById('bankruptcyAccount').value.trim(),
       conciliationStampDate: document.getElementById('conciliationStampDate').value,
-      updatedAt:            serverTimestamp(),
+      // Preserve confidentiality fields — only ED can change these via saveTierChange()
+      confidentialityTier:   _client.confidentialityTier || 'standard',
+      careTeam:              _client.careTeam || [],
+      updatedAt:             serverTimestamp(),
     };
 
     await updateDoc(doc(db, 'clients', clientId), data);
@@ -797,16 +854,18 @@ async function addToList(slotId, label, page) {
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   try {
     const base = {
-      clientId:        clientId,
-      clientName:      _client.clientName  || '',
-      amiPercent:      _client.amiPercent  || '',
-      driveFolderId:   _client.driveFolderId  || '',
-      driveFolderName: _client.driveFolderName || '',
-      driveFolderUrl:  _client.driveFolderUrl  || '',
-      enrolledAt:      serverTimestamp(),
-      updatedAt:       serverTimestamp(),
-      notes:           '',
-      status:          page === 'cca-list' ? 'eligible' : 'waitlisted',
+      clientId:            clientId,
+      clientName:          _client.clientName          || '',
+      amiPercent:          _client.amiPercent          || '',
+      driveFolderId:       _client.driveFolderId        || '',
+      driveFolderName:     _client.driveFolderName      || '',
+      driveFolderUrl:      _client.driveFolderUrl       || '',
+      confidentialityTier: _client.confidentialityTier  || 'standard',
+      careTeam:            _client.careTeam             || [],
+      enrolledAt:          serverTimestamp(),
+      updatedAt:           serverTimestamp(),
+      notes:               '',
+      status:              page === 'cca-list' ? 'eligible' : 'waitlisted',
     };
     if (page === 'cca-list') {
       Object.assign(base, { counselor: _client.counselor || '', closingDate: null, ccaAmount: 0 });
@@ -831,13 +890,15 @@ async function addToList(slotId, label, page) {
 async function syncClientToLists(data) {
   try {
     const ccaBase = {
-      clientName:      data.clientName      || '',
-      counselor:       data.counselor       || '',
-      amiPercent:      data.amiPercent      || '',
-      driveFolderId:   data.driveFolderId   || '',
-      driveFolderName: data.driveFolderName || '',
-      driveFolderUrl:  data.driveFolderUrl  || '',
-      updatedAt:       serverTimestamp(),
+      clientName:          data.clientName          || '',
+      counselor:           data.counselor           || '',
+      amiPercent:          data.amiPercent          || '',
+      driveFolderId:       data.driveFolderId        || '',
+      driveFolderName:     data.driveFolderName      || '',
+      driveFolderUrl:      data.driveFolderUrl       || '',
+      confidentialityTier: data.confidentialityTier  || 'standard',
+      careTeam:            data.careTeam             || [],
+      updatedAt:           serverTimestamp(),
     };
     const higBase = { ...ccaBase };
     delete higBase.counselor; // hig records don't track counselor
@@ -851,6 +912,178 @@ async function syncClientToLists(data) {
       ...higSnap.docs.map(d => updateDoc(doc(db, 'higWaitlist', d.id), higBase)),
     ]);
   } catch (_) {}
+}
+
+// ── Confidentiality section ───────────────────────────────────────────────────
+
+function renderConfidentialitySection() {
+  const tier = _client.confidentialityTier || 'standard';
+  const card = document.getElementById('confidentialityCard');
+  if (!card) return;
+
+  // Show the card only if the tier is non-standard OR the ED is viewing
+  if (tier === 'standard' && !_isED) return;
+  card.classList.remove('hidden');
+
+  const tierLabel = tier === 'sealed' ? 'Protected' : tier === 'restricted' ? 'Confidential' : 'Standard';
+  const tierColor = tier === 'sealed' ? '#7c3aed' : tier === 'restricted' ? '#b45309' : '#16a34a';
+
+  const careTeam      = _client.careTeam || [];
+  const careTeamItems = careTeam.map((uid, i) => {
+    const u    = _allUsers.find(u => u.uid === uid);
+    const name = u ? u.name : uid;
+    return { uid, name, i };
+  });
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+      <span style="display:inline-block;background:${tierColor}18;color:${tierColor};border:1px solid ${tierColor}50;border-radius:20px;padding:0.25rem 0.9rem;font-size:0.8rem;font-weight:700;">
+        ${tierLabel}
+      </span>
+      <span style="font-size:0.8125rem;color:var(--text-muted);">
+        ${tier === 'standard' ? 'No access restrictions' : tier === 'restricted' ? 'Visible to care team and Executive Director only' : 'Fully protected — excluded from all program lists'}
+      </span>
+    </div>`;
+
+  if (tier !== 'standard') {
+    html += `
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.5rem;">Care Team</div>
+      <div id="careTeamList" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">
+        ${careTeamItems.length
+          ? careTeamItems.map(m => `
+            <span class="chip" style="background:#f5f0ff;color:#7c3aed;">
+              ${escHtml(m.name)}
+              ${_isED ? `<button type="button" class="chip-remove care-team-remove" data-uid="${escAttr(m.uid)}" aria-label="Remove">&times;</button>` : ''}
+            </span>`).join('')
+          : '<span style="font-size:0.8125rem;color:var(--text-muted);">No care team members assigned.</span>'}
+      </div>
+      ${_isED ? `
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <select id="careTeamAddSelect" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">Add care team member…</option>
+            ${_allUsers.filter(u => !careTeam.includes(u.uid))
+              .map(u => `<option value="${escAttr(u.uid)}">${escHtml(u.name)}</option>`)
+              .join('')}
+          </select>
+          <button id="careTeamAddBtn" class="btn btn-secondary btn-sm">Add</button>
+        </div>` : ''}
+    </div>`;
+  }
+
+  if (_isED) {
+    html += `
+    <div style="border-top:1px solid var(--border);padding-top:1rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.5rem;">Change Tier (ED Only)</div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;">New Tier</label>
+          <select id="tierChangeSelect" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="standard"   ${tier === 'standard'   ? 'selected' : ''}>Standard</option>
+            <option value="restricted" ${tier === 'restricted' ? 'selected' : ''}>Confidential (Restricted)</option>
+            <option value="sealed"     ${tier === 'sealed'     ? 'selected' : ''}>Protected (Sealed)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label style="font-size:0.75rem;">Reason</label>
+          <input type="text" id="tierChangeReason" placeholder="Required for audit log"
+            style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);width:100%;">
+        </div>
+        <button id="tierSaveBtn" class="btn btn-primary btn-sm">Save Tier</button>
+      </div>
+      <p id="tierSaveMsg" class="hidden" style="font-size:0.8rem;margin-top:0.5rem;"></p>
+    </div>`;
+  }
+
+  document.getElementById('confidentialityContent').innerHTML = html;
+
+  if (_isED) {
+    document.querySelectorAll('.care-team-remove').forEach(btn => {
+      btn.addEventListener('click', () => removeCareTeamMember(btn.dataset.uid));
+    });
+    const addBtn = document.getElementById('careTeamAddBtn');
+    if (addBtn) addBtn.addEventListener('click', addCareTeamMember);
+    const saveTierBtn = document.getElementById('tierSaveBtn');
+    if (saveTierBtn) saveTierBtn.addEventListener('click', saveTierChange);
+  }
+}
+
+async function addCareTeamMember() {
+  const sel = document.getElementById('careTeamAddSelect');
+  const uid = sel?.value;
+  if (!uid) return;
+  const careTeam = [...(_client.careTeam || []), uid];
+  try {
+    await updateDoc(doc(db, 'clients', clientId), { careTeam, updatedAt: serverTimestamp() });
+    _client.careTeam = careTeam;
+    syncClientToLists({ ..._client, careTeam });
+    renderConfidentialitySection();
+  } catch (err) {
+    alert('Failed to add member: ' + err.message);
+  }
+}
+
+async function removeCareTeamMember(uid) {
+  const careTeam = (_client.careTeam || []).filter(u => u !== uid);
+  try {
+    await updateDoc(doc(db, 'clients', clientId), { careTeam, updatedAt: serverTimestamp() });
+    _client.careTeam = careTeam;
+    syncClientToLists({ ..._client, careTeam });
+    renderConfidentialitySection();
+  } catch (err) {
+    alert('Failed to remove member: ' + err.message);
+  }
+}
+
+async function saveTierChange() {
+  const newTier = document.getElementById('tierChangeSelect')?.value;
+  const reason  = document.getElementById('tierChangeReason')?.value.trim();
+  const msgEl   = document.getElementById('tierSaveMsg');
+  const saveBtn = document.getElementById('tierSaveBtn');
+
+  if (!reason) {
+    msgEl.textContent = 'Reason is required for audit log.';
+    msgEl.style.color = 'var(--danger)';
+    msgEl.classList.remove('hidden');
+    return;
+  }
+
+  saveBtn.disabled = true;
+  const prevTier = _client.confidentialityTier || 'standard';
+  const careTeam = newTier === 'standard' ? [] : (_client.careTeam || []);
+
+  try {
+    await updateDoc(doc(db, 'clients', clientId), {
+      confidentialityTier: newTier,
+      careTeam,
+      updatedAt: serverTimestamp(),
+    });
+    await addDoc(collection(db, 'accessLog'), {
+      clientId,
+      event:         'tier_change',
+      changedBy:     _user.uid,
+      changedByName: _profile.name || '',
+      fromTier:      prevTier,
+      toTier:        newTier,
+      reason,
+      changedAt:     serverTimestamp(),
+    });
+    _client.confidentialityTier = newTier;
+    _client.careTeam = careTeam;
+    syncClientToLists({ ..._client, confidentialityTier: newTier, careTeam });
+    renderHeader(_client);
+    renderConfidentialitySection();
+    msgEl.textContent = 'Tier updated.';
+    msgEl.style.color = 'var(--success, green)';
+    msgEl.classList.remove('hidden');
+    setTimeout(() => msgEl.classList.add('hidden'), 2500);
+  } catch (err) {
+    msgEl.textContent = 'Save failed: ' + err.message;
+    msgEl.style.color = 'var(--danger)';
+    msgEl.classList.remove('hidden');
+  } finally {
+    saveBtn.disabled = false;
+  }
 }
 
 // ── Rx Numbers subcollection panel ───────────────────────────────────────────

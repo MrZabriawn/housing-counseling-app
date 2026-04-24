@@ -141,6 +141,62 @@
         </div>
       </div>
 
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;border-left:4px solid #7c3aed;">
+        <div class="card-title" style="color:#7c3aed;">Safely Home — Confidentiality Program</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">This program supports clients fleeing domestic violence or other safety threats. It is designed to comply with VAWA (Violence Against Women Act) confidentiality requirements and HUD's Continuum of Care privacy standards (24 CFR §578.103).</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+          <div style="background:#f5f0ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:#7c3aed;">Standard</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Normal program clients. Visible to all counselors and admins. Appears in all lists and reports.</div>
+          </div>
+          <div style="background:#fff8ed;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:#b45309;">Confidential</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Visible only to the client's care team and the Executive Director. Appears in Buyer Ready and Repair Ready lists only if you are on the care team. Shown as "Confidential" to authorized viewers — never labeled as DV.</div>
+          </div>
+          <div style="background:#f5f0ff;border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.8125rem;">
+            <div style="font-weight:700;margin-bottom:0.3rem;color:#7c3aed;">Protected</div>
+            <div style="color:var(--text-muted);line-height:1.55;">Same access controls as Confidential, plus the client is fully excluded from program waitlists. Used for the highest-risk clients where even list visibility is a concern. Shown as "Protected" to authorized viewers.</div>
+          </div>
+        </div>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.6rem;">How it works</div>
+        <div class="ops-step">
+          <span class="step-badge sub">1</span>
+          <div class="step-text"><strong>Enrollment:</strong> Select "Safely Home (Confidential)" from the Program dropdown when creating a new client. The enrolling counselor is automatically added as the initial care team member.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">2</span>
+          <div class="step-text"><strong>Care team management:</strong> The Executive Director can add or remove care team members from the Confidentiality section on the client's profile. Only the ED can change a client's tier or assign team members.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">3</span>
+          <div class="step-text"><strong>Visibility:</strong> Unauthorized users cannot see these clients in the client list, Buyer Ready, or Repair Ready. They receive no indication that the record exists. The client name and all data are completely hidden.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">4</span>
+          <div class="step-text"><strong>Audit log:</strong> Every access to a Confidential or Protected profile is recorded in the system audit log with the user name and timestamp. All tier changes are logged with the reason provided by the ED.</div>
+        </div>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:1.25rem 0 0.6rem;">Legal basis &amp; compliance</div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>VAWA (Violence Against Women Act):</strong> Prohibits disclosure of personally identifying information about DV/SA victims served by HUD-funded programs without informed, written, time-limited consent. This system enforces that at the data access layer — non-team members cannot retrieve the record at all.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>HUD CoC Privacy Rule (24 CFR §578.103):</strong> Requires that recipients collect only the minimum necessary information, establish procedures to ensure data security, and limit access to staff with a need to know. The care team model implements the "need to know" principle — access is restricted to the assigned team, not the entire organization.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>What is never stored:</strong> The system does not store any label like "DV", "domestic violence", "Safely Home", or "restricted" in any field visible to unauthorized users. Authorized viewers see "Confidential" or "Protected." No one outside the care team sees anything.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge sub">i</span>
+          <div class="step-text"><strong>HUD reporting:</strong> Confidential and Protected clients are included in aggregate HUD reports (counts, demographics) but are never identified individually in any report output. Address fields are excluded from any exported data for these clients.</div>
+        </div>
+      </div>
+
       <div class="card" style="max-width:860px;">
         <div class="card-title">Key Things to Know</div>
         <div class="ops-step">

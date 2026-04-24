@@ -10,7 +10,10 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
+let _user = null;
+
 requireAuth(async (user, profile) => {
+  _user = user;
   setupNav(profile, 'clients');
 
   // Populate selects
@@ -115,6 +118,8 @@ async function handleSubmit(e) {
       totalDownPayment:  0,
       ccaAmountProvided: 0,
       status:            'active',
+      confidentialityTier: document.getElementById('programDesignation').value === 'safely_home' ? 'restricted' : 'standard',
+      careTeam:            document.getElementById('programDesignation').value === 'safely_home' ? [_user.uid] : [],
       sessionCount:      1,
       totalOutcomeValue: dollarsAwarded,
       firstSessionDate:  dateVal ? new Date(dateVal + 'T12:00:00') : null,

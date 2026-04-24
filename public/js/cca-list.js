@@ -69,7 +69,12 @@ requireAuth(async (user, profile) => {
   setupNav(profile, 'cca-list');
 
   const snap = await getDocs(query(collection(db, 'ccaList'), orderBy('enrolledAt', 'asc')));
-  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => {
+    const tier = r.confidentialityTier || 'standard';
+    if (tier === 'standard') return true;
+    if (profile.role === 'executive_director') return true;
+    return (r.careTeam || []).includes(user.uid);
+  });
 
   render();
 

@@ -155,11 +155,18 @@ function restoreFilters() {
   } catch (_) {}
 }
 
+function canViewClient(c) {
+  const tier = c.confidentialityTier || 'standard';
+  if (tier === 'standard') return true;
+  if (_profile.role === 'executive_director') return true;
+  return _user != null && (c.careTeam || []).includes(_user.uid);
+}
+
 async function loadClients() {
   document.getElementById('tableBody').innerHTML =
     '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>';
   const snap = await getDocs(collection(db, 'clients'));
-  allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  allClients = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(canViewClient);
   allClients.sort((a, b) => {
     const da = toDate(a.lastSessionDate).getTime();
     const db_ = toDate(b.lastSessionDate).getTime();
@@ -277,9 +284,15 @@ function renderTable(clients) {
     const typeBadge = c.counselingType
       ? `<span class="badge badge-${(c.counselingType||'').toLowerCase()}">${c.counselingType}</span>`
       : '—';
+    const tier = c.confidentialityTier || 'standard';
+    const tierBadge = tier === 'sealed'
+      ? `<span title="Protected" style="font-size:0.7rem;font-weight:700;color:#7c3aed;margin-left:0.3rem;">&#128274;</span>`
+      : tier === 'restricted'
+      ? `<span title="Confidential" style="font-size:0.7rem;font-weight:700;color:#b45309;margin-left:0.3rem;">&#128274;</span>`
+      : '';
 
     return `<tr class="clickable-row" data-id="${c.id}" style="cursor:pointer;">
-      <td>${c.clientName || '—'}</td>
+      <td>${c.clientName || '—'}${tierBadge}</td>
       <td>${typeBadge}</td>
       <td>${c.counselor || '—'}</td>
       <td>${c.amiPercent || '—'}</td>

@@ -114,7 +114,12 @@ requireAuth(async (user, profile) => {
   if (wSnap.exists()) weights = { ...weights, ...wSnap.data() };
 
   const snap = await getDocs(query(collection(db, 'higWaitlist'), orderBy('enrolledAt', 'asc')));
-  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => {
+    const tier = r.confidentialityTier || 'standard';
+    if (tier === 'standard') return true;
+    if (profile.role === 'executive_director') return true;
+    return (r.careTeam || []).includes(user.uid);
+  });
 
   render();
 
