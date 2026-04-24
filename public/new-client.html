@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Client — Home Stabilization Program</title>
   <link rel="stylesheet" href="css/app.css">
+  <style>
+    .fin-table { width:100%; border-collapse:collapse; font-size:0.825rem; }
+    .fin-table th { text-align:left; padding:0.35rem 0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); font-weight:700; background:#f8f9fb; border-bottom:2px solid var(--border); white-space:nowrap; }
+    .fin-table td { padding:0.3rem 0.4rem; border-bottom:1px solid #f0f1f3; vertical-align:middle; }
+    .fin-table input[type="text"], .fin-table input[type="number"] { width:100%; border:1px solid var(--border); border-radius:var(--radius); padding:0.25rem 0.4rem; font-size:0.825rem; background:#fff; }
+    .fin-table .del-btn { background:none; border:none; cursor:pointer; color:var(--danger,#dc2626); font-size:1.1rem; line-height:1; padding:0.15rem 0.35rem; border-radius:4px; }
+    .fin-table .del-btn:hover { background:#fee2e2; }
+    .fin-total-row td { font-weight:700; background:#f8f9fb; border-top:2px solid var(--border); }
+    .exp-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 2.5rem; }
+    @media(max-width:700px){ .exp-grid { grid-template-columns:1fr; } }
+    .exp-col h4 { font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin:0 0 0.6rem; }
+    .exp-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem; }
+    .exp-label { font-size:0.8125rem; flex:1; color:var(--text); }
+    .exp-input { width:90px; flex-shrink:0; border:1px solid var(--border); border-radius:var(--radius); padding:0.25rem 0.4rem; font-size:0.825rem; text-align:right; }
+    .exp-total-row { border-top:2px solid var(--border); margin-top:0.5rem; display:flex; align-items:center; padding-top:0.4rem; }
+    .exp-total-label { font-size:0.8125rem; font-weight:700; flex:1; }
+    .exp-total-val { font-weight:700; color:var(--primary); width:90px; text-align:right; font-size:0.875rem; }
+  </style>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -120,6 +138,236 @@
             <label for="notes">Notes</label>
             <textarea id="notes" rows="3"></textarea>
           </div>
+        </div>
+      </div>
+
+      <!-- Financials -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-title">Financials</div>
+        <div class="form-grid">
+
+          <div class="section-title">Property &amp; Mortgage</div>
+
+          <div class="form-group">
+            <label for="propertyType">Property Type</label>
+            <select id="propertyType">
+              <option value="">— Select —</option>
+              <option value="Detached/Condo">Detached Home or Condo</option>
+              <option value="Mobile Home">Mobile Home (secured by mortgage)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="mortgageType">Mortgage Type</label>
+            <select id="mortgageType">
+              <option value="">— Select —</option>
+              <option value="Conventional">Conventional</option>
+              <option value="VA">VA</option>
+              <option value="FHA">FHA</option>
+              <option value="FmHA/USDA">FmHA / USDA Rural Housing</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="mortgage1Company">1st Mortgage Company</label>
+            <input type="text" id="mortgage1Company">
+          </div>
+          <div class="form-group">
+            <label for="mortgage2Company">2nd Mortgage Company</label>
+            <input type="text" id="mortgage2Company">
+          </div>
+          <div class="form-group">
+            <label for="mortgage3Company">3rd Mortgage Company</label>
+            <input type="text" id="mortgage3Company">
+          </div>
+          <div class="checkbox-row" style="grid-column:1/-1;">
+            <input type="checkbox" id="bankruptcyFiled">
+            <label for="bankruptcyFiled">Bankruptcy Filed</label>
+          </div>
+          <div class="form-group" id="bankruptcyAccountGroup" style="display:none;">
+            <label for="bankruptcyAccount">Bankruptcy Account #</label>
+            <input type="text" id="bankruptcyAccount">
+          </div>
+          <div class="checkbox-row" style="grid-column:1/-1;">
+            <input type="checkbox" id="primaryResidence">
+            <label for="primaryResidence">Primary Residence</label>
+          </div>
+
+          <div class="section-title">Liquidity &amp; Credit</div>
+
+          <div class="form-group">
+            <label for="finLiquidAssets">Liquid Assets ($)</label>
+            <input type="number" id="finLiquidAssets" min="0" step="1" placeholder="Checking, savings, etc.">
+          </div>
+          <div class="form-group">
+            <label for="finMonthlySavings">Monthly Savings ($)</label>
+            <input type="number" id="finMonthlySavings" min="0" step="1" placeholder="Amount saved per month">
+          </div>
+          <div class="form-group">
+            <label for="finScoreEq">Equifax Score</label>
+            <input type="number" id="finScoreEq" min="300" max="850" step="1" placeholder="300–850">
+          </div>
+          <div class="form-group">
+            <label for="finScoreEx">Experian Score</label>
+            <input type="number" id="finScoreEx" min="300" max="850" step="1" placeholder="300–850">
+          </div>
+          <div class="form-group">
+            <label for="finScoreTu">TransUnion Score</label>
+            <input type="number" id="finScoreTu" min="300" max="850" step="1" placeholder="300–850">
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Employment History -->
+      <div class="card" style="padding:0;margin-top:1.25rem;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+          <span class="card-title" style="margin:0;border:none;padding:0;">Employment History &amp; Income Verification</span>
+        </div>
+        <div style="overflow-x:auto;padding:0.75rem 1.25rem 0;">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th style="min-width:110px;">Applicant / Co-App</th>
+                <th style="min-width:180px;">Employer &amp; Address</th>
+                <th style="min-width:80px;">Start</th>
+                <th style="min-width:80px;">End / Current</th>
+                <th style="min-width:110px;">Position</th>
+                <th style="min-width:110px;">Reason Left</th>
+                <th style="min-width:90px;">Gross/Mo ($)</th>
+                <th style="min-width:90px;">Net/Mo ($)</th>
+                <th style="width:32px;"></th>
+              </tr>
+            </thead>
+            <tbody id="empBody"></tbody>
+          </table>
+        </div>
+        <div style="padding:0.6rem 1.25rem 1rem;">
+          <button type="button" id="addEmpRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        </div>
+      </div>
+
+      <!-- Other Income -->
+      <div class="card" style="padding:0;margin-top:1.25rem;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+          <span class="card-title" style="margin:0;border:none;padding:0;">Other Income Sources</span>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin:0.2rem 0 0;">Interest, dividends, pensions, child support, alimony, cash assistance, etc.</p>
+        </div>
+        <div style="overflow-x:auto;padding:0.75rem 1.25rem 0;">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">Applicant / Co-App</th>
+                <th style="min-width:160px;">Source</th>
+                <th style="min-width:120px;">Monthly Amount ($)</th>
+                <th>Description</th>
+                <th style="width:32px;"></th>
+              </tr>
+            </thead>
+            <tbody id="incomeBody"></tbody>
+          </table>
+        </div>
+        <div style="padding:0.6rem 1.25rem 1rem;">
+          <button type="button" id="addIncomeRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        </div>
+      </div>
+
+      <!-- Monthly Expense Sheet -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-title">Monthly Expense Sheet</div>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin:-0.25rem 0 1rem;">Indicate average monthly amount. Divide annual or quarterly expenses to get monthly figures.</p>
+        <div class="exp-grid">
+          <div class="exp-col">
+            <h4>Housing Expenses</h4>
+            <div class="exp-row"><span class="exp-label">Mortgage (1st) / Rent</span><input class="exp-input housing-exp" type="number" id="expMortgage1" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Mortgage (2nd)</span><input class="exp-input housing-exp" type="number" id="expMortgage2" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Mortgage (3rd)</span><input class="exp-input housing-exp" type="number" id="expMortgage3" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Real Estate / Property Taxes</span><input class="exp-input housing-exp" type="number" id="expPropertyTax" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Hazard Insurance</span><input class="exp-input housing-exp" type="number" id="expHazardIns" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Condo Fees</span><input class="exp-input housing-exp" type="number" id="expCondoFees" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Assoc. Dues</span><input class="exp-input housing-exp" type="number" id="expAssocDues" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Other</span><input class="exp-input housing-exp" type="number" id="expOtherHousing" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Electric</span><input class="exp-input housing-exp" type="number" id="expElectric" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Gas</span><input class="exp-input housing-exp" type="number" id="expGas" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Oil</span><input class="exp-input housing-exp" type="number" id="expOil" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Water</span><input class="exp-input housing-exp" type="number" id="expWater" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Sewer</span><input class="exp-input housing-exp" type="number" id="expSewer" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Trash</span><input class="exp-input housing-exp" type="number" id="expTrash" min="0" step="0.01"></div>
+            <div class="exp-total-row">
+              <span class="exp-total-label">Total Housing Expenses</span>
+              <span class="exp-total-val" id="housingTotal">$0.00</span>
+            </div>
+          </div>
+          <div class="exp-col">
+            <h4>Living Expenses</h4>
+            <div class="exp-row"><span class="exp-label">Groceries / Toiletries</span><input class="exp-input living-exp" type="number" id="expGroceries" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Lunches</span><input class="exp-input living-exp" type="number" id="expLunches" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Pet Care</span><input class="exp-input living-exp" type="number" id="expPetCare" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Pet Food</span><input class="exp-input living-exp" type="number" id="expPetFood" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Tobacco / Alcohol</span><input class="exp-input living-exp" type="number" id="expTobacco" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Hair Cuts</span><input class="exp-input living-exp" type="number" id="expHairCuts" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Laundry / Dry Cleaning</span><input class="exp-input living-exp" type="number" id="expLaundry" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Clothing</span><input class="exp-input living-exp" type="number" id="expClothing" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Cell Phone</span><input class="exp-input living-exp" type="number" id="expCellPhone" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Home Phone</span><input class="exp-input living-exp" type="number" id="expHomePhone" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Cable / Dish / TV</span><input class="exp-input living-exp" type="number" id="expCableTV" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Internet Service</span><input class="exp-input living-exp" type="number" id="expInternet" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Home Maint / Alarm</span><input class="exp-input living-exp" type="number" id="expHomeMaint" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Auto Insurance</span><input class="exp-input living-exp" type="number" id="expAutoIns" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Gasoline</span><input class="exp-input living-exp" type="number" id="expGasoline" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Car Repair / Insp / Registration</span><input class="exp-input living-exp" type="number" id="expCarRepair" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Bus / Parking / Tolls</span><input class="exp-input living-exp" type="number" id="expBusParking" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Prescriptions / Med Supplies</span><input class="exp-input living-exp" type="number" id="expPrescriptions" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Co-Pays</span><input class="exp-input living-exp" type="number" id="expCopays" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Day Care</span><input class="exp-input living-exp" type="number" id="expDayCare" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Church / Donations</span><input class="exp-input living-exp" type="number" id="expChurch" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Entertainment</span><input class="exp-input living-exp" type="number" id="expEntertainment" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Newspaper / Subscriptions</span><input class="exp-input living-exp" type="number" id="expNewspaper" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Clubs / Gifts</span><input class="exp-input living-exp" type="number" id="expClubs" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Other (1)</span><input class="exp-input living-exp" type="number" id="expOtherLiving1" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Other (2)</span><input class="exp-input living-exp" type="number" id="expOtherLiving2" min="0" step="0.01"></div>
+            <div class="exp-row"><span class="exp-label">Other (3)</span><input class="exp-input living-exp" type="number" id="expOtherLiving3" min="0" step="0.01"></div>
+            <div class="exp-total-row">
+              <span class="exp-total-label">Total Living Expenses</span>
+              <span class="exp-total-val" id="livingTotal">$0.00</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:1.25rem;padding-top:0.75rem;border-top:2px solid var(--border);display:flex;justify-content:flex-end;gap:2rem;align-items:center;">
+          <span style="font-weight:700;font-size:0.875rem;">Total Monthly Expenses</span>
+          <span id="grandExpTotal" style="font-weight:700;font-size:0.9rem;color:var(--primary);min-width:90px;text-align:right;">$0.00</span>
+        </div>
+      </div>
+
+      <!-- Monthly Liabilities -->
+      <div class="card" style="padding:0;margin-top:1.25rem;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+          <span class="card-title" style="margin:0;border:none;padding:0;">Monthly Liabilities</span>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin:0.2rem 0 0;">Credit cards, installment loans, auto loans, student loans, IRS, alimony, etc.</p>
+        </div>
+        <div style="overflow-x:auto;padding:0.75rem 1.25rem 0;">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th>Account Name</th>
+                <th style="min-width:130px;">Monthly Payment ($)</th>
+                <th style="min-width:130px;">Balance ($)</th>
+                <th style="min-width:130px;">Credit Limit ($)</th>
+                <th style="width:32px;"></th>
+              </tr>
+            </thead>
+            <tbody id="liabilityBody"></tbody>
+            <tfoot>
+              <tr class="fin-total-row">
+                <td>Totals</td>
+                <td id="liabilityPaymentTotal">$0.00</td>
+                <td id="liabilityBalanceTotal">$0.00</td>
+                <td id="liabilityCreditLimitTotal">$0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div style="padding:0.6rem 1.25rem 1rem;">
+          <button type="button" id="addLiabilityRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
         </div>
       </div>
 
