@@ -9,7 +9,8 @@ const SS = 'clientsFilters'; // sessionStorage key
 
 let allClients       = [];
 let _filteredClients = [];
-let _filteredHours   = null;  // hours from session query when date filter active
+let _allSessions     = [];    // { clientId, date, hours, counselor, ... } loaded once on init
+let _filteredHours   = null;  // computed hours for visible clients (always set after load)
 let _displayLimit    = 25;    // rows currently shown; expanded by "Show more"
 let _user            = null;  // Firebase Auth user
 let _profile         = null;  // Firestore users/{uid} profile
@@ -165,8 +166,15 @@ function canViewClient(c) {
 async function loadClients() {
   document.getElementById('tableBody').innerHTML =
     '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>';
-  const snap = await getDocs(collection(db, 'clients'));
-  allClients = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(canViewClient);
+
+  const [clientSnap, sessSnap] = await Promise.all([
+    getDocs(collection(db, 'clients')),
+    getDocs(collectionGroup(db, 'sessions')),
+  ]);
+
+  allClients   = clientSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(canViewClient);
+  _allSessions = sessSnap.docs.map(d => ({ clientId: d.ref.parent.parent.id, ...d.data() }));
+
   allClients.sort((a, b) => {
     const da = toDate(a.lastSessionDate).getTime();
     const db_ = toDate(b.lastSessionDate).getTime();
@@ -228,28 +236,26 @@ async function applyFilters() {
   if (re)        rows = rows.filter(c => c.reCode === re);
   if (status)    rows = rows.filter(c => (c.status || 'active') === status);
 
-  // Date-based session filter — query sessions, restrict table to matching clientIds
-  _filteredHours = null;
+  // Compute hours from preloaded sessions; when date filter active also restrict client table
+  let hours = 0;
   if (hasDateFilter) {
-    try {
-      const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
-      const matchingIds = new Set();
-      let hours = 0;
-      sessSnap.docs.forEach(d => {
-        const s     = d.data();
-        const sDate = toDate(s.date);
-        if (start && sDate < start) return;
-        if (end   && sDate > end)   return;
-        if (counselor && (s.counselor || '') !== counselor) return;
-        matchingIds.add(d.ref.parent.parent.id);
-        hours += Number(s.hours) || 0;
-      });
-      rows = rows.filter(c => matchingIds.has(c.id));
-      _filteredHours = hours;
-    } catch (_) {
-      _filteredHours = null;
-    }
+    const matchingIds = new Set();
+    _allSessions.forEach(s => {
+      const sDate = toDate(s.date);
+      if (start && sDate < start) return;
+      if (end   && sDate > end)   return;
+      if (counselor && (s.counselor || '') !== counselor) return;
+      matchingIds.add(s.clientId);
+      hours += Number(s.hours) || 0;
+    });
+    rows = rows.filter(c => matchingIds.has(c.id));
+  } else {
+    const visibleIds = new Set(rows.map(c => c.id));
+    _allSessions.forEach(s => {
+      if (visibleIds.has(s.clientId)) hours += Number(s.hours) || 0;
+    });
   }
+  _filteredHours = hours;
 
   _filteredClients = rows;
   _displayLimit    = 25;
