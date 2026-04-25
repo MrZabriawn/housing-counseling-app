@@ -128,12 +128,22 @@ async function syncDerivedSessions() {
   const existingSourceIds = new Set(_entries.map(e => e.sourceSessionId).filter(Boolean));
 
   try {
+    // Build billingType map from client docs
     const clientSnap = await getDocs(collection(db, 'clients'));
-    const guarantorMap   = {};
     const billingTypeMap = {};
     clientSnap.docs.forEach(d => {
-      guarantorMap[d.id]   = d.data().guarantor  || null;
       billingTypeMap[d.id] = d.data().billingType || null;
+    });
+
+    // Build rxNumber → guarantor map from the rxNumbers subcollection
+    // Only active Rx numbers are considered
+    const rxSnap = await getDocs(collectionGroup(db, 'rxNumbers'));
+    const rxGuarantorMap = {}; // rxNumber string → guarantor
+    rxSnap.docs.forEach(d => {
+      const r = d.data();
+      if (r.active !== false && r.rxNumber) {
+        rxGuarantorMap[r.rxNumber.trim()] = r.guarantor || null;
+      }
     });
 
     const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
@@ -143,9 +153,13 @@ async function syncDerivedSessions() {
       const clientId = d.ref.parent.parent.id;
       const data     = d.data();
 
-      if (data.counselor !== _myName)          continue;
-      if (guarantorMap[clientId] !== 'NOFA')   continue;
-      if (existingSourceIds.has(d.id))         continue;
+      if (data.counselor !== _myName) continue;
+
+      // Match this session's Rx number to the subcollection guarantor
+      const sessionRx = (data.rxNumber || '').trim();
+      if (!sessionRx || rxGuarantorMap[sessionRx] !== 'NOFA') continue;
+
+      if (existingSourceIds.has(d.id)) continue;
 
       const rawDate = data.date;
       let dateObj;

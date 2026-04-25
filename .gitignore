@@ -67,6 +67,12 @@ node_modules/
 
 # Sensitive credentials — never commit
 scripts/serviceAccount.json
+scripts/.env
+
+# Review generator — script, input, and output
+scripts/generate-reviews.js
+scripts/transcripts/
+scripts/reviews-output/
 
 # Source data files
 *.xlsx
