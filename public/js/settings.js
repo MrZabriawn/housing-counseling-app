@@ -945,6 +945,21 @@ async function performMerge() {
     // Delete drop client doc
     await deleteDoc(doc(db, 'clients', dropId));
 
+    // Clean up higWaitlist: re-point or remove the dropped client's entry
+    const [dropHigSnap, keepHigSnap] = await Promise.all([
+      getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', dropId))),
+      getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', keepId))),
+    ]);
+    for (const higDoc of dropHigSnap.docs) {
+      if (keepHigSnap.size > 0) {
+        // keep already has a waitlist entry — just delete the orphaned one
+        await deleteDoc(doc(db, 'higWaitlist', higDoc.id));
+      } else {
+        // keep has no entry — salvage this one by re-pointing it
+        await updateDoc(doc(db, 'higWaitlist', higDoc.id), { clientId: keepId, updatedAt: now });
+      }
+    }
+
     // Close modal and remove pair from results
     document.getElementById('mergeModal').classList.add('hidden');
     _dismissedPairs.add(pk);

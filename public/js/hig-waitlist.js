@@ -28,7 +28,7 @@ import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { openDrivePicker, openDriveFolderPicker } from './picker.js';
 import {
-  collection, getDocs, doc, getDoc, addDoc, updateDoc, orderBy, query, serverTimestamp
+  collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── AMI helpers ───────────────────────────────────────────────────────────────
@@ -129,6 +129,7 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('higEditCancel').addEventListener('click', closeModal);
   document.getElementById('higEditSave').addEventListener('click', saveEdit);
+  document.getElementById('higRemoveBtn').addEventListener('click', removeFromList);
 
   // Link search inside edit modal
   document.getElementById('higLinkSearch').addEventListener('input', renderHigLinkResults);
@@ -307,6 +308,28 @@ function closeModal() {
   _editFile   = null;
   _editFolder = null;
   document.getElementById('higEditModal').classList.add('hidden');
+}
+
+async function removeFromList() {
+  if (!editingId) return;
+  const name = _editingRecord?.clientName || 'this entry';
+  if (!confirm(`Remove "${toTitleCase(name)}" from the Repair Ready list? This cannot be undone.`)) return;
+
+  const btn = document.getElementById('higRemoveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+
+  try {
+    await deleteDoc(doc(db, 'higWaitlist', editingId));
+    allRows = allRows.filter(r => r.id !== editingId);
+    closeModal();
+    render();
+  } catch (err) {
+    document.getElementById('higEditError').textContent = 'Remove failed: ' + err.message;
+    document.getElementById('higEditError').classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Remove from List';
+  }
 }
 
 async function saveEdit() {
