@@ -12,6 +12,16 @@
     .client-selector-item:hover { background:var(--primary-light,#e8f0fe); }
     .client-selector-item .cs-name { font-weight:600; }
     .client-selector-item .cs-meta { font-size:0.78rem; color:var(--text-muted); }
+
+    /* Tag/chip input */
+    .chip-input-wrap { display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center; border:1px solid var(--border); border-radius:var(--radius); padding:0.35rem 0.5rem; min-height:2.25rem; cursor:text; background:#fff; }
+    .chip-input-wrap input { border:none; outline:none; flex:1; min-width:120px; font-size:0.875rem; background:transparent; padding:0.1rem 0; }
+    .chip { display:inline-flex; align-items:center; gap:0.25rem; background:var(--primary-light,#e8f0fe); color:var(--primary,#1a56db); font-size:0.78rem; font-weight:600; padding:0.15rem 0.5rem; border-radius:999px; }
+    .chip .chip-del { cursor:pointer; font-size:1rem; line-height:1; opacity:0.6; }
+    .chip .chip-del:hover { opacity:1; }
+
+    /* Area tags in table cells */
+    .area-tag { display:inline-block; background:var(--primary-light,#e8f0fe); color:var(--primary,#1a56db); font-size:0.7rem; font-weight:600; padding:0.1rem 0.4rem; border-radius:999px; margin:0.1rem; }
   </style>
 </head>
 <body>
@@ -30,17 +40,14 @@
       <div class="form-group">
         <label>Status</label>
         <select id="filterStatus">
-          <option value="">All Statuses</option>
+          <option value="">All</option>
           <option value="eligible">Eligible</option>
-          <option value="applied">Applied</option>
-          <option value="approved">Approved</option>
-          <option value="funded">Funded</option>
-          <option value="closed">Closed</option>
+          <option value="under_contract">Under Contract</option>
         </select>
       </div>
       <div class="form-group">
         <label>Search</label>
-        <input type="text" id="filterSearch" placeholder="Client name or counselor…">
+        <input type="text" id="filterSearch" placeholder="Client, counselor, or area…">
       </div>
     </div>
 
@@ -50,12 +57,12 @@
           <tr>
             <th>Client</th>
             <th>Counselor</th>
-            <th>AMI</th>
+            <th>Status</th>
+            <th>Est. Price Range</th>
+            <th>Areas of Interest</th>
+            <th>Bedrooms</th>
             <th>Closing Date</th>
             <th>CCA Amount</th>
-            <th>Status</th>
-            <th>Drive Folder</th>
-            <th>Enrolled</th>
             <th></th>
           </tr>
         </thead>
@@ -87,22 +94,50 @@
 
       <div class="form-grid" style="margin-top:1rem;">
         <div class="form-group">
-          <label for="editClosingDate">Closing Date</label>
-          <input type="date" id="editClosingDate">
+          <label for="editPriceMin">Est. Price Range — Min ($)</label>
+          <input type="number" id="editPriceMin" min="0" step="1000" placeholder="e.g. 150000">
         </div>
         <div class="form-group">
-          <label for="editCcaAmount">CCA Amount ($)</label>
-          <input type="number" id="editCcaAmount" min="0" step="0.01">
+          <label for="editPriceMax">Est. Price Range — Max ($)</label>
+          <input type="number" id="editPriceMax" min="0" step="1000" placeholder="e.g. 220000">
+        </div>
+        <div class="form-group">
+          <label for="editBedrooms">Bedrooms</label>
+          <select id="editBedrooms">
+            <option value="">—</option>
+            <option value="1">1 bedroom</option>
+            <option value="2">2 bedrooms</option>
+            <option value="3">3 bedrooms</option>
+            <option value="4">4 bedrooms</option>
+            <option value="5+">5+ bedrooms</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label>Areas of Interest <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">(type a word and press Enter)</span></label>
+          <div class="chip-input-wrap" id="areaChipsWrap">
+            <div id="areaChips" style="display:contents;"></div>
+            <input type="text" id="areaChipInput" placeholder="e.g. aliquippa">
+          </div>
         </div>
         <div class="form-group">
           <label for="editCcaStatus">Status</label>
           <select id="editCcaStatus">
             <option value="eligible">Eligible</option>
-            <option value="applied">Applied</option>
-            <option value="approved">Approved</option>
-            <option value="funded">Funded</option>
-            <option value="closed">Closed</option>
+            <option value="under_contract">Under Contract</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label for="editClosingDate">Closing Date</label>
+          <div style="display:flex;gap:0.75rem;align-items:center;">
+            <input type="date" id="editClosingDate" style="flex:1;">
+            <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.875rem;font-weight:400;white-space:nowrap;cursor:pointer;">
+              <input type="checkbox" id="editClosingNA"> N/A
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="editCcaAmount">CCA Amount ($)</label>
+          <input type="number" id="editCcaAmount" min="0" step="0.01">
         </div>
         <div class="form-group full-width">
           <label for="editCcaNotes">Notes</label>
@@ -113,6 +148,7 @@
       <div class="form-actions">
         <button id="ccaEditSave" class="btn btn-primary">Save</button>
         <button id="ccaEditCancel" class="btn btn-secondary">Cancel</button>
+        <button id="ccaRemoveBtn" class="btn btn-secondary" style="margin-left:auto;color:var(--danger,#dc2626);">Remove from List</button>
       </div>
     </div>
   </div>

@@ -1,69 +1,17 @@
-/**
- * cca-list.js — "Buyer Ready" page
- *
- * Manages the ccaList Firestore collection: PRE clients enrolled in the
- * Closing Cost Assistance program.
- *
- * Row click behavior:
- *   - If the record has a clientId → navigate to client.html?id={clientId}
- *     for the full editable client profile.
- *   - "Edit Entry" button → open modal to edit CCA-specific fields only
- *     (status, closing date, amount, notes) without leaving the page.
- *
- * "+ Add Client" opens a selector modal filtered to active PRE clients
- * not already on the list. Adding a client creates a new ccaList doc with
- * clientId set, which enables the row navigation and cross-collection sync.
- *
- * Client name / counselor / AMI / Drive folder are kept in sync automatically
- * by syncClientToLists() in client.js whenever the client profile is saved.
- */
-
-/**
- * cca-list.js — "Buyer Ready" page
- *
- * Manages the ccaList Firestore collection: PRE clients enrolled in the
- * Closing Cost Assistance program.
- *
- * Row click behavior:
- *   - If the record has a clientId → navigate to client.html?id={clientId}
- *     for the full editable client profile.
- *   - "Edit Entry" button → open modal to edit CCA-specific fields only
- *     (status, closing date, amount, notes) without leaving the page.
- *
- * "+ Add Client" opens a selector modal filtered to active PRE clients
- * not already on the list. Adding a client creates a new ccaList doc with
- * clientId set, which enables the row navigation and cross-collection sync.
- *
- * Client name / counselor / AMI / Drive folder are kept in sync automatically
- * by syncClientToLists() in client.js whenever the client profile is saved.
- */
-
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import {
-  collection, getDocs, doc, getDoc, addDoc, updateDoc, orderBy, query, serverTimestamp
+  collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const STATUS_LABELS = {
-  eligible: 'Eligible',
-  applied:  'Applied',
-  approved: 'Approved',
-  funded:   'Funded',
-  closed:   'Closed',
-};
-
-const STATUS_COLORS = {
-  eligible: 'badge-blue',
-  applied:  'badge-yellow',
-  approved: 'badge-green',
-  funded:   'badge-green',
-  closed:   'badge-gray',
-};
+const STATUS_LABELS = { eligible: 'Eligible', under_contract: 'Under Contract' };
+const STATUS_COLORS = { eligible: 'badge-blue', under_contract: 'badge-green' };
 
 let allRows      = [];
-let _allClients  = [];   // lazy-loaded full client list (for Add + Link searches)
+let _allClients  = [];
 let editingId    = null;
-let _editingRecord = null; // full ccaList record currently open in the edit modal
+let _editingRecord = null;
+let _editingAreas  = [];
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'cca-list');
@@ -78,33 +26,59 @@ requireAuth(async (user, profile) => {
 
   render();
 
-  document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('filterSearch').addEventListener('input', render);
+  document.getElementById('filterStatus').addEventListener('change', render);
 
   document.getElementById('ccaEditCancel').addEventListener('click', closeModal);
   document.getElementById('ccaEditSave').addEventListener('click', saveEdit);
+  document.getElementById('ccaRemoveBtn').addEventListener('click', removeFromList);
 
   document.getElementById('addClientBtn').addEventListener('click', openClientSelector);
   document.getElementById('clientSelectorClose').addEventListener('click', closeClientSelector);
   document.getElementById('clientSelectorSearch').addEventListener('input', renderClientSelector);
 
-  // Link search inside the edit modal
   document.getElementById('ccaLinkSearch').addEventListener('input', renderLinkResults);
   document.getElementById('ccaResyncBtn').addEventListener('click', resyncFromClient);
+
+  // Chip input — type a word and press Enter
+  document.getElementById('areaChipInput').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const val = e.target.value.trim().toLowerCase();
+    if (val && !_editingAreas.includes(val)) {
+      _editingAreas.push(val);
+      renderEditingChips();
+    }
+    e.target.value = '';
+  });
+
+  document.getElementById('areaChipsWrap').addEventListener('click', () => {
+    document.getElementById('areaChipInput').focus();
+  });
+
+  document.getElementById('editClosingNA').addEventListener('change', e => {
+    const dateInput = document.getElementById('editClosingDate');
+    dateInput.disabled = e.target.checked;
+    if (e.target.checked) dateInput.value = '';
+  });
 });
 
+// ── Render table ──────────────────────────────────────────────────────────────
+
 function render() {
+  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
   const status = document.getElementById('filterStatus').value;
-  const search = document.getElementById('filterSearch').value.toLowerCase();
 
   const filtered = allRows.filter(r => {
     if (status && r.status !== status) return false;
-    if (search && !r.clientName?.toLowerCase().includes(search) &&
-                  !r.counselor?.toLowerCase().includes(search)) return false;
-    return true;
+    if (!search) return true;
+    if ((r.clientName || '').toLowerCase().includes(search)) return true;
+    if ((r.counselor  || '').toLowerCase().includes(search)) return true;
+    if ((r.areasOfInterest || []).some(a => a.toLowerCase().includes(search))) return true;
+    return false;
   });
 
-  // Sort: soonest closing date first, then nulls at bottom
+  // Sort: soonest closing date first, nulls at bottom
   filtered.sort((a, b) => {
     const da = closingMs(a), db2 = closingMs(b);
     if (!da && !db2) return 0;
@@ -120,21 +94,34 @@ function render() {
   }
 
   tbody.innerHTML = filtered.map(r => {
-    const closing = fmtDate(r.closingDate);
-    const urgent  = isUrgent(r.closingDate) ? ' style="color:var(--danger);font-weight:600;"' : '';
-    const folder  = r.driveFolderUrl
-      ? `<a href="${r.driveFolderUrl}" target="_blank" style="font-size:0.8rem;">📁 ${r.driveFolderName || 'Folder'}</a>`
+    const closingCell = r.closingDateNA
+      ? '<span class="text-muted">N/A</span>'
+      : (fmtDate(r.closingDate) || '<span class="text-muted">—</span>');
+    const urgent = !r.closingDateNA && isUrgent(r.closingDate) ? ' style="color:var(--danger);font-weight:600;"' : '';
+
+    const priceRange = (r.priceRangeMin || r.priceRangeMax)
+      ? [
+          r.priceRangeMin ? '$' + Number(r.priceRangeMin).toLocaleString('en-US') : '',
+          r.priceRangeMax ? '$' + Number(r.priceRangeMax).toLocaleString('en-US') : '',
+        ].filter(Boolean).join(' – ')
       : '<span class="text-muted">—</span>';
+
+    const areas = (r.areasOfInterest || []).length
+      ? r.areasOfInterest.map(a => `<span class="area-tag">${esc(a)}</span>`).join('')
+      : '<span class="text-muted">—</span>';
+
+    const statusLabel = STATUS_LABELS[r.status] || r.status || 'Eligible';
+    const statusBadge = STATUS_COLORS[r.status] || 'badge-blue';
 
     return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
       <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(r.counselor)}</td>
-      <td>${esc(r.amiPercent)}</td>
-      <td${urgent}>${closing || '—'}</td>
+      <td><span class="badge ${statusBadge}">${statusLabel}</span></td>
+      <td style="white-space:nowrap;">${priceRange}</td>
+      <td style="max-width:14rem;">${areas}</td>
+      <td>${r.bedrooms ? r.bedrooms + ' bd' : '<span class="text-muted">—</span>'}</td>
+      <td${urgent}>${closingCell}</td>
       <td>${r.ccaAmount ? '$' + Number(r.ccaAmount).toLocaleString('en-US', {minimumFractionDigits:2}) : '—'}</td>
-      <td><span class="badge ${STATUS_COLORS[r.status] || ''}">${STATUS_LABELS[r.status] || r.status}</span></td>
-      <td>${folder}</td>
-      <td>${fmtDate(r.enrolledAt)}</td>
       <td><button class="btn btn-secondary btn-sm edit-entry-btn" data-id="${r.id}" style="white-space:nowrap;">Edit Entry</button></td>
     </tr>`;
   }).join('');
@@ -156,41 +143,39 @@ function render() {
   });
 }
 
-function closingMs(r) {
-  if (!r.closingDate) return null;
-  const d = r.closingDate.toDate ? r.closingDate.toDate() : new Date(r.closingDate);
-  return d.getTime();
-}
-
-function isUrgent(closingDate) {
-  if (!closingDate) return false;
-  const d = closingDate.toDate ? closingDate.toDate() : new Date(closingDate);
-  const days = (d - Date.now()) / (1000 * 60 * 60 * 24);
-  return days >= 0 && days <= 14;
-}
+// ── Edit modal ────────────────────────────────────────────────────────────────
 
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
-  editingId     = id;
+  editingId      = id;
   _editingRecord = r;
+  _editingAreas  = [...(r.areasOfInterest || [])];
 
-  document.getElementById('ccaEditTitle').textContent = toTitleCase(r.clientName);
-  document.getElementById('editClosingDate').value = toDateInput(r.closingDate);
-  document.getElementById('editCcaAmount').value   = r.ccaAmount || '';
-  document.getElementById('editCcaStatus').value   = r.status || 'eligible';
-  document.getElementById('editCcaNotes').value    = r.notes  || '';
+  document.getElementById('ccaEditTitle').textContent      = toTitleCase(r.clientName);
+  document.getElementById('editPriceMin').value            = r.priceRangeMin || '';
+  document.getElementById('editPriceMax').value            = r.priceRangeMax || '';
+  document.getElementById('editBedrooms').value            = r.bedrooms || '';
+  document.getElementById('editCcaStatus').value           = r.status || 'eligible';
+  document.getElementById('editCcaAmount').value           = r.ccaAmount || '';
+  document.getElementById('editCcaNotes').value            = r.notes  || '';
+  document.getElementById('areaChipInput').value           = '';
   document.getElementById('ccaEditError').classList.add('hidden');
 
+  const naChecked = !!r.closingDateNA;
+  document.getElementById('editClosingNA').checked   = naChecked;
+  document.getElementById('editClosingDate').disabled = naChecked;
+  document.getElementById('editClosingDate').value    = naChecked ? '' : toDateInput(r.closingDate);
+
+  renderEditingChips();
+
   if (r.clientId) {
-    // Record is linked — show the profile link and re-sync button
     const anchor = document.getElementById('ccaClientAnchor');
     anchor.href        = `client.html?id=${r.clientId}`;
     anchor.textContent = toTitleCase(r.clientName) || r.clientId;
     document.getElementById('ccaLinkedBar').classList.remove('hidden');
     document.getElementById('ccaLinkSection').classList.add('hidden');
   } else {
-    // Record is not linked — show the link search, pre-filled with the stored name
     document.getElementById('ccaLinkedBar').classList.add('hidden');
     document.getElementById('ccaLinkSection').classList.remove('hidden');
     document.getElementById('ccaLinkSearch').value = r.clientName || '';
@@ -205,6 +190,20 @@ function closeModal() {
   document.getElementById('ccaEditModal').classList.add('hidden');
 }
 
+function renderEditingChips() {
+  const container = document.getElementById('areaChips');
+  container.innerHTML = _editingAreas.map((tag, i) =>
+    `<span class="chip">${esc(tag)}<span class="chip-del" data-i="${i}">&times;</span></span>`
+  ).join('');
+  container.querySelectorAll('.chip-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _editingAreas.splice(parseInt(btn.dataset.i), 1);
+      renderEditingChips();
+    });
+  });
+}
+
 async function saveEdit() {
   if (!editingId) return;
   const errorEl = document.getElementById('ccaEditError');
@@ -214,17 +213,22 @@ async function saveEdit() {
   saveBtn.textContent = 'Saving…';
 
   try {
-    const dateVal = document.getElementById('editClosingDate').value;
+    const dateVal   = document.getElementById('editClosingDate').value;
+    const naChecked = document.getElementById('editClosingNA').checked;
     const updates = {
-      closingDate: dateVal ? new Date(dateVal) : null,
-      ccaAmount:   parseFloat(document.getElementById('editCcaAmount').value) || 0,
-      status:      document.getElementById('editCcaStatus').value,
-      notes:       document.getElementById('editCcaNotes').value.trim(),
-      updatedAt:   serverTimestamp(),
+      priceRangeMin:   parseFloat(document.getElementById('editPriceMin').value) || 0,
+      priceRangeMax:   parseFloat(document.getElementById('editPriceMax').value) || 0,
+      bedrooms:        document.getElementById('editBedrooms').value || '',
+      areasOfInterest: [..._editingAreas],
+      status:          document.getElementById('editCcaStatus').value,
+      closingDateNA:   naChecked,
+      closingDate:     (!naChecked && dateVal) ? new Date(dateVal + 'T12:00:00') : null,
+      ccaAmount:       parseFloat(document.getElementById('editCcaAmount').value) || 0,
+      notes:           document.getElementById('editCcaNotes').value.trim(),
+      updatedAt:       serverTimestamp(),
     };
     await updateDoc(doc(db, 'ccaList', editingId), updates);
 
-    // Update local copy
     const idx = allRows.findIndex(x => x.id === editingId);
     if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
 
@@ -239,25 +243,29 @@ async function saveEdit() {
   }
 }
 
-function toDateInput(ts) {
-  if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toISOString().split('T')[0];
+async function removeFromList() {
+  if (!editingId) return;
+  const r = allRows.find(x => x.id === editingId);
+  const name = toTitleCase(r?.clientName || 'this client');
+  if (!confirm(`Remove ${name} from Buyer Ready? This only removes them from the list — their client profile is not affected.`)) return;
+
+  try {
+    await deleteDoc(doc(db, 'ccaList', editingId));
+    allRows = allRows.filter(x => x.id !== editingId);
+    closeModal();
+    render();
+  } catch (err) {
+    document.getElementById('ccaEditError').textContent = 'Remove failed: ' + err.message;
+    document.getElementById('ccaEditError').classList.remove('hidden');
+  }
 }
 
-function fmtDate(ts) {
-  if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-// ── Link search (inside edit modal for unlinked records) ─────────────────────
+// ── Link search ───────────────────────────────────────────────────────────────
 
 async function renderLinkResults() {
-  const search     = document.getElementById('ccaLinkSearch').value.toLowerCase().trim();
-  const resultsEl  = document.getElementById('ccaLinkResults');
+  const search    = document.getElementById('ccaLinkSearch').value.toLowerCase().trim();
+  const resultsEl = document.getElementById('ccaLinkResults');
 
-  // Lazy-load clients on first search
   if (!_allClients.length) {
     resultsEl.innerHTML = '<div style="padding:0.75rem;color:var(--text-muted);">Loading…</div>';
     try {
@@ -272,9 +280,9 @@ async function renderLinkResults() {
   }
 
   const matches = _allClients.filter(c =>
-    (c.clientName  || '').toLowerCase().includes(search) ||
-    (c.counselor   || '').toLowerCase().includes(search) ||
-    (c.rxNumbers   || []).some(rx => rx.toLowerCase().includes(search))
+    (c.clientName || '').toLowerCase().includes(search) ||
+    (c.counselor  || '').toLowerCase().includes(search) ||
+    (c.rxNumbers  || []).some(rx => rx.toLowerCase().includes(search))
   ).slice(0, 20);
 
   if (!matches.length) {
@@ -302,9 +310,8 @@ async function linkClientToEntry(clientDocId) {
   errorEl.classList.add('hidden');
 
   try {
-    // Load the real client doc to pull fresh canonical data
     const clientSnap = await getDoc(doc(db, 'clients', clientDocId));
-    if (!clientSnap.exists()) { throw new Error('Client not found.'); }
+    if (!clientSnap.exists()) throw new Error('Client not found.');
     const c = clientSnap.data();
 
     const updates = {
@@ -320,12 +327,10 @@ async function linkClientToEntry(clientDocId) {
 
     await updateDoc(doc(db, 'ccaList', editingId), updates);
 
-    // Update local cache
     const idx = allRows.findIndex(x => x.id === editingId);
     if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
     _editingRecord = { ..._editingRecord, ...updates };
 
-    // Flip the modal to show the linked state
     const anchor = document.getElementById('ccaClientAnchor');
     anchor.href        = `client.html?id=${clientDocId}`;
     anchor.textContent = toTitleCase(c.clientName || '') || clientDocId;
@@ -333,7 +338,7 @@ async function linkClientToEntry(clientDocId) {
     document.getElementById('ccaLinkSection').classList.add('hidden');
     document.getElementById('ccaEditTitle').textContent = toTitleCase(c.clientName || '');
 
-    render(); // refresh table so the row shows updated counselor name
+    render();
   } catch (err) {
     errorEl.textContent = 'Link failed: ' + err.message;
     errorEl.classList.remove('hidden');
@@ -438,22 +443,28 @@ async function addClientToList(clientId) {
     const newDoc = await addDoc(collection(db, 'ccaList'), {
       clientId,
       clientName:      client.clientName      || '',
-      counselor:       client.counselor        || '',
-      amiPercent:      client.amiPercent        || '',
-      driveFolderId:   client.driveFolderId    || '',
-      driveFolderName: client.driveFolderName  || '',
-      driveFolderUrl:  client.driveFolderUrl   || '',
+      counselor:       client.counselor       || '',
+      amiPercent:      client.amiPercent      || '',
+      driveFolderId:   client.driveFolderId   || '',
+      driveFolderName: client.driveFolderName || '',
+      driveFolderUrl:  client.driveFolderUrl  || '',
+      priceRangeMin:   0,
+      priceRangeMax:   0,
+      bedrooms:        '',
+      areasOfInterest: [],
       closingDate:     null,
       ccaAmount:       0,
-      status:          'eligible',
       notes:           '',
       enrolledAt:      serverTimestamp(),
       updatedAt:       serverTimestamp(),
     });
 
-    allRows.push({ id: newDoc.id, clientId, clientName: client.clientName,
-      counselor: client.counselor, amiPercent: client.amiPercent,
-      status: 'eligible', enrolledAt: new Date() });
+    allRows.push({
+      id: newDoc.id, clientId,
+      clientName: client.clientName, counselor: client.counselor,
+      amiPercent: client.amiPercent, areasOfInterest: [],
+      enrolledAt: new Date(),
+    });
     closeClientSelector();
     render();
   } catch (err) {
@@ -462,6 +473,34 @@ async function addClientToList(clientId) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function closingMs(r) {
+  if (!r.closingDate) return null;
+  const d = r.closingDate.toDate ? r.closingDate.toDate() : new Date(r.closingDate);
+  return d.getTime();
+}
+
+function isUrgent(closingDate) {
+  if (!closingDate) return false;
+  const d = closingDate.toDate ? closingDate.toDate() : new Date(closingDate);
+  const days = (d - Date.now()) / (1000 * 60 * 60 * 24);
+  return days >= 0 && days <= 14;
+}
+
+function toDateInput(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 function esc(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
