@@ -140,25 +140,21 @@ function removeClient(clientId) {
 }
 
 function renderSelected() {
-  const listEl       = document.getElementById('selectedList');
-  const emptyEl      = document.getElementById('selectedEmpty');
+  const listEl        = document.getElementById('selectedList');
   const submitSection = document.getElementById('submitSection');
-  const countEl      = document.getElementById('selectedCount');
+  const countEl       = document.getElementById('selectedCount');
 
   countEl.textContent = _selected.length;
 
   if (!_selected.length) {
-    emptyEl.classList.remove('hidden');
+    listEl.innerHTML = '<div class="empty-state">No clients added yet. Search and click a client to add them.</div>';
     submitSection.classList.add('hidden');
-    listEl.innerHTML = '';
-    listEl.appendChild(emptyEl);
     return;
   }
 
-  emptyEl.classList.add('hidden');
   submitSection.classList.remove('hidden');
 
-  const cards = _selected.map(c => {
+  listEl.innerHTML = _selected.map(c => {
     const rxDefault = (c.rxNumbers || [])[0] || '';
     return `
       <div class="selected-client-card" data-client-id="${c.id}">
@@ -179,8 +175,6 @@ function renderSelected() {
         </div>
       </div>`;
   }).join('');
-
-  listEl.innerHTML = cards;
 
   listEl.querySelectorAll('.remove-btn').forEach(btn => {
     btn.addEventListener('click', () => removeClient(btn.dataset.removeId));
@@ -297,6 +291,7 @@ function resetForm() {
   document.getElementById('clientSearch').value  = '';
   document.getElementById('clientResults').innerHTML =
     '<div class="empty-state">Start typing to find clients.</div>';
+  document.getElementById('submitError').classList.add('hidden');
 
   renderSelected();
 
@@ -305,7 +300,6 @@ function resetForm() {
   document.querySelectorAll('.card').forEach(card => {
     card.classList.remove('hidden');
   });
-  document.getElementById('submitError').classList.add('hidden');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
