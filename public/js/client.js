@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
@@ -64,6 +64,62 @@ function canViewClient(c) {
   if (tier === 'standard') return true;
   if (_isED) return true;
   return (_user != null) && (c.careTeam || []).includes(_user.uid);
+}
+
+function canViewSSN() {
+  if (_isED) return true;
+  return _profile?.name && _client?.counselor &&
+    _profile.name.toLowerCase() === _client.counselor.toLowerCase();
+}
+
+function maskSSN(ssn) {
+  if (!ssn) return '';
+  const d = ssn.replace(/\D/g, '');
+  return d.length >= 4 ? `***-**-${d.slice(-4)}` : '***-**-****';
+}
+
+function initSsnField(inputId, btnId, realValue) {
+  const input = document.getElementById(inputId);
+  const btn   = document.getElementById(btnId);
+  if (!input) return;
+
+  if (!canViewSSN()) {
+    const group = input.closest('.form-group');
+    if (group) {
+      group.innerHTML = `<label>Social Security Number</label><p style="margin:0.25rem 0 0;font-family:monospace;color:var(--text-muted);">${realValue ? maskSSN(realValue) : '—'}</p>`;
+    }
+    return;
+  }
+
+  input.dataset.realValue = realValue || '';
+  input.value   = realValue ? maskSSN(realValue) : '';
+  input.readOnly = true;
+  input.dataset.revealed = 'false';
+  if (!btn) return;
+
+  btn.addEventListener('click', () => {
+    if (input.dataset.revealed === 'false') {
+      input.value = input.dataset.realValue;
+      input.readOnly = false;
+      input.dataset.revealed = 'true';
+      btn.title = 'Hide SSN';
+      btn.textContent = 'Hide';
+    } else {
+      input.dataset.realValue = input.value.trim();
+      input.value    = input.dataset.realValue ? maskSSN(input.dataset.realValue) : '';
+      input.readOnly = true;
+      input.dataset.revealed = 'false';
+      btn.title = 'Show SSN';
+      btn.innerHTML = '&#128065;';
+    }
+  });
+}
+
+function readSsnField(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return '';
+  if (input.dataset.revealed === 'true') return input.value.trim();
+  return input.dataset.realValue || '';
 }
 
 function writeAccessLog(event, extra = {}) {
@@ -152,9 +208,9 @@ async function loadCmcLink() {
 function buildSelects() {
   appendOptions('counselingType',   COUNSELING_TYPES);
   appendOptions('billingType',      BILLING_TYPES);
-  appendOptions('amiPercent',       AMI_LEVELS);
   appendOptions('reCode',           RE_CODES);
   appendOptions('closureAwardType', AWARD_TYPES);
+  wireAmiLabel('amiPercent', 'amiLabel');
 }
 
 function appendOptions(id, list) {
@@ -165,6 +221,29 @@ function appendOptions(id, list) {
     o.value = v; o.textContent = v;
     sel.appendChild(o);
   });
+}
+
+function wireAmiLabel(inputId, labelId) {
+  const inp = document.getElementById(inputId);
+  const lbl = document.getElementById(labelId);
+  if (!inp || !lbl) return;
+  inp.addEventListener('input', () => {
+    const v = parseFloat(inp.value);
+    lbl.textContent = isNaN(v) ? '' : amiDisplayLabel(v);
+  });
+}
+
+function setAmiField(val) {
+  const inp = document.getElementById('amiPercent');
+  const lbl = document.getElementById('amiLabel');
+  if (!inp) return;
+  const n = Number(val);
+  if (val != null && val !== '' && !isNaN(n) && n > 0) {
+    inp.value = n;
+    if (lbl) lbl.textContent = amiDisplayLabel(n);
+  } else if (val) {
+    if (lbl) lbl.textContent = `Legacy: ${val}`;
+  }
 }
 
 async function loadCounselorOptions(selectId) {
@@ -202,7 +281,7 @@ function populateClientForm(c) {
   setValue('zipCode',       c.zipCode);
   setSelectValue('counselingType', c.counselingType);
   setSelectValue('billingType',    c.billingType);
-  setSelectValue('amiPercent',     c.amiPercent);
+  setAmiField(c.amiPercent);
   setSelectValue('reCode',         c.reCode);
 
   setSelectValue('counselor', c.counselor);
@@ -221,6 +300,7 @@ function populateClientForm(c) {
   setValue('city',          c.city);
   setValue('county',        c.county);
   setValue('dateOfBirth',   c.dateOfBirth);
+  initSsnField('ssn', 'ssnRevealBtn', c.ssn);
   setValue('email',         c.email);
   setValue('homePhone',     c.homePhone);
   setValue('workPhone',     c.workPhone);
@@ -229,6 +309,7 @@ function populateClientForm(c) {
   // Intake — Co-Applicant
   setValue('coApplicantName',      c.coApplicantName);
   setValue('coApplicantDob',       c.coApplicantDob);
+  initSsnField('coApplicantSsn', 'coApplicantSsnRevealBtn', c.coApplicantSsn);
   setValue('coApplicantEmail',     c.coApplicantEmail);
   setValue('coApplicantHomePhone', c.coApplicantHomePhone);
   setValue('coApplicantWorkPhone', c.coApplicantWorkPhone);
@@ -238,6 +319,7 @@ function populateClientForm(c) {
   setSelectValue('maritalStatus',   c.maritalStatus);
   setValue('adultsInHousehold',     c.adultsInHousehold);
   setValue('childrenInHousehold',   c.childrenInHousehold);
+  renderHouseholdTable(c.householdMembers || []);
 
   // Intake — Property & Mortgage
   setSelectValue('propertyType', c.propertyType);
@@ -284,6 +366,16 @@ function setValue(id, val) {
 
 function renderHeader(c) {
   document.getElementById('pageTitle').textContent = c.clientName || 'Client Profile';
+
+  const coAppEl = document.getElementById('coApplicantSubtitle');
+  if (coAppEl) {
+    if (c.coApplicantName) {
+      coAppEl.textContent = `& ${c.coApplicantName}`;
+      coAppEl.classList.remove('hidden');
+    } else {
+      coAppEl.classList.add('hidden');
+    }
+  }
 
   const status = c.status || 'active';
   const badge  = status === 'closed'
@@ -404,6 +496,11 @@ function wireClientForm() {
   // Financials save
   document.getElementById('saveFinancialsBtn').addEventListener('click', saveFinancials);
 
+  // Household members dynamic rows
+  document.getElementById('addHouseholdRowBtn').addEventListener('click', () => {
+    document.getElementById('householdBody').appendChild(makeHouseholdRow());
+  });
+
   // Financials dynamic rows
   document.getElementById('addEmpRowBtn').addEventListener('click', addEmpRow);
   document.getElementById('addIncomeRowBtn').addEventListener('click', addIncomeRow);
@@ -517,7 +614,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       billingType:       document.getElementById('billingType').value,
       counselor:         document.getElementById('counselor').value,
       zipCode:           document.getElementById('zipCode').value.trim(),
-      amiPercent:        document.getElementById('amiPercent').value,
+      amiPercent:        (() => { const v = document.getElementById('amiPercent').value; return v ? Number(v) : (_client?.amiPercent ?? null); })(),
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,
@@ -530,6 +627,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       city:              document.getElementById('city').value.trim(),
       county:            document.getElementById('county').value.trim(),
       dateOfBirth:       document.getElementById('dateOfBirth').value,
+      ssn:               canViewSSN() ? readSsnField('ssn') : (_client.ssn || ''),
       email:             document.getElementById('email').value.trim(),
       homePhone:         document.getElementById('homePhone').value.trim(),
       workPhone:         document.getElementById('workPhone').value.trim(),
@@ -537,6 +635,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       // Intake — Co-Applicant
       coApplicantName:      document.getElementById('coApplicantName').value.trim(),
       coApplicantDob:       document.getElementById('coApplicantDob').value,
+      coApplicantSsn:       canViewSSN() ? readSsnField('coApplicantSsn') : (_client.coApplicantSsn || ''),
       coApplicantEmail:     document.getElementById('coApplicantEmail').value.trim(),
       coApplicantHomePhone: document.getElementById('coApplicantHomePhone').value.trim(),
       coApplicantWorkPhone: document.getElementById('coApplicantWorkPhone').value.trim(),
@@ -545,6 +644,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       maritalStatus:        document.getElementById('maritalStatus').value,
       adultsInHousehold:    parseInt(document.getElementById('adultsInHousehold').value) || null,
       childrenInHousehold:  parseInt(document.getElementById('childrenInHousehold').value) || null,
+      householdMembers:     readHouseholdRows(),
       // Intake — Property & Mortgage
       propertyType:         document.getElementById('propertyType').value,
       mortgageType:         document.getElementById('mortgageType').value,
@@ -1820,6 +1920,84 @@ function updateLastLateDisplay() {
   setRatioEl('rLastLate', mo + ' mo', mo >= 24 ? 'ok' : mo >= 12 ? 'warn' : 'bad');
 }
 
+// ── Household members table ───────────────────────────────────────────────────
+
+const RELATIONSHIPS = ['Spouse', 'Partner', 'Co-Borrower', 'Dependent', 'Other Adult'];
+
+function renderHouseholdTable(rows) {
+  const tbody = document.getElementById('householdBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  rows.forEach(r => tbody.appendChild(makeHouseholdRow(r)));
+}
+
+function makeHouseholdRow(r = {}) {
+  const tr = document.createElement('tr');
+  const relOpts = RELATIONSHIPS.map(v =>
+    `<option value="${escAttr(v)}" ${v === (r.relationship || '') ? 'selected' : ''}>${v}</option>`
+  ).join('');
+  const ssnMasked = r.ssn ? maskSSN(r.ssn) : '';
+
+  tr.innerHTML = `
+    <td><input type="text" class="hh-name" value="${escAttr(r.name || '')}"></td>
+    <td><select class="hh-rel"><option value="">— Select —</option>${relOpts}</select></td>
+    <td><input type="date" class="hh-dob" value="${escAttr(r.dateOfBirth || '')}"></td>
+    <td>
+      <div style="display:flex;gap:0.3rem;align-items:center;">
+        <input type="text" class="hh-ssn" autocomplete="off" maxlength="11"
+          value="${escAttr(ssnMasked)}"
+          data-real-value="${escAttr(r.ssn || '')}"
+          data-revealed="false"
+          ${canViewSSN() ? '' : 'readonly style="color:var(--text-muted);background:#f8f9fb;"'}
+          placeholder="XXX-XX-XXXX" style="flex:1;width:100px;">
+        ${canViewSSN() ? `<button type="button" class="hh-ssn-btn btn btn-secondary btn-sm" title="Show SSN" style="padding:0.2rem 0.4rem;flex-shrink:0;">&#128065;</button>` : ''}
+      </div>
+    </td>
+    <td><input type="number" class="hh-income" value="${r.monthlyIncome || ''}" min="0" step="0.01"></td>
+    <td><input type="text" class="hh-source" value="${escAttr(r.incomeSource || '')}"></td>
+    <td><button type="button" class="del-btn" title="Remove">&times;</button></td>`;
+
+  tr.querySelector('.del-btn').addEventListener('click', () => tr.remove());
+
+  if (canViewSSN()) {
+    const ssnInput = tr.querySelector('.hh-ssn');
+    const ssnBtn   = tr.querySelector('.hh-ssn-btn');
+    ssnBtn.addEventListener('click', () => {
+      if (ssnInput.dataset.revealed === 'false') {
+        ssnInput.value = ssnInput.dataset.realValue;
+        ssnInput.readOnly = false;
+        ssnInput.dataset.revealed = 'true';
+        ssnBtn.textContent = 'Hide';
+      } else {
+        ssnInput.dataset.realValue = ssnInput.value.trim();
+        ssnInput.value = ssnInput.dataset.realValue ? maskSSN(ssnInput.dataset.realValue) : '';
+        ssnInput.readOnly = true;
+        ssnInput.dataset.revealed = 'false';
+        ssnBtn.innerHTML = '&#128065;';
+      }
+    });
+  }
+
+  return tr;
+}
+
+function readHouseholdRows() {
+  return [...document.querySelectorAll('#householdBody tr')].map(row => {
+    const ssnInput = row.querySelector('.hh-ssn');
+    const ssn = ssnInput
+      ? (ssnInput.dataset.revealed === 'true' ? ssnInput.value.trim() : ssnInput.dataset.realValue || '')
+      : '';
+    return {
+      name:         row.querySelector('.hh-name')?.value.trim()   || '',
+      relationship: row.querySelector('.hh-rel')?.value           || '',
+      dateOfBirth:  row.querySelector('.hh-dob')?.value           || '',
+      ssn,
+      monthlyIncome: parseFloat(row.querySelector('.hh-income')?.value || '0') || 0,
+      incomeSource:  row.querySelector('.hh-source')?.value.trim() || '',
+    };
+  }).filter(r => r.name || r.monthlyIncome);
+}
+
 // ── Employment rows ───────────────────────────────────────────────────────────
 
 function renderEmpTable(rows) {
@@ -2111,7 +2289,7 @@ function openSnapshotView(snap) {
     ${row('Counseling Type',  v(snap.counselingType))}
     ${row('Billing Type',     v(snap.billingType))}
     ${row('Counselor',        v(snap.counselor))}
-    ${row('AMI Level',        v(snap.amiPercent))}
+    ${row('AMI Level',        v(amiDisplayLabel(snap.amiPercent)))}
     ${row('Race & Ethnicity', v(snap.reCode))}
 
     ${sectionHdr('Contact')}
@@ -2214,7 +2392,7 @@ function generateExportPdf() {
         ${pdfRow('Counselor',       v(c.counselor))}
       </div>
       <div>
-        ${pdfRow('AMI Level',        v(c.amiPercent))}
+        ${pdfRow('AMI Level',        v(amiDisplayLabel(c.amiPercent)))}
         ${pdfRow('Race &amp; Ethnicity', v(c.reCode))}
         <div class="prow"><span class="plbl">Hispanic / Latino</span><span class="pval"><span class="chk">${chk(c.hispanic)}</span></span></div>
         <div class="prow"><span class="plbl">Female-Headed HH</span><span class="pval"><span class="chk">${chk(c.femaleHeaded)}</span></span></div>

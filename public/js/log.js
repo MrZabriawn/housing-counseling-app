@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
-import { MONTHS, AMI_LEVELS, RE_CODES, COUNSELING_TYPES } from './data.js';
+import { MONTHS, AMI_LEVELS, RE_CODES, COUNSELING_TYPES, amiCategory } from './data.js';
 import {
   collection, getDocs, deleteDoc, doc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -50,7 +50,13 @@ function printReport() {
       return `<div class="rpt-section"><h3>${b.title}</h3><p>${b.count}</p></div>`;
     }
     const counts = {};
-    b.data.forEach(r => { const k = (r[b.field] || '').trim() || '(blank)'; counts[k] = (counts[k] || 0) + 1; });
+    b.data.forEach(r => {
+      const raw = r[b.field];
+      const k = b.field === 'amiPercent'
+        ? (amiCategory(raw) || '(blank)')
+        : ((raw || '').trim() || '(blank)');
+      counts[k] = (counts[k] || 0) + 1;
+    });
     const rows2 = Object.entries(counts).sort((a, c) => c[1] - a[1]);
     return `<div class="rpt-section"><h3>${b.title}</h3><table>
       ${rows2.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
@@ -149,7 +155,7 @@ function applyFilters() {
   if (v.counselor) rows = rows.filter(r => r.counselor === v.counselor);
   if (v.start)     rows = rows.filter(r => toDate(r.counselingDate) >= new Date(v.start));
   if (v.end)       rows = rows.filter(r => toDate(r.counselingDate) <= new Date(v.end + 'T23:59:59'));
-  if (v.ami)       rows = rows.filter(r => r.amiPercent === v.ami);
+  if (v.ami)       rows = rows.filter(r => amiCategory(r.amiPercent) === v.ami);
   if (v.re)        rows = rows.filter(r => r.reCode === v.re);
   if (v.type)      rows = rows.filter(r => r.counselingType === v.type);
   if (v.status)    rows = rows.filter(r => (r.caseStatus || '').toLowerCase().includes(v.status));
@@ -195,7 +201,7 @@ function renderStats(rows) {
   document.getElementById('statDollars').textContent    =
     '$' + dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  renderBreakdown('amiTable',         'amiPercent',     unique);
+  renderBreakdown('amiTable',         'amiPercent',     unique.map(r => ({ ...r, amiPercent: amiCategory(r.amiPercent) })));
   renderBreakdown('reTable',          'reCode',         unique);
   renderBreakdown('typeTable',        'counselingType', rows);
   renderBreakdown('counselorTable',   'counselor',      rows);

@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate, amiDisplayLabel } from './data.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -16,9 +16,9 @@ requireAuth(async (user, profile) => {
 async function buildSelects(profile) {
   appendOptions('counselingType', COUNSELING_TYPES);
   appendOptions('sourceMonth',    MONTHS);
-  appendOptions('amiPercent',     AMI_LEVELS);
   appendOptions('reCode',         RE_CODES);
   appendOptions('awardType',      AWARD_TYPES);
+  wireAmiLabel('amiPercent', 'amiLabel');
 
   // Load counselors from Firestore and pre-select current user
   const sel = document.getElementById('counselor');
@@ -50,6 +50,16 @@ function appendOptions(id, list) {
     const o = document.createElement('option');
     o.value = v; o.textContent = v;
     sel.appendChild(o);
+  });
+}
+
+function wireAmiLabel(inputId, labelId) {
+  const inp = document.getElementById(inputId);
+  const lbl = document.getElementById(labelId);
+  if (!inp || !lbl) return;
+  inp.addEventListener('input', () => {
+    const v = parseFloat(inp.value);
+    lbl.textContent = isNaN(v) ? '' : amiDisplayLabel(v);
   });
 }
 
@@ -118,7 +128,7 @@ function readForm() {
     sourceMonth,
     caseStatus:      document.getElementById('caseStatus').value.trim(),
     outcome:         document.getElementById('outcome').value.trim(),
-    amiPercent:      document.getElementById('amiPercent').value,
+    amiPercent:      Number(document.getElementById('amiPercent').value) || null,
     reCode:          document.getElementById('reCode').value,
     hispanic:        document.getElementById('hispanic').checked,
     femaleHeaded:    document.getElementById('femaleHeaded').checked,

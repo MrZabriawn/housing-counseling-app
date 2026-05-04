@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, AWARD_TYPES } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel } from './data.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -35,17 +35,22 @@ function escAttr(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-let _user = null;
+let _user           = null;
+let _counselorUids  = {}; // name (lowercase) → uid
 
 requireAuth(async (user, profile) => {
   _user = user;
   setupNav(profile, 'clients');
 
   appendOptions('counselingType', COUNSELING_TYPES);
-  appendOptions('amiPercent',     AMI_LEVELS);
   appendOptions('reCode',         RE_CODES);
   appendOptions('awardType',      AWARD_TYPES);
-  await loadCounselorOptions('counselor', profile.name);
+  appendOptions('billingType',    BILLING_TYPES);
+  wireAmiLabel('amiPercent', 'amiLabel');
+  await Promise.all([
+    loadCounselorOptions('counselor', profile.name),
+    loadCounselorUids(),
+  ]);
 
   document.getElementById('sessionDate').value = new Date().toISOString().split('T')[0];
 
@@ -90,6 +95,26 @@ function appendOptions(id, list) {
     o.value = v; o.textContent = v;
     sel.appendChild(o);
   });
+}
+
+function wireAmiLabel(inputId, labelId) {
+  const inp = document.getElementById(inputId);
+  const lbl = document.getElementById(labelId);
+  if (!inp || !lbl) return;
+  inp.addEventListener('input', () => {
+    const v = parseFloat(inp.value);
+    lbl.textContent = isNaN(v) ? '' : amiDisplayLabel(v);
+  });
+}
+
+async function loadCounselorUids() {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    snap.docs.forEach(d => {
+      const name = (d.data().name || '').trim().toLowerCase();
+      if (name) _counselorUids[name] = d.id;
+    });
+  } catch (_) {}
 }
 
 async function loadCounselorOptions(selectId, currentUserName) {
@@ -274,12 +299,15 @@ async function handleSubmit(e) {
 
     const clientData = {
       clientName:        toTitleCase(document.getElementById('clientName').value.trim()),
+      dateOfBirth:       document.getElementById('dateOfBirth').value,
+      ssn:               document.getElementById('ssn').value.trim(),
       counselingType:    document.getElementById('counselingType').value,
+      billingType:       document.getElementById('billingType').value,
       counselor:         document.getElementById('counselor').value,
       guarantor:         document.getElementById('guarantor').value.trim(),
       zipCode:           document.getElementById('zipCode').value.trim(),
       rxNumbers,
-      amiPercent:        document.getElementById('amiPercent').value,
+      amiPercent:        Number(document.getElementById('amiPercent').value) || null,
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,
@@ -291,7 +319,14 @@ async function handleSubmit(e) {
       ccaAmountProvided: 0,
       status:            'active',
       confidentialityTier: document.getElementById('programDesignation').value === 'safely_home' ? 'restricted' : 'standard',
-      careTeam:            document.getElementById('programDesignation').value === 'safely_home' ? [_user.uid] : [],
+      careTeam: (() => {
+        if (document.getElementById('programDesignation').value !== 'safely_home') return [];
+        const team = [_user.uid];
+        const assignedName = document.getElementById('counselor').value.trim().toLowerCase();
+        const assignedUid  = _counselorUids[assignedName];
+        if (assignedUid && assignedUid !== _user.uid) team.push(assignedUid);
+        return team;
+      })(),
       sessionCount:      1,
       totalOutcomeValue: dollarsAwarded,
       firstSessionDate:  dateVal ? new Date(dateVal + 'T12:00:00') : null,

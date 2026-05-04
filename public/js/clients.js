@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS } from './data.js';
+import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, amiCategory, amiDisplayLabel } from './data.js';
 import {
   collection, collectionGroup, getDocs, addDoc, query, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -232,7 +232,7 @@ async function applyFilters() {
   if (name)      rows = rows.filter(c => (c.clientName || '').toLowerCase().includes(name));
   if (type)      rows = rows.filter(c => c.counselingType === type);
   if (counselor) rows = rows.filter(c => c.counselor === counselor);
-  if (ami)       rows = rows.filter(c => c.amiPercent === ami);
+  if (ami)       rows = rows.filter(c => amiCategory(c.amiPercent) === ami);
   if (re)        rows = rows.filter(c => c.reCode === re);
   if (status)    rows = rows.filter(c => (c.status || 'active') === status);
 
@@ -301,7 +301,7 @@ function renderTable(clients) {
       <td>${c.clientName || '—'}${tierBadge}</td>
       <td>${typeBadge}</td>
       <td>${c.counselor || '—'}</td>
-      <td>${c.amiPercent || '—'}</td>
+      <td>${amiDisplayLabel(c.amiPercent) || '—'}</td>
       <td style="text-align:center">${c.sessionCount || 0}</td>
       <td>${fmtDate(c.lastSessionDate)}</td>
       <td>${statusBadge}</td>
@@ -368,7 +368,7 @@ function renderStats(clients) {
   document.getElementById('statDollars').textContent  =
     '$' + dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  renderBreakdown('amiTable',      'amiPercent',     clients);
+  renderBreakdown('amiTable',      'amiPercent',     clients.map(c => ({ ...c, amiPercent: amiCategory(c.amiPercent) })));
   renderBreakdown('reTable',       'reCode',         clients);
   renderBreakdown('typeTable',     'counselingType', clients);
   renderCounselorSessionBreakdown(clients);
@@ -416,7 +416,13 @@ function printReport() {
 
   const countBy = (field) => {
     const counts = {};
-    rows.forEach(r => { const k = (r[field] || '').trim() || '(blank)'; counts[k] = (counts[k] || 0) + 1; });
+    rows.forEach(r => {
+      const raw = r[field];
+      const k = field === 'amiPercent'
+        ? (amiCategory(raw) || '(blank)')
+        : ((raw || '').trim() || '(blank)');
+      counts[k] = (counts[k] || 0) + 1;
+    });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   };
 

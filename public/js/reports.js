@@ -1,5 +1,5 @@
 import { db } from './firebase-config.js';
-import { MONTHS, AMI_LEVELS, RE_CODES, RE_CODE_LABELS } from './data.js';
+import { MONTHS, RE_CODES, RE_CODE_LABELS, amiCdbgCategory } from './data.js';
 import {
   collection, collectionGroup, getDocs, query, where, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -18,8 +18,20 @@ export async function initCdbgReports(user, profile) {
   document.getElementById('reportYear').value   = new Date().getFullYear();
   document.getElementById('reportPerson').value = profile.name || '';
 
+  // Populate counselor filter
+  try {
+    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const sel  = document.getElementById('reportCounselor');
+    snap.docs.filter(d => d.data().active !== false).forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.data().name; o.textContent = d.data().name;
+      sel.appendChild(o);
+    });
+  } catch (_) {}
+
   monthSel.addEventListener('change', loadMonth);
   document.getElementById('reportYear').addEventListener('change', loadMonth);
+  document.getElementById('reportCounselor').addEventListener('change', loadMonth);
 
   document.getElementById('printCdbgBtn').addEventListener('click', () => window.print());
 
@@ -48,30 +60,86 @@ async function loadMonth() {
   status.textContent = 'Loading data…';
   card.style.display = 'none';
 
-  const snap = await getDocs(query(collection(db, 'counselingLog')));
-  let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const counselorVal = document.getElementById('reportCounselor').value;
+  const monthIdx     = MONTHS.indexOf(month);
+  const start        = new Date(year, monthIdx, 1);
+  const end          = new Date(year, monthIdx + 1, 0, 23, 59, 59);
 
-  // Filter by month name AND year
-  rows = rows.filter(r => {
+  // Load clients, all sessions (filter client-side — no index needed), and legacy counselingLog in parallel
+  const [clientsSnap, sessionsSnap, logSnap] = await Promise.all([
+    getDocs(collection(db, 'clients')),
+    getDocs(collectionGroup(db, 'sessions')),
+    getDocs(collection(db, 'counselingLog')),
+  ]);
+
+  // Build client demographics lookup
+  const clientsMap = {};
+  clientsSnap.docs.forEach(d => { clientsMap[d.id] = { id: d.id, ...d.data() }; });
+
+  // Sessions → filter to the selected month/year (and optional counselor), enrich with client demographics
+  const sessionRows = [];
+  sessionsSnap.docs.forEach(d => {
+    const s     = d.data();
+    const sDate = toDate(s.date);
+    if (!sDate) return;
+    if (sDate < start || sDate > end) return;
+
+    const clientId     = d.ref.parent.parent.id;
+    const client       = clientsMap[clientId] || {};
+    const rowCounselor = (s.counselor || client.counselor || '').trim();
+    if (counselorVal && rowCounselor.toLowerCase() !== counselorVal.toLowerCase()) return;
+    sessionRows.push({
+      _clientId:      clientId,
+      clientName:     client.clientName || '',
+      caseNo:         (client.rxNumbers || [])[0] || '',
+      counselor:      s.counselor || client.counselor || '',
+      counselingType: client.counselingType || '',
+      amiPercent:     client.amiPercent || '',
+      reCode:         client.reCode || '',
+      hispanic:       !!client.hispanic,
+      femaleHeaded:   !!client.femaleHeaded,
+      counselingDate: s.date,
+    });
+  });
+
+  // Legacy counselingLog entries filtered to the selected month/year
+  let logRows = logSnap.docs.map(d => ({ _clientId: null, id: d.id, ...d.data() }));
+  logRows = logRows.filter(r => {
     if (r.sourceMonth !== month) return false;
     const d = toDate(r.counselingDate);
-    if (!d) return true; // no date — keep if month name matches
+    if (!d) return true;
     return d.getFullYear() === year;
   });
 
-  // Unique households: deduplicate by caseNo, falling back to clientName
+  if (counselorVal) {
+    logRows = logRows.filter(r => (r.counselor || '') === counselorVal);
+  }
+
+  // Only add legacy entries for clients not already captured via sessions
+  const sessionNames = new Set(
+    sessionRows.map(r => (r.clientName || '').toLowerCase().trim()).filter(Boolean)
+  );
+  const legacyOnly = logRows.filter(r => {
+    const name = (r.clientName || '').toLowerCase().trim();
+    return name && !sessionNames.has(name);
+  });
+
+  const allRows = [...sessionRows, ...legacyOnly];
+
+  // Deduplicate to one row per household (clientId > clientName)
   const seen   = new Set();
-  const unique = rows.filter(r => {
-    const key = (r.caseNo || '').trim() || (r.clientName || '').trim().toLowerCase();
+  const unique = allRows.filter(r => {
+    const key = r._clientId || (r.caseNo || '').trim() || (r.clientName || '').toLowerCase().trim();
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  reportData = { unique, rows, month, year };
+  reportData = { unique, rows: allRows, month, year };
 
+  const counselorLabel = counselorVal ? ` · ${counselorVal}` : '';
   status.textContent =
-    `${unique.length} unique household${unique.length !== 1 ? 's' : ''} · ${rows.length} session${rows.length !== 1 ? 's' : ''} for ${month} ${year}`;
+    `${unique.length} unique household${unique.length !== 1 ? 's' : ''} · ${allRows.length} session${allRows.length !== 1 ? 's' : ''} for ${month} ${year}${counselorLabel}`;
 
   renderPreviews(unique);
   updatePrintArea(month, year);
@@ -86,15 +154,33 @@ function renderPreviews(unique) {
   renderR2Preview(unique);
 }
 
+const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non Low-Moderate'];
+
+function countCdbgAmi(rows) {
+  const counts = {};
+  CDBG_AMI_LEVELS.forEach(k => { counts[k] = 0; });
+  rows.forEach(r => {
+    const cat = amiCdbgCategory(r.amiPercent);
+    if (cat in counts) counts[cat]++;
+  });
+  return counts;
+}
+
 function renderR1Preview(unique) {
-  const counts = countByField(unique, 'amiPercent', AMI_LEVELS);
-  const total  = Object.values(counts).reduce((s, n) => s + n, 0);
+  const counts      = countCdbgAmi(unique);
+  const unspecified = unique.filter(r => !CDBG_AMI_LEVELS.includes(amiCdbgCategory(r.amiPercent))).length;
+  const total       = unique.length;
   document.getElementById('r1PreviewBody').innerHTML =
-    AMI_LEVELS.map(level => `
+    CDBG_AMI_LEVELS.map(level => `
       <tr>
         <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;text-align:right;">${counts[level] || 0}</td>
         <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;">${amiLabel(level)}</td>
-      </tr>`).join('') + `
+      </tr>`).join('') +
+    (unspecified > 0 ? `
+      <tr>
+        <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;text-align:right;color:var(--danger);">${unspecified}</td>
+        <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;color:var(--danger);">Not Specified — AMI field blank</td>
+      </tr>` : '') + `
     <tr>
       <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;text-align:right;font-weight:700;">${total}</td>
       <td style="border:1px solid var(--border);padding:0.35rem 0.6rem;font-weight:700;">Total persons served</td>
@@ -102,9 +188,10 @@ function renderR1Preview(unique) {
 }
 
 function renderR2Preview(unique) {
-  const counts   = countByField(unique, 'reCode', RE_CODES);
-  const total    = Object.values(counts).reduce((s, n) => s + n, 0);
-  const femaleCt = unique.filter(r => r.femaleHeaded).length;
+  const counts      = countByField(unique, 'reCode', RE_CODES);
+  const unspecified = unique.filter(r => !RE_CODES.includes(r.reCode)).length;
+  const total       = unique.length;
+  const femaleCt    = unique.filter(r => r.femaleHeaded).length;
   document.getElementById('r2PreviewBody').innerHTML =
     RE_CODES.map(code => {
       const hispCt = unique.filter(r => r.reCode === code && r.hispanic).length;
@@ -113,7 +200,13 @@ function renderR2Preview(unique) {
         <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;font-size:0.8rem;">${RE_CODE_LABELS[code] || code}</td>
         <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;">${hispCt}</td>
       </tr>`;
-    }).join('') + `
+    }).join('') +
+    (unspecified > 0 ? `
+      <tr>
+        <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;color:var(--danger);">${unspecified}</td>
+        <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;color:var(--danger);">Not Specified — Race/Ethnicity blank</td>
+        <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;"></td>
+      </tr>` : '') + `
     <tr>
       <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;font-weight:700;">${total}</td>
       <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;font-weight:700;">Total Households served</td>
@@ -138,23 +231,24 @@ function updatePrintArea(month, year) {
   document.getElementById('printDateLine').textContent    = `Date Prepared: ${today}`;
 
   // Report 1 print table
-  const counts1 = countByField(unique, 'amiPercent', AMI_LEVELS);
-  const total1  = Object.values(counts1).reduce((s, n) => s + n, 0);
+  const counts1      = countCdbgAmi(unique);
+  const unspecified1 = unique.filter(r => !CDBG_AMI_LEVELS.includes(amiCdbgCategory(r.amiPercent))).length;
   document.getElementById('r1PrintBody').innerHTML =
-    AMI_LEVELS.map(level => `
+    CDBG_AMI_LEVELS.map(level => `
       <tr>
         <td class="num">${counts1[level] || 0}</td>
         <td>${amiLabel(level)}</td>
-      </tr>`).join('') + `
+      </tr>`).join('') +
+    (unspecified1 > 0 ? `<tr><td class="num">${unspecified1}</td><td>Not Specified</td></tr>` : '') + `
     <tr style="font-weight:700;">
-      <td class="num">${total1}</td>
+      <td class="num">${unique.length}</td>
       <td>Total persons served</td>
     </tr>`;
 
   // Report 2 print table
-  const counts2  = countByField(unique, 'reCode', RE_CODES);
-  const total2   = Object.values(counts2).reduce((s, n) => s + n, 0);
-  const femaleCt = unique.filter(r => r.femaleHeaded).length;
+  const counts2      = countByField(unique, 'reCode', RE_CODES);
+  const unspecified2 = unique.filter(r => !RE_CODES.includes(r.reCode)).length;
+  const femaleCt     = unique.filter(r => r.femaleHeaded).length;
   document.getElementById('r2PrintBody').innerHTML =
     RE_CODES.map(code => {
       const hispCt = unique.filter(r => r.reCode === code && r.hispanic).length;
@@ -163,9 +257,10 @@ function updatePrintArea(month, year) {
         <td>${RE_CODE_LABELS[code] || code}</td>
         <td class="num">${hispCt}</td>
       </tr>`;
-    }).join('') + `
+    }).join('') +
+    (unspecified2 > 0 ? `<tr><td class="num">${unspecified2}</td><td>Not Specified</td><td></td></tr>` : '') + `
     <tr style="font-weight:700;">
-      <td class="num">${total2}</td><td>Total Households served</td><td></td>
+      <td class="num">${unique.length}</td><td>Total Households served</td><td></td>
     </tr>
     <tr style="font-weight:700;">
       <td class="num">${femaleCt}</td><td colspan="2">Number of Female-Headed Households</td>

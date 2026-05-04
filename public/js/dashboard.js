@@ -1,8 +1,8 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
-import { MONTHS } from './data.js';
+import { MONTHS, amiCategory } from './data.js';
 import {
-  collection, collectionGroup, getDocs, query, orderBy
+  collection, collectionGroup, getDocs, query, orderBy, where
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const SS = 'dashboardFilters'; // sessionStorage key
@@ -91,7 +91,7 @@ function toDate(ts) {
 function uniqueHouseholds(rows) {
   const seen = new Set();
   return rows.filter(r => {
-    const key = (r.caseNo || '').trim() || (r.clientName || '').trim().toLowerCase();
+    const key = r._clientId || (r.caseNo || '').trim() || (r.clientName || '').trim().toLowerCase();
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -113,12 +113,58 @@ async function loadDashboard() {
   const start = startVal ? new Date(startVal + 'T00:00:00') : null;
   const end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
 
-  // ── counselingLog (demographics / CDBG data) ──────────────────────────────
-  const snap = await getDocs(collection(db, 'counselingLog'));
-  let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // Load clients, all sessions, and legacy counselingLog in parallel
+  const [clientsSnap, sessionsSnap, logSnap] = await Promise.all([
+    getDocs(collection(db, 'clients')),
+    getDocs(collectionGroup(db, 'sessions')),
+    getDocs(collection(db, 'counselingLog')),
+  ]);
+
+  // Build client demographics lookup
+  const clientsMap = {};
+  clientsSnap.docs.forEach(d => { clientsMap[d.id] = { id: d.id, ...d.data() }; });
+
+  // Filter sessions client-side, enrich with demographics, accumulate hours
+  let totalHours = 0;
+  const sessionRows = [];
+
+  sessionsSnap.docs.forEach(d => {
+    const s     = d.data();
+    const sDate = toDate(s.date);
+
+    if (hasDateRange) {
+      if (start && sDate < start) return;
+      if (end   && sDate > end)   return;
+    } else if (monthVal || yearVal) {
+      if (monthVal && MONTHS[sDate.getMonth()] !== monthVal) return;
+      if (yearVal  && sDate.getFullYear() !== yearVal)        return;
+    }
+
+    const clientId     = d.ref.parent.parent.id;
+    const client       = clientsMap[clientId] || {};
+    const rowCounselor = (s.counselor || client.counselor || '').trim();
+    if (counselorVal && rowCounselor.toLowerCase() !== counselorVal.toLowerCase()) return;
+    totalHours += Number(s.hours) || 0;
+
+    sessionRows.push({
+      _clientId:      clientId,
+      clientName:     client.clientName || '',
+      counselor:      s.counselor || client.counselor || '',
+      counselingType: client.counselingType || '',
+      amiPercent:     client.amiPercent || '',
+      reCode:         client.reCode || '',
+      hispanic:       !!client.hispanic,
+      femaleHeaded:   !!client.femaleHeaded,
+      dollarsAwarded: Number(s.dollarsAwarded) || 0,
+      counselingDate: s.date,
+    });
+  });
+
+  // Legacy counselingLog entries — apply same filters, exclude names already in sessions
+  let logRows = logSnap.docs.map(d => ({ _clientId: null, id: d.id, ...d.data() }));
 
   if (hasDateRange) {
-    rows = rows.filter(r => {
+    logRows = logRows.filter(r => {
       if (!r.counselingDate) return false;
       const d = toDate(r.counselingDate);
       if (start && d < start) return false;
@@ -126,53 +172,36 @@ async function loadDashboard() {
       return true;
     });
   } else if (monthVal) {
-    rows = rows.filter(r => {
+    logRows = logRows.filter(r => {
       if (r.sourceMonth !== monthVal) return false;
       if (yearVal) {
         const d = toDate(r.counselingDate);
-        if (d.getTime() === 0) return true;
+        if (!d || d.getTime() === 0) return true;
         return d.getFullYear() === yearVal;
       }
       return true;
     });
   } else if (yearVal) {
-    rows = rows.filter(r => {
+    logRows = logRows.filter(r => {
       const d = toDate(r.counselingDate);
-      if (d.getTime() === 0) return false;
+      if (!d || d.getTime() === 0) return false;
       return d.getFullYear() === yearVal;
     });
   }
 
   if (counselorVal) {
-    rows = rows.filter(r => (r.counselor || '') === counselorVal);
+    logRows = logRows.filter(r => (r.counselor || '').trim().toLowerCase() === counselorVal.toLowerCase());
   }
 
-  // ── Sessions subcollection — Total Hours ──────────────────────────────────
-  // Always load all sessions and filter client-side to avoid needing a
-  // composite Firestore index on collectionGroup + date range.
-  let totalHours = 0;
-  try {
-    const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
-    sessSnap.docs.forEach(d => {
-      const s = d.data();
-      const sDate = toDate(s.date);
+  const sessionNames = new Set(
+    sessionRows.map(r => (r.clientName || '').toLowerCase().trim()).filter(Boolean)
+  );
+  const legacyOnly = logRows.filter(r => {
+    const name = (r.clientName || '').toLowerCase().trim();
+    return name && !sessionNames.has(name);
+  });
 
-      if (hasDateRange) {
-        if (start && sDate < start) return;
-        if (end   && sDate > end)   return;
-      } else {
-        if (monthVal && MONTHS[sDate.getMonth()] !== monthVal) return;
-        if (yearVal  && sDate.getFullYear() !== yearVal)        return;
-      }
-
-      if (counselorVal && (s.counselor || '') !== counselorVal) return;
-      totalHours += Number(s.hours) || 0;
-    });
-  } catch (_) {
-    totalHours = null; // show N/A only if the query itself fails
-  }
-
-  renderStats(rows, totalHours);
+  renderStats([...sessionRows, ...legacyOnly], totalHours);
 }
 
 function renderStats(rows, totalHours) {
@@ -192,7 +221,7 @@ function renderStats(rows, totalHours) {
   document.getElementById('statFemale').textContent   = unique.filter(r => r.femaleHeaded).length;
   document.getElementById('statHispanic').textContent = unique.filter(r => r.hispanic).length;
 
-  renderBreakdown('amiTable',       'amiPercent',     unique);
+  renderBreakdown('amiTable',       'amiPercent',     unique.map(r => ({ ...r, amiPercent: amiCategory(r.amiPercent) })));
   renderBreakdown('reTable',        'reCode',         unique);
   renderBreakdown('typeTable',      'counselingType', rows);
   renderBreakdown('counselorTable', 'counselor',      rows);

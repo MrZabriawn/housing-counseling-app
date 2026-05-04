@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate, amiDisplayLabel } from './data.js';
 
 // Inject a stored value as an option if it doesn't match any existing option
 function setSelectValue(id, val) {
@@ -75,9 +75,9 @@ requireAuth(async (user, profile) => {
 async function buildSelects() {
   appendOptions('counselingType', COUNSELING_TYPES);
   appendOptions('sourceMonth',    MONTHS);
-  appendOptions('amiPercent',     AMI_LEVELS);
   appendOptions('reCode',         RE_CODES);
   appendOptions('awardType',      AWARD_TYPES);
+  wireAmiLabel('amiPercent', 'amiLabel');
   await loadCounselorOptions('counselor');
 }
 
@@ -120,6 +120,29 @@ function appendOptions(id, list) {
     o.value = v; o.textContent = v;
     sel.appendChild(o);
   });
+}
+
+function wireAmiLabel(inputId, labelId) {
+  const inp = document.getElementById(inputId);
+  const lbl = document.getElementById(labelId);
+  if (!inp || !lbl) return;
+  inp.addEventListener('input', () => {
+    const v = parseFloat(inp.value);
+    lbl.textContent = isNaN(v) ? '' : amiDisplayLabel(v);
+  });
+}
+
+function setAmiField(val) {
+  const inp = document.getElementById('amiPercent');
+  const lbl = document.getElementById('amiLabel');
+  if (!inp) return;
+  const n = Number(val);
+  if (val != null && val !== '' && !isNaN(n) && n > 0) {
+    inp.value = n;
+    if (lbl) lbl.textContent = amiDisplayLabel(n);
+  } else if (val) {
+    if (lbl) lbl.textContent = `Legacy: ${val}`;
+  }
 }
 
 function setupAutoCalc() {
@@ -165,7 +188,7 @@ function populateForm(r) {
   setSelectValue('sourceMonth',    r.sourceMonth);
   setValue('caseStatus',     r.caseStatus);
   setValue('outcome',        r.outcome);
-  setSelectValue('amiPercent', r.amiPercent);
+  setAmiField(r.amiPercent);
   setSelectValue('reCode',     r.reCode);
   setValue('hours',          r.hours);
   setValue('ratePerHour',    r.ratePerHour);
@@ -273,7 +296,7 @@ function readForm() {
     sourceMonth,
     caseStatus:     document.getElementById('caseStatus').value.trim(),
     outcome:        document.getElementById('outcome').value.trim(),
-    amiPercent:     selectVal('amiPercent', 'amiPercent'),
+    amiPercent:     (() => { const v = document.getElementById('amiPercent').value; return v ? Number(v) : (_originalRecord?.amiPercent ?? null); })(),
     reCode:         selectVal('reCode',     'reCode'),
     hispanic:       document.getElementById('hispanic').checked,
     femaleHeaded:   document.getElementById('femaleHeaded').checked,

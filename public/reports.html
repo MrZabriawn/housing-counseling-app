@@ -45,7 +45,7 @@
 
     /* ── Print styles ────────────────────────────────────────────────────────── */
     @media print {
-      .nav, .no-print, .reports-tabs, #cdbgControls, #courtSection { display: none !important; }
+      .nav, .no-print, .reports-tabs, #cdbgControls { display: none !important; }
       main.page { padding: 0 !important; margin: 0 !important; }
       #cdbgCard { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
       #cdbgPrintArea { display: block !important; padding: 0; }
@@ -82,11 +82,13 @@
 
     <!-- Tab bar -->
     <div class="reports-tabs no-print">
-      <button class="reports-tab active" data-tab="tab-cdbg">CDBG &amp; Court</button>
-      <button class="reports-tab hidden" id="hudTabBtn" data-tab="tab-hud">HUD Reports</button>
+      <button class="reports-tab active" data-tab="tab-cdbg">CDBG</button>
+      <button class="reports-tab" data-tab="tab-court">Court</button>
+      <button class="reports-tab" data-tab="tab-chci">CHCI</button>
+      <button class="reports-tab" id="hudTabBtn" data-tab="tab-hud">HUD</button>
     </div>
 
-    <!-- ══ CDBG & Court panel ════════════════════════════════════════════════════ -->
+    <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
     <div class="reports-panel active" id="tab-cdbg">
 
       <div style="margin-bottom:0.5rem;" class="no-print">
@@ -106,6 +108,12 @@
           <div class="form-group">
             <label for="reportYear">Year *</label>
             <input type="number" id="reportYear" min="2000" max="2100" style="max-width:120px;">
+          </div>
+          <div class="form-group">
+            <label for="reportCounselor">Counselor</label>
+            <select id="reportCounselor">
+              <option value="">— All Counselors —</option>
+            </select>
           </div>
           <div class="form-group" style="flex:1;min-width:160px;">
             <label for="reportPerson">Person Completing Form</label>
@@ -180,32 +188,47 @@
         </div>
       </div>
 
-      <div id="courtSection">
-        <div style="margin-top:2rem;margin-bottom:0.5rem;">
-          <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
-            Court Appearances
-          </h3>
+    </div>
+
+    <!-- ══ Court panel ═══════════════════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-court">
+
+      <div style="margin-bottom:0.5rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
+          Court Appearances
+        </h3>
+      </div>
+      <div class="card">
+        <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
+          Court Appearance Summary
+        </h3>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
+          Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
+        </p>
+        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="courtReportYear">Year</label>
+            <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
+          </div>
+          <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
         </div>
-        <div class="card">
-          <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
-            Court Appearance Summary
-          </h3>
-          <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
-            Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
-          </p>
-          <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="courtReportYear">Year</label>
-              <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
-            </div>
-            <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
-          </div>
-          <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
-            Select a year and click Load.
-          </div>
+        <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
+          Select a year and click Load.
         </div>
       </div>
 
+    </div>
+
+    <!-- ══ CHCI panel ════════════════════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-chci">
+      <div style="margin-bottom:0.5rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
+          CHCI Reports
+        </h3>
+      </div>
+      <div class="card">
+        <p style="color:var(--text-muted);font-size:0.875rem;">CHCI reporting coming soon.</p>
+      </div>
     </div>
 
     <!-- ══ HUD Reports panel ══════════════════════════════════════════════════════ -->
@@ -308,7 +331,6 @@
       setupNav(profile, 'reports');
       await initCdbgReports(user, profile);
       if (profile.role === 'executive_director') {
-        document.getElementById('hudTabBtn').classList.remove('hidden');
         await initHudReports(user, profile);
       }
     });
