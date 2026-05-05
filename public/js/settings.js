@@ -1,11 +1,13 @@
 import { db } from './firebase-config.js';
 import { requireED, setupNav } from './auth.js';
+import { amiCategory, AMI_IMPORT_MAP } from './data.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch,
+  collection, collectionGroup, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch,
   query, where, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const DEFAULTS = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
+const _sessionMonthCache = new Map(); // "YYYY-MM" → Set<clientId>
 
 requireED(async (user, profile) => {
   setupNav(profile, 'settings');
@@ -45,6 +47,10 @@ requireED(async (user, profile) => {
   // All-caps title case tool — now scans clients collection
   document.getElementById('scanNamesBtn').addEventListener('click', scanAllCapsNames);
   document.getElementById('applyTitleCaseBtn').addEventListener('click', applyTitleCaseToClients);
+
+  // AMI normalization
+  document.getElementById('scanAmiBtn').addEventListener('click', scanAmiValues);
+  document.getElementById('applyAmiBtn').addEventListener('click', applyAmiNormalization);
 
   // Duplicate scanner
   document.getElementById('scanDuplicatesBtn').addEventListener('click', scanDuplicates);
@@ -458,6 +464,90 @@ async function applyTitleCaseToClients() {
   }
 }
 
+// ── AMI Normalization ─────────────────────────────────────────────────────────
+
+const CANONICAL_AMI = new Set(['Extremely Low', 'Very Low', 'Low', 'Moderate', 'Non Low-Moderate']);
+
+function resolveAmi(val) {
+  if (val == null || val === '') return null;
+  if (CANONICAL_AMI.has(val)) return null; // already correct
+  // Try numeric / amiCategory first
+  const cat = amiCategory(val);
+  if (CANONICAL_AMI.has(cat)) return cat;
+  // Try the import map (handles ranges like "51-80%")
+  const mapped = AMI_IMPORT_MAP[String(val).toLowerCase().trim()];
+  if (mapped && CANONICAL_AMI.has(mapped)) return mapped;
+  return null; // unknown format — skip
+}
+
+let _amiNormDocs = [];
+
+async function scanAmiValues() {
+  const btn       = document.getElementById('scanAmiBtn');
+  const previewEl = document.getElementById('amiNormPreview');
+  btn.disabled    = true;
+  btn.textContent = 'Scanning…';
+  previewEl.textContent = 'Loading…';
+
+  try {
+    const snap = await getDocs(collection(db, 'clients'));
+    _amiNormDocs = snap.docs
+      .map(d => ({ id: d.id, amiPercent: d.data().amiPercent, clientName: d.data().clientName }))
+      .filter(d => resolveAmi(d.amiPercent) !== null)
+      .map(d => ({ ...d, normalized: resolveAmi(d.amiPercent) }));
+
+    if (!_amiNormDocs.length) {
+      previewEl.innerHTML = '<span style="color:var(--accent);">All AMI values are already using the standard labels.</span>';
+      document.getElementById('applyAmiBtn').classList.add('hidden');
+    } else {
+      const sample = _amiNormDocs.slice(0, 10).map(d =>
+        `<li><strong>${escHtml(toTitleCase(d.clientName || ''))}</strong>: <code>${escHtml(String(d.amiPercent))}</code> → <strong>${escHtml(d.normalized)}</strong></li>`
+      ).join('');
+      previewEl.innerHTML = `
+        <p style="margin-bottom:0.5rem;font-weight:600;">${_amiNormDocs.length} client${_amiNormDocs.length !== 1 ? 's' : ''} to update${_amiNormDocs.length > 10 ? ' (showing first 10)' : ''}:</p>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.9;">${sample}</ul>
+        ${_amiNormDocs.length > 10 ? `<p style="color:var(--text-muted);margin-top:0.4rem;">…and ${_amiNormDocs.length - 10} more</p>` : ''}`;
+      document.getElementById('applyAmiBtn').classList.remove('hidden');
+    }
+  } catch (err) {
+    previewEl.innerHTML = `<span class="error-msg">Scan failed: ${err.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan Records';
+  }
+}
+
+async function applyAmiNormalization() {
+  if (!_amiNormDocs.length) return;
+  if (!confirm(`Normalize AMI values for ${_amiNormDocs.length} client${_amiNormDocs.length !== 1 ? 's' : ''}?`)) return;
+
+  const btn   = document.getElementById('applyAmiBtn');
+  const msgEl = document.getElementById('amiNormMsg');
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+  msgEl.classList.add('hidden');
+
+  try {
+    const now = serverTimestamp();
+    for (let i = 0; i < _amiNormDocs.length; i += 499) {
+      const batch = writeBatch(db);
+      _amiNormDocs.slice(i, i + 499).forEach(d => {
+        batch.update(doc(db, 'clients', d.id), { amiPercent: d.normalized, updatedAt: now });
+      });
+      await batch.commit();
+    }
+    showMsg(msgEl, `Done — ${_amiNormDocs.length} AMI value${_amiNormDocs.length !== 1 ? 's' : ''} normalized.`, true);
+    _amiNormDocs = [];
+    document.getElementById('amiNormPreview').innerHTML = '<span style="color:var(--accent);">All done. No non-standard AMI values remaining.</span>';
+    document.getElementById('applyAmiBtn').classList.add('hidden');
+  } catch (err) {
+    showMsg(msgEl, 'Failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Apply Normalization';
+  }
+}
+
 // ── Client Name Remapping (Last, First → First Last, etc.) ────────────────────
 
 let _clientNameDocs = []; // { id, clientName }
@@ -772,6 +862,13 @@ async function scanDuplicates() {
             ${typeOpts}
           </select>
         </div>
+        <div class="form-group" style="margin:0;min-width:155px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Session Month</label>
+          <input type="month" id="dupFilterMonth" style="font-size:0.8125rem;" title="Show only pairs where at least one client has a session in this month">
+        </div>
+        <div class="form-group" style="margin:0;align-self:flex-end;">
+          <button id="dupApplyBtn" class="btn btn-primary btn-sm" style="white-space:nowrap;">Apply Filters</button>
+        </div>
         <div class="form-group" style="margin:0;min-width:160px;">
           <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Sort by</label>
           <select id="dupSort" style="font-size:0.8125rem;">
@@ -805,6 +902,8 @@ async function scanDuplicates() {
             data-counselors="${escAttr(aCounselors + ' ' + bCounselors)}"
             data-types="${escAttr(((a.counselingType || '') + ' ' + (b.counselingType || '')).toLowerCase())}"
             data-total-sessions="${totalSessions}"
+            data-client-a="${escAttr(a.id)}"
+            data-client-b="${escAttr(b.id)}"
             style="border:1px solid var(--border);border-radius:var(--radius);padding:0.9rem 1rem;background:#fff;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
               <div style="flex:1;min-width:200px;">
@@ -887,26 +986,67 @@ async function scanDuplicates() {
       items.forEach(el => list.appendChild(el));
     }
 
-    function applyDupFilter() {
-      const search   = (document.getElementById('dupFilterSearch')?.value || '').toLowerCase();
-      const conf     = document.getElementById('dupFilterConf')?.value || '';
+    async function applyDupFilter() {
+      const search    = (document.getElementById('dupFilterSearch')?.value || '').toLowerCase();
+      const conf      = document.getElementById('dupFilterConf')?.value || '';
       const counselor = (document.getElementById('dupFilterCounselor')?.value || '').toLowerCase();
-      const type     = (document.getElementById('dupFilterType')?.value || '').toLowerCase();
+      const type      = (document.getElementById('dupFilterType')?.value || '').toLowerCase();
+      const monthVal  = document.getElementById('dupFilterMonth')?.value || ''; // "YYYY-MM"
+
+      let sessionIds = null; // null = no month filter active
+      if (monthVal) {
+        if (_sessionMonthCache.has(monthVal)) {
+          sessionIds = _sessionMonthCache.get(monthVal);
+        } else {
+          const [yr, mo] = monthVal.split('-').map(Number);
+          try {
+            const snap = await getDocs(collectionGroup(db, 'sessions'));
+            sessionIds = new Set(
+              snap.docs
+                .filter(d => {
+                  const raw = d.data().date;
+                  if (!raw) return false;
+                  const dt = raw.toDate ? raw.toDate() : new Date(raw);
+                  return dt.getFullYear() === yr && dt.getMonth() === mo - 1;
+                })
+                .map(d => d.ref.parent.parent.id)
+            );
+            _sessionMonthCache.set(monthVal, sessionIds);
+          } catch (_) {
+            sessionIds = null;
+          }
+        }
+      }
+
       container.querySelectorAll('.dup-pair').forEach(pair => {
-        const nameMatch     = !search   || pair.dataset.names.includes(search);
-        const confMatch     = !conf     || pair.dataset.conf === conf;
+        const nameMatch     = !search    || pair.dataset.names.includes(search);
+        const confMatch     = !conf      || pair.dataset.conf === conf;
         const counselorMatch = !counselor || pair.dataset.counselors.includes(counselor);
-        const typeMatch     = !type     || pair.dataset.types.includes(type);
-        pair.style.display  = (nameMatch && confMatch && counselorMatch && typeMatch) ? '' : 'none';
+        const typeMatch     = !type      || pair.dataset.types.includes(type);
+        const clientA = pair.dataset.clientA || '';
+        const clientB = pair.dataset.clientB || '';
+        const monthMatch = !sessionIds || !monthVal ||
+          (clientA && sessionIds.has(clientA)) || (clientB && sessionIds.has(clientB));
+        pair.style.display  = (nameMatch && confMatch && counselorMatch && typeMatch && monthMatch) ? '' : 'none';
       });
       updateDupCount();
     }
 
-    document.getElementById('dupFilterSearch').addEventListener('input', applyDupFilter);
-    document.getElementById('dupFilterConf').addEventListener('change', applyDupFilter);
-    document.getElementById('dupFilterCounselor').addEventListener('change', applyDupFilter);
-    document.getElementById('dupFilterType').addEventListener('change', applyDupFilter);
+    // Sort is instant (no query involved)
     document.getElementById('dupSort').addEventListener('change', () => { sortPairs(); updateDupCount(); });
+
+    // All other filters go through the Apply button
+    const applyBtn = document.getElementById('dupApplyBtn');
+    applyBtn.addEventListener('click', async () => {
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Loading…';
+      try {
+        await applyDupFilter();
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'Apply Filters';
+      }
+    });
 
     // Initial sort (confidence)
     sortPairs();
@@ -991,6 +1131,8 @@ async function performMerge() {
       getDoc(doc(db, 'clients', keepId)),
       getDoc(doc(db, 'clients', dropId)),
     ]);
+    if (!keepSnap.exists()) throw new Error(`Client "${keepName}" no longer exists — it may have already been merged or deleted. Refresh the page and scan again.`);
+    if (!dropSnap.exists()) throw new Error(`Client "${dropName}" no longer exists — it may have already been merged or deleted. Refresh the page and scan again.`);
     const keep = keepSnap.data();
     const drop = dropSnap.data();
 

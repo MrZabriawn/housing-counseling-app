@@ -164,6 +164,20 @@
       <p id="titleCaseMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
     </div>
 
+    <!-- AMI Normalization -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Normalize AMI Values</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        Finds clients whose AMI is stored as a number or range (e.g. 65, "51–80%") and converts them to the standard labels used everywhere else (Extremely Low, Very Low, Low, Moderate, Non Low-Moderate).
+      </p>
+      <div id="amiNormPreview" style="font-size:0.875rem;color:var(--text-muted);">Click the button to scan records.</div>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button id="scanAmiBtn" class="btn btn-secondary">Scan Records</button>
+        <button id="applyAmiBtn" class="btn btn-primary hidden">Apply Normalization</button>
+      </div>
+      <p id="amiNormMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
     <!-- Client Name Remapping (Last, First → First Last) -->
     <div class="card" style="max-width:640px;margin-top:1.25rem;">
       <div class="card-title">Remap Client Names</div>

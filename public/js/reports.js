@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
-import { MONTHS, RE_CODES, RE_CODE_LABELS, amiCdbgCategory } from './data.js';
+import { MONTHS, RE_CODES, RE_CODE_LABELS, AMI_LEVELS, amiCategory, amiCdbgCategory, DEFAULT_RATE, COURT_RATE } from './data.js';
 import {
-  collection, collectionGroup, getDocs, query, where, orderBy
+  collection, collectionGroup, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let reportData = null; // { unique, rows, month, year }
@@ -33,7 +33,11 @@ export async function initCdbgReports(user, profile) {
   document.getElementById('reportYear').addEventListener('change', loadMonth);
   document.getElementById('reportCounselor').addEventListener('change', loadMonth);
 
-  document.getElementById('printCdbgBtn').addEventListener('click', () => window.print());
+  document.getElementById('printCdbgBtn').addEventListener('click', () => {
+    const dateEl = document.getElementById('printInvoiceDate');
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-US');
+    window.print();
+  });
 
   await loadMonth();
 
@@ -65,12 +69,17 @@ async function loadMonth() {
   const start        = new Date(year, monthIdx, 1);
   const end          = new Date(year, monthIdx + 1, 0, 23, 59, 59);
 
-  // Load clients, all sessions (filter client-side — no index needed), and legacy counselingLog in parallel
-  const [clientsSnap, sessionsSnap, logSnap] = await Promise.all([
+  // Load clients, all sessions (filter client-side — no index needed), legacy counselingLog, and billing rates in parallel
+  const [clientsSnap, sessionsSnap, logSnap, ratesSnap] = await Promise.all([
     getDocs(collection(db, 'clients')),
     getDocs(collectionGroup(db, 'sessions')),
     getDocs(collection(db, 'counselingLog')),
+    getDoc(doc(db, 'config', 'billing')).catch(() => null),
   ]);
+
+  const ratesData    = ratesSnap?.exists?.() ? ratesSnap.data() : {};
+  const defaultRate  = ratesData.defaultRate ?? DEFAULT_RATE;
+  const courtRate    = ratesData.courtRate   ?? COURT_RATE;
 
   // Build client demographics lookup
   const clientsMap = {};
@@ -88,12 +97,19 @@ async function loadMonth() {
     const client       = clientsMap[clientId] || {};
     const rowCounselor = (s.counselor || client.counselor || '').trim();
     if (counselorVal && rowCounselor.toLowerCase() !== counselorVal.toLowerCase()) return;
+    const cType = client.counselingType || '';
+    const isCourtSession = cType === 'COURT' || (s.billingType || '') === 'Court';
+    const rate  = isCourtSession ? courtRate : defaultRate;
     sessionRows.push({
+      _sessionId:     d.id,
       _clientId:      clientId,
       clientName:     client.clientName || '',
       caseNo:         (client.rxNumbers || [])[0] || '',
       counselor:      s.counselor || client.counselor || '',
-      counselingType: client.counselingType || '',
+      counselingType: cType,
+      billingType:    s.billingType || '',
+      hours:          typeof s.hours === 'number' ? s.hours : (parseFloat(s.hours) || 0),
+      rate,
       amiPercent:     client.amiPercent || '',
       reCode:         client.reCode || '',
       hispanic:       !!client.hispanic,
@@ -115,13 +131,19 @@ async function loadMonth() {
     logRows = logRows.filter(r => (r.counselor || '') === counselorVal);
   }
 
-  // Only add legacy entries for clients not already captured via sessions
-  const sessionNames = new Set(
-    sessionRows.map(r => (r.clientName || '').toLowerCase().trim()).filter(Boolean)
-  );
+  // Only add legacy entries for clients not already captured via sessions.
+  // Match on normalized name (collapse whitespace) OR case/Rx number.
+  function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  const sessionNames = new Set(sessionRows.map(r => normName(r.clientName)).filter(Boolean));
+  const sessionCaseNos = new Set(sessionRows.map(r => (r.caseNo || '').trim()).filter(Boolean));
+
   const legacyOnly = logRows.filter(r => {
-    const name = (r.clientName || '').toLowerCase().trim();
-    return name && !sessionNames.has(name);
+    const name    = normName(r.clientName);
+    const caseNo  = (r.caseNo || r.rxNumber || '').trim();
+    if (!name) return false;
+    if (sessionNames.has(name)) return false;
+    if (caseNo && sessionCaseNos.has(caseNo)) return false;
+    return true;
   });
 
   const allRows = [...sessionRows, ...legacyOnly];
@@ -135,7 +157,7 @@ async function loadMonth() {
     return true;
   });
 
-  reportData = { unique, rows: allRows, month, year };
+  reportData = { unique, rows: allRows, sessionRows, month, year };
 
   const counselorLabel = counselorVal ? ` · ${counselorVal}` : '';
   status.textContent =
@@ -153,6 +175,7 @@ function renderPreviews(unique) {
   renderR1Preview(unique);
   renderR2Preview(unique);
   renderClientDetail(reportData.rows, unique);
+  renderInvoiceTable(reportData.sessionRows);
 }
 
 const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non Low-Moderate'];
@@ -266,6 +289,12 @@ function updatePrintArea(month, year) {
     <tr style="font-weight:700;">
       <td class="num">${femaleCt}</td><td colspan="2">Number of Female-Headed Households</td>
     </tr>`;
+
+  // Copy client detail and invoice tables into print area
+  const cdPrint  = document.getElementById('clientDetailPrintBody');
+  const invPrint = document.getElementById('invoicePrintBody');
+  if (cdPrint)  cdPrint.innerHTML  = document.getElementById('clientDetailBody')?.innerHTML  || '';
+  if (invPrint) invPrint.innerHTML = document.getElementById('invoiceTableBody')?.innerHTML  || '';
 }
 
 // ── Client detail table ───────────────────────────────────────────────────────
@@ -273,8 +302,6 @@ function updatePrintArea(month, year) {
 function renderClientDetail(allRows, unique) {
   const el = document.getElementById('clientDetailBody');
   if (!el) return;
-
-  const uniqueIds = new Set(unique.map(r => r._clientId || (r.caseNo || '').trim() || (r.clientName || '').toLowerCase().trim()));
 
   // Group all sessions by client key
   const byClient = {};
@@ -292,6 +319,12 @@ function renderClientDetail(allRows, unique) {
 
   if (!rows.length) { el.textContent = 'No clients.'; return; }
 
+  const amiOpts = ['', ...AMI_LEVELS]
+    .map(l => `<option value="${l}">${l || '— Unknown —'}</option>`).join('');
+
+  const reOpts = ['', ...RE_CODES]
+    .map(c => `<option value="${c}">${c ? (RE_CODE_LABELS[c] || c) : '— Unknown —'}</option>`).join('');
+
   el.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
       <thead>
@@ -302,26 +335,256 @@ function renderClientDetail(allRows, unique) {
           <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Session Date(s)</th>
           <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Source</th>
           <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">AMI</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Race &amp; Ethnicity</th>
           <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Type</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;width:32px;"></th>
         </tr>
       </thead>
       <tbody>
         ${rows.map((entry, i) => {
           const r = entry.r;
-          const src = r._clientId ? 'Sessions' : 'Legacy Log';
-          const srcColor = r._clientId ? 'var(--primary)' : '#b45309';
+          const isLegacy   = !r._clientId;
+          const src        = isLegacy ? 'Legacy Log' : 'Sessions';
+          const srcColor   = isLegacy ? '#b45309' : 'var(--primary)';
+          const curAmi     = amiCategory(r.amiPercent) || '';
+          const missingAmi = !curAmi;
+          const curRe      = r.reCode || '';
+          const missingRe  = !curRe;
+
+          const amiCell = r._clientId
+            ? `<select data-ami-client="${esc(r._clientId)}" style="font-size:0.75rem;border:1px solid ${missingAmi ? 'var(--danger)' : 'var(--border)'};border-radius:3px;padding:1px 3px;background:${missingAmi ? '#fff5f5' : 'transparent'};max-width:130px;">
+                ${amiOpts.replace(`value="${curAmi}"`, `value="${curAmi}" selected`)}
+               </select>`
+            : esc(curAmi || '—');
+
+          const reCell = r._clientId
+            ? `<select data-re-client="${esc(r._clientId)}" style="font-size:0.75rem;border:1px solid ${missingRe ? 'var(--danger)' : 'var(--border)'};border-radius:3px;padding:1px 3px;background:${missingRe ? '#fff5f5' : 'transparent'};max-width:180px;">
+                ${reOpts.replace(`value="${curRe}"`, `value="${curRe}" selected`)}
+               </select>`
+            : esc(curRe || '—');
+
+          const delBtn = isLegacy && r.id
+            ? `<button data-legacy-id="${esc(r.id)}" title="Delete this legacy log entry" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1rem;padding:0 4px;line-height:1;">&#10005;</button>`
+            : '';
+
           return `<tr>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:right;color:var(--text-muted);">${i + 1}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(r.clientName || '—')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${esc(r.counselor || '—')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${entry.sessions.join(', ')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.75rem;font-weight:700;color:${srcColor};">${src}</td>
-            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${esc(String(r.amiPercent || '—'))}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${amiCell}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${reCell}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${esc(r.counselingType || '—')}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:center;">${delBtn}</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>`;
+
+  // AMI selects — save directly to client doc
+  el.querySelectorAll('[data-ami-client]').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const clientId = sel.dataset.amiClient;
+      sel.style.opacity = '0.5';
+      try {
+        await updateDoc(doc(db, 'clients', clientId), { amiPercent: sel.value });
+        sel.style.opacity = '1';
+        sel.style.borderColor = '#16a34a';
+        sel.style.background = 'transparent';
+        setTimeout(() => { sel.style.borderColor = ''; }, 1500);
+      } catch (err) {
+        alert('Save failed: ' + err.message);
+        sel.style.opacity = '1';
+      }
+    });
+  });
+
+  // RE code selects — save directly to client doc
+  el.querySelectorAll('[data-re-client]').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const clientId = sel.dataset.reClient;
+      sel.style.opacity = '0.5';
+      try {
+        await updateDoc(doc(db, 'clients', clientId), { reCode: sel.value });
+        sel.style.opacity = '1';
+        sel.style.borderColor = '#16a34a';
+        sel.style.background = 'transparent';
+        setTimeout(() => { sel.style.borderColor = ''; }, 1500);
+      } catch (err) {
+        alert('Save failed: ' + err.message);
+        sel.style.opacity = '1';
+      }
+    });
+  });
+
+  // Delete buttons for legacy log rows
+  el.querySelectorAll('[data-legacy-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const legacyId = btn.dataset.legacyId;
+      const name = btn.closest('tr')?.querySelector('td:nth-child(2)')?.textContent || legacyId;
+      if (!confirm(`Delete legacy log entry for "${name}"? This cannot be undone.`)) return;
+      btn.disabled = true;
+      try {
+        await deleteDoc(doc(db, 'counselingLog', legacyId));
+        btn.closest('tr').remove();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// ── Invoice Calculator Table ──────────────────────────────────────────────────
+
+function renderInvoiceTable(sessionRows) {
+  const el = document.getElementById('invoiceTableBody');
+  if (!el) return;
+
+  if (!sessionRows.length) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No sessions this month.</p>';
+    return;
+  }
+
+  // Group by counselor (preserve insertion order, then sort alpha)
+  const byCounselor = {};
+  sessionRows.forEach(r => {
+    const key = (r.counselor || 'Unassigned').trim();
+    if (!byCounselor[key]) byCounselor[key] = [];
+    byCounselor[key].push(r);
+  });
+  const counselors = Object.keys(byCounselor).sort();
+
+  const $  = (n) => `$${n.toFixed(2)}`;
+  const td = (content, style = '') =>
+    `<td style="border:1px solid var(--border);padding:0.28rem 0.5rem;${style}">${content}</td>`;
+
+  let grandHours  = 0;
+  let grandAmount = 0;
+
+  const rows = counselors.map(counselor => {
+    const sessions = byCounselor[counselor].sort((a, b) => {
+      const ta = toDate(a.counselingDate) || 0;
+      const tb = toDate(b.counselingDate) || 0;
+      return ta - tb;
+    });
+
+    let subtotalHours  = 0;
+    let subtotalAmount = 0;
+
+    const sessionHtml = sessions.map(r => {
+      const d         = toDate(r.counselingDate);
+      const dateStr   = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—';
+      const missing   = !r.hours;
+      const amount    = r.hours * r.rate;
+      subtotalHours  += r.hours;
+      subtotalAmount += amount;
+      const typeLabel = r.billingType || r.counselingType || '—';
+      const rowStyle  = missing ? 'background:#fff5f5;' : '';
+      const hoursInput = `<input type="number"
+        data-hours-client="${esc(r._clientId)}"
+        data-hours-session="${esc(r._sessionId)}"
+        data-rate="${r.rate}"
+        value="${r.hours || ''}"
+        min="0" step="0.5" placeholder="0"
+        style="width:58px;text-align:right;border:1px solid ${missing ? 'var(--danger)' : 'var(--border)'};border-radius:3px;padding:2px 4px;font-size:0.8rem;background:transparent;">`;
+      const amountCell = `<span data-amount-for="${esc(r._sessionId)}">${missing ? '<span style="color:var(--danger);">$0.00</span>' : $(amount)}</span>`;
+      return `<tr style="${rowStyle}" data-row-session="${esc(r._sessionId)}">
+        ${td('')}
+        ${td(esc(r.clientName || '—'), missing ? 'font-weight:600;color:var(--danger);' : 'font-weight:600;')}
+        ${td(dateStr, 'white-space:nowrap;')}
+        ${td(esc(typeLabel), 'font-size:0.775rem;color:var(--text-muted);')}
+        ${td(hoursInput, 'text-align:right;padding:0.1rem 0.3rem;')}
+        ${td($(r.rate), 'text-align:right;font-size:0.775rem;color:var(--text-muted);')}
+        ${td(amountCell, 'text-align:right;font-weight:600;')}
+      </tr>`;
+    }).join('');
+
+    grandHours  += subtotalHours;
+    grandAmount += subtotalAmount;
+
+    return `
+      <tr style="background:#f8f9fb;">
+        ${td(`<strong>${esc(counselor)}</strong>`, 'font-size:0.8rem;font-weight:700;color:var(--primary);')}
+        ${td('', 'background:#f8f9fb;')}
+        ${td('', 'background:#f8f9fb;')}
+        ${td('', 'background:#f8f9fb;')}
+        ${td(`<strong>${subtotalHours}</strong>`, 'text-align:right;background:#f8f9fb;')}
+        ${td('', 'background:#f8f9fb;')}
+        ${td(`<strong>${$(subtotalAmount)}</strong>`, 'text-align:right;background:#f8f9fb;')}
+      </tr>
+      ${sessionHtml}`;
+  }).join('');
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
+      <thead>
+        <tr style="background:#f0f4ff;">
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;width:130px;">Counselor</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;">Client</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;white-space:nowrap;">Session Date</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;">Type</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;">Hours</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;">Rate</th>
+          <th style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#e8f0fe;">
+          <td colspan="4" style="border:1px solid var(--border);padding:0.35rem 0.5rem;font-weight:700;">Grand Total</td>
+          <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;font-weight:700;" id="invoiceGrandHours">${grandHours}</td>
+          <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;"></td>
+          <td style="border:1px solid var(--border);padding:0.35rem 0.5rem;text-align:right;font-weight:700;" id="invoiceGrandAmount">${$(grandAmount)}</td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  // Hours inputs — save to session doc, update amount cell live
+  el.querySelectorAll('[data-hours-client]').forEach(input => {
+    input.addEventListener('change', async () => {
+      const clientId  = input.dataset.hoursClient;
+      const sessionId = input.dataset.hoursSession;
+      const rate      = parseFloat(input.dataset.rate) || 0;
+      const hours     = parseFloat(input.value) || 0;
+      const amount    = hours * rate;
+
+      input.style.opacity = '0.5';
+      try {
+        await updateDoc(doc(db, 'clients', clientId, 'sessions', sessionId), { hours });
+        input.style.opacity = '1';
+        input.style.borderColor = '#16a34a';
+        setTimeout(() => { input.style.borderColor = ''; }, 1500);
+
+        // Update amount cell for this row
+        const amountSpan = el.querySelector(`[data-amount-for="${sessionId}"]`);
+        if (amountSpan) amountSpan.innerHTML = `$${amount.toFixed(2)}`;
+
+        // Recalculate grand totals from all current input values
+        let gh = 0, ga = 0;
+        el.querySelectorAll('[data-hours-client]').forEach(inp => {
+          const h = parseFloat(inp.value) || 0;
+          const r = parseFloat(inp.dataset.rate) || 0;
+          gh += h; ga += h * r;
+        });
+        const ghEl = document.getElementById('invoiceGrandHours');
+        const gaEl = document.getElementById('invoiceGrandAmount');
+        if (ghEl) ghEl.textContent = gh;
+        if (gaEl) gaEl.textContent = `$${ga.toFixed(2)}`;
+
+        // Remove red highlight from row if hours now set
+        if (hours > 0) {
+          const row = input.closest('tr');
+          if (row) row.style.background = '';
+          input.style.border = '1px solid var(--border)';
+        }
+      } catch (err) {
+        alert('Save failed: ' + err.message);
+        input.style.opacity = '1';
+      }
+    });
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

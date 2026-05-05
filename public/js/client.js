@@ -332,6 +332,11 @@ function populateClientForm(c) {
   setValue('bankruptcyAccount',     c.bankruptcyAccount);
   setValue('conciliationStampDate', c.conciliationStampDate);
 
+  // Intake Notes
+  setValue('intakeDate', c.intakeDate);
+  const intakeNotesEl = document.getElementById('intakeNotes');
+  if (intakeNotesEl) intakeNotesEl.value = c.intakeNotes || '';
+
   updateIntakeSections(c.counselingType);
   updateBankruptcyAccountState();
 
@@ -484,7 +489,7 @@ function wireClientForm() {
   });
 
   // Primary save button (Overview tab)
-  document.getElementById('saveClientBtn').addEventListener('click', saveClient);
+  document.getElementById('saveClientBtn').addEventListener('click', () => saveClient());
 
   // Secondary save button (Intake tab) — same action, different msg element
   document.getElementById('saveClientBtn2').addEventListener('click', () => saveClient('clientSaveMsg2'));
@@ -655,6 +660,9 @@ async function saveClient(msgId = 'clientSaveMsg') {
       bankruptcyFiled:      document.getElementById('bankruptcyFiled').checked,
       bankruptcyAccount:    document.getElementById('bankruptcyAccount').value.trim(),
       conciliationStampDate: document.getElementById('conciliationStampDate').value,
+      // Intake Notes
+      intakeDate:           document.getElementById('intakeDate').value,
+      intakeNotes:          (document.getElementById('intakeNotes')?.value || '').trim(),
       // Preserve confidentiality fields — only ED can change these via saveTierChange()
       confidentialityTier:   _client.confidentialityTier || 'standard',
       careTeam:              _client.careTeam || [],
@@ -1678,12 +1686,13 @@ function printIntakeForm() {
 <hr>
 
 <div class="two" style="margin-top:4px;">
-  <div class="row"><span class="lbl">FACE TO FACE MEETING — DATE:</span> <span class="val"></span></div>
+  <div class="row"><span class="lbl">FACE TO FACE MEETING — DATE:</span> <span class="val">${fmtD(c.firstSessionDate || c.intakeDate)}</span></div>
   <div class="row"><span class="lbl">TIME:</span> <span class="val"></span></div>
 </div>
-<div class="row"><span class="lbl">PHONE CALL NOTES:</span> <span class="val"></span></div>
-<div class="notes-line"></div>
-<div class="notes-line"></div>
+<div style="margin-bottom:5px;"><span class="lbl">PHONE CALL NOTES:</span></div>
+${c.intakeNotes
+  ? `<div style="border:1px solid #aaa;padding:5px 7px;min-height:40px;font-size:9pt;white-space:pre-wrap;line-height:1.5;">${v(c.intakeNotes)}</div>`
+  : '<div class="notes-line"></div><div class="notes-line"></div><div class="notes-line"></div>'}
 
 <script>window.addEventListener('load', () => window.print());<\/script>
 </body></html>`;

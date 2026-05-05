@@ -43,13 +43,14 @@
     .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
     #statusMsg { font-size: 0.8125rem; margin-top: 0.5rem; }
 
+    #printReqNum:hover, #printReqNum:focus { background: #fffbe6; cursor: text; }
     /* ── Print styles ────────────────────────────────────────────────────────── */
     @media print {
       .nav, .no-print, .reports-tabs, #cdbgControls { display: none !important; }
       main.page { padding: 0 !important; margin: 0 !important; }
       #cdbgCard { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
       #cdbgPrintArea { display: block !important; padding: 0; }
-      .reports-panel { display: block !important; }
+      #tab-cdbg { display: block !important; }
       .cdbg-print-header { margin-bottom: 1.5rem; }
       .cdbg-print-header h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
       .cdbg-print-header p { font-size: 0.85rem; color: #555; margin: 0.15rem 0; }
@@ -58,10 +59,14 @@
         font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;
         border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;
       }
-      .print-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      .print-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; border: 1px solid #999; }
       .print-table th, .print-table td { border: 1px solid #999; padding: 0.3rem 0.5rem; }
       .print-table th { background: #f0f0f0; font-weight: 700; text-align: left; }
       .print-table td.num { text-align: right; }
+      .inv-header-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 0.75rem; }
+      .inv-header-table td { padding: 0.2rem 0.5rem; vertical-align: top; }
+      .inv-header-table .lbl { font-weight: 700; white-space: nowrap; width: 1%; }
+      [contenteditable] { border-bottom: none !important; outline: none !important; }
     }
   </style>
 
@@ -133,11 +138,14 @@
         </div>
 
         <div id="cdbgPrintArea" style="display:none;">
-          <div class="cdbg-print-header">
-            <h2>CDBG Direct Benefit Report — Home Stabilization</h2>
-            <p id="printMonthLine"></p>
-            <p id="printPersonLine"></p>
-            <p id="printDateLine"></p>
+          <div class="cdbg-print-header" style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #1a3a8f;padding-bottom:10px;margin-bottom:14px;">
+            <img src="img/logo.png" style="height:60px;width:auto;" alt="Housing Opportunities Inc." onerror="this.style.display='none'">
+            <div>
+              <h2 style="margin:0 0 2px;color:#1a3a8f;">CDBG Direct Benefit Report — Home Stabilization Program</h2>
+              <p id="printMonthLine" style="margin:0;font-size:0.85rem;color:#555;"></p>
+              <p id="printPersonLine" style="margin:0;font-size:0.85rem;color:#555;"></p>
+              <p id="printDateLine" style="margin:0;font-size:0.85rem;color:#555;"></p>
+            </div>
           </div>
           <div class="cdbg-report-section">
             <h3>Report 1 — Income (Owner Households)<br>
@@ -156,6 +164,35 @@
               <thead><tr><th style="width:60px;">Count</th><th>Race / Ethnicity</th><th style="width:80px;">Hispanic</th></tr></thead>
               <tbody id="r2PrintBody"></tbody>
             </table>
+          </div>
+          <div class="cdbg-report-section">
+            <h3>Client Detail — All Sessions Included</h3>
+            <div id="clientDetailPrintBody"></div>
+          </div>
+          <div class="cdbg-report-section">
+            <h3 style="font-size:1rem;text-transform:uppercase;letter-spacing:0.04em;">Subgrantee Request for Funds</h3>
+            <table class="inv-header-table">
+              <tr>
+                <td class="lbl">Date:</td>
+                <td id="printInvoiceDate"></td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr><td colspan="4" style="padding:0;height:6px;"></td></tr>
+              <tr>
+                <td class="lbl">Request Agency:</td>
+                <td>Housing Opportunities Inc.</td>
+                <td class="lbl">Requisition Number:</td>
+                <td id="printReqNum" contenteditable="true" style="border-bottom:1px solid #aaa;min-width:120px;outline:none;" title="Click to edit"></td>
+              </tr>
+              <tr>
+                <td class="lbl">Program Name:</td>
+                <td>Home Stabilization Program</td>
+                <td>Home Stabilization Pro.</td>
+                <td>CD255505 2419-PRO</td>
+              </tr>
+            </table>
+            <div id="invoicePrintBody"></div>
           </div>
         </div>
 
@@ -193,6 +230,15 @@
             Client Detail — All Sessions Included
           </div>
           <div id="clientDetailBody" style="overflow-x:auto;"></div>
+        </div>
+
+        <!-- Invoice calculator — hours × rate per session -->
+        <div id="invoiceSection" class="no-print" style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem;">
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">
+            Invoice Calculator — Hours × Rate
+          </div>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;">Sessions with hours logged, grouped by counselor. Rate from Settings → Billing Rates.</p>
+          <div id="invoiceTableBody" style="overflow-x:auto;"></div>
         </div>
       </div>
 
@@ -323,7 +369,7 @@
 
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
-    import { initCdbgReports } from './js/reports.js';
+    import { initCdbgReports } from './js/reports.js?v=9';
     import { initHudReports } from './js/hud-reports.js';
 
     document.querySelectorAll('.reports-tab').forEach(btn => {
