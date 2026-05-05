@@ -152,6 +152,7 @@ async function loadMonth() {
 function renderPreviews(unique) {
   renderR1Preview(unique);
   renderR2Preview(unique);
+  renderClientDetail(reportData.rows, unique);
 }
 
 const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non Low-Moderate'];
@@ -265,6 +266,62 @@ function updatePrintArea(month, year) {
     <tr style="font-weight:700;">
       <td class="num">${femaleCt}</td><td colspan="2">Number of Female-Headed Households</td>
     </tr>`;
+}
+
+// ── Client detail table ───────────────────────────────────────────────────────
+
+function renderClientDetail(allRows, unique) {
+  const el = document.getElementById('clientDetailBody');
+  if (!el) return;
+
+  const uniqueIds = new Set(unique.map(r => r._clientId || (r.caseNo || '').trim() || (r.clientName || '').toLowerCase().trim()));
+
+  // Group all sessions by client key
+  const byClient = {};
+  allRows.forEach(r => {
+    const key = r._clientId || (r.caseNo || '').trim() || (r.clientName || '').toLowerCase().trim();
+    if (!key) return;
+    if (!byClient[key]) byClient[key] = { r, sessions: [] };
+    const d = toDate(r.counselingDate);
+    byClient[key].sessions.push(d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—');
+  });
+
+  const rows = Object.values(byClient).sort((a, b) =>
+    (a.r.clientName || '').localeCompare(b.r.clientName || '')
+  );
+
+  if (!rows.length) { el.textContent = 'No clients.'; return; }
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
+      <thead>
+        <tr style="background:#f8f9fb;">
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;text-align:right;width:32px;">#</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Client Name</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Counselor</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Session Date(s)</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Source</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">AMI</th>
+          <th style="border:1px solid var(--border);padding:0.3rem 0.5rem;">Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((entry, i) => {
+          const r = entry.r;
+          const src = r._clientId ? 'Sessions' : 'Legacy Log';
+          const srcColor = r._clientId ? 'var(--primary)' : '#b45309';
+          return `<tr>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:right;color:var(--text-muted);">${i + 1}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(r.clientName || '—')}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${esc(r.counselor || '—')}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${entry.sessions.join(', ')}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.75rem;font-weight:700;color:${srcColor};">${src}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${esc(String(r.amiPercent || '—'))}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${esc(r.counselingType || '—')}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

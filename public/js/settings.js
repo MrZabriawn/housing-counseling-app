@@ -717,31 +717,67 @@ async function scanDuplicates() {
       }
     }
 
-    // Sort: high confidence first
-    const rank = r => r.confidence === 'high' ? 0 : r.confidence === 'medium' ? 1 : 2;
-    pairs.sort((x, y) => Math.min(...x.reasons.map(r => rank(r))) - Math.min(...y.reasons.map(r => rank(r))));
-
     if (!pairs.length) {
       container.innerHTML = '<p style="color:var(--accent);">No potential duplicates found.</p>';
       return;
     }
 
+    const rank = r => r.confidence === 'high' ? 0 : r.confidence === 'medium' ? 1 : 2;
     const confidenceColor = { high: 'var(--danger)', medium: '#e65100', low: 'var(--text-muted)' };
     const confidenceLabel = { high: 'Strong match', medium: 'Possible match', low: 'Weak signal' };
 
+    function fmtLastSession(ts) {
+      if (!ts) return '—';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    }
+
+    // Collect unique counselors and types for filter dropdowns
+    const allCounselors = [...new Set(
+      pairs.flatMap(p => [p.a.counselor, p.b.counselor].filter(Boolean))
+    )].sort();
+    const allTypes = [...new Set(
+      pairs.flatMap(p => [p.a.counselingType, p.b.counselingType].filter(Boolean))
+    )].sort();
+
+    const counselorOpts = allCounselors.map(c => `<option value="${escAttr(c)}">${escHtml(c)}</option>`).join('');
+    const typeOpts      = allTypes.map(t => `<option value="${escAttr(t)}">${escHtml(t)}</option>`).join('');
+
     container.innerHTML = `
-      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.9rem;">
-        <div class="form-group" style="margin:0;flex:1;min-width:180px;">
-          <label style="font-size:0.75rem;">Filter by name</label>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.75rem;padding:0.75rem;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);">
+        <div class="form-group" style="margin:0;flex:2;min-width:160px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Search name</label>
           <input type="text" id="dupFilterSearch" placeholder="Type a name…" style="font-size:0.8125rem;">
         </div>
-        <div class="form-group" style="margin:0;">
-          <label style="font-size:0.75rem;">Confidence</label>
+        <div class="form-group" style="margin:0;min-width:140px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Confidence</label>
           <select id="dupFilterConf" style="font-size:0.8125rem;">
             <option value="">All</option>
-            <option value="high">Strong match only</option>
-            <option value="medium">Possible match only</option>
-            <option value="low">Weak signal only</option>
+            <option value="high">Strong match</option>
+            <option value="medium">Possible match</option>
+            <option value="low">Weak signal</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Counselor</label>
+          <select id="dupFilterCounselor" style="font-size:0.8125rem;">
+            <option value="">All Counselors</option>
+            ${counselorOpts}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:130px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Type</label>
+          <select id="dupFilterType" style="font-size:0.8125rem;">
+            <option value="">All Types</option>
+            ${typeOpts}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:160px;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Sort by</label>
+          <select id="dupSort" style="font-size:0.8125rem;">
+            <option value="confidence">Confidence (default)</option>
+            <option value="sessions">Most sessions first</option>
+            <option value="alpha">Alphabetical</option>
           </select>
         </div>
       </div>
@@ -751,23 +787,38 @@ async function scanDuplicates() {
           const topConf = reasons.reduce((best, r) => rank(r) < rank(best) ? r : best, reasons[0]);
           const aName = toTitleCase(a.clientName);
           const bName = toTitleCase(b.clientName);
+          const aSessions = a.sessionCount || 0;
+          const bSessions = b.sessionCount || 0;
+          const totalSessions = aSessions + bSessions;
+          // Smart merge: keep whichever has more sessions (or A on tie)
+          const smartKeep = bSessions > aSessions ? b : a;
+          const smartDrop = bSessions > aSessions ? a : b;
+          const smartKeepName = toTitleCase(smartKeep.clientName);
+          const smartDropName = toTitleCase(smartDrop.clientName);
+          const aCounselors = (a.counselor || '').toLowerCase();
+          const bCounselors = (b.counselor || '').toLowerCase();
           return `
           <div class="dup-pair"
             data-key="${escAttr(key)}"
             data-conf="${topConf.confidence}"
             data-names="${escAttr((aName + ' ' + bName).toLowerCase())}"
+            data-counselors="${escAttr(aCounselors + ' ' + bCounselors)}"
+            data-types="${escAttr(((a.counselingType || '') + ' ' + (b.counselingType || '')).toLowerCase())}"
+            data-total-sessions="${totalSessions}"
             style="border:1px solid var(--border);border-radius:var(--radius);padding:0.9rem 1rem;background:#fff;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
               <div style="flex:1;min-width:200px;">
                 <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.15rem;">A</div>
                 <div style="font-weight:600;font-size:0.9rem;">${escHtml(aName)}</div>
-                <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(a.counselingType || '')} · ${escHtml(a.counselor || '')} · ${a.sessionCount || 0} sessions</div>
+                <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(a.counselingType || '—')} · ${escHtml(a.counselor || '—')}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.15rem;">${aSessions} session${aSessions !== 1 ? 's' : ''} · Last: ${fmtLastSession(a.lastSessionDate)}</div>
               </div>
-              <div style="font-size:0.8rem;color:var(--text-muted);padding:0 0.25rem;">↔</div>
+              <div style="font-size:0.8rem;color:var(--text-muted);padding:0 0.25rem;align-self:center;">↔</div>
               <div style="flex:1;min-width:200px;">
                 <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.15rem;">B</div>
                 <div style="font-weight:600;font-size:0.9rem;">${escHtml(bName)}</div>
-                <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(b.counselingType || '')} · ${escHtml(b.counselor || '')} · ${b.sessionCount || 0} sessions</div>
+                <div style="font-size:0.775rem;color:var(--text-muted);">${escHtml(b.counselingType || '—')} · ${escHtml(b.counselor || '—')}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.15rem;">${bSessions} session${bSessions !== 1 ? 's' : ''} · Last: ${fmtLastSession(b.lastSessionDate)}</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end;flex-shrink:0;">
                 <span style="font-size:0.72rem;font-weight:700;color:${confidenceColor[topConf.confidence]};">
@@ -777,16 +828,24 @@ async function scanDuplicates() {
                   <a href="client.html?id=${a.id}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:0.75rem;">Open A</a>
                   <a href="client.html?id=${b.id}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:0.75rem;">Open B</a>
                   <button class="btn btn-sm btn-secondary dismiss-pair" data-key="${escAttr(key)}" style="font-size:0.75rem;">Dismiss</button>
+                  <button class="btn btn-sm btn-secondary smart-merge-btn"
+                    data-keep="${smartKeep.id}" data-drop="${smartDrop.id}"
+                    data-keep-name="${escAttr(smartKeepName)}"
+                    data-drop-name="${escAttr(smartDropName)}"
+                    style="font-size:0.75rem;background:#f0f4ff;border-color:var(--primary);color:var(--primary);"
+                    title="Keep the side with more sessions (${escAttr(smartKeepName)})">
+                    Smart Merge
+                  </button>
                   <button class="btn btn-sm btn-primary merge-btn"
                     data-keep="${a.id}" data-drop="${b.id}"
                     data-keep-name="${escAttr(aName)}"
                     data-drop-name="${escAttr(bName)}"
-                    style="font-size:0.75rem;">Merge B→A</button>
+                    style="font-size:0.75rem;">Keep A</button>
                   <button class="btn btn-sm btn-primary merge-btn"
                     data-keep="${b.id}" data-drop="${a.id}"
                     data-keep-name="${escAttr(bName)}"
                     data-drop-name="${escAttr(aName)}"
-                    style="font-size:0.75rem;">Merge A→B</button>
+                    style="font-size:0.75rem;">Keep B</button>
                 </div>
               </div>
             </div>
@@ -801,7 +860,7 @@ async function scanDuplicates() {
       </div>`;
 
     function updateDupCount() {
-      const visible = container.querySelectorAll('.dup-pair:not([style*="display: none"])').length;
+      const visible = [...container.querySelectorAll('.dup-pair')].filter(p => p.style.display !== 'none').length;
       const total   = container.querySelectorAll('.dup-pair').length;
       const countEl = document.getElementById('dupCount');
       if (countEl) countEl.textContent = visible === total
@@ -809,19 +868,48 @@ async function scanDuplicates() {
         : `Showing ${visible} of ${total} pairs:`;
     }
 
+    function sortPairs() {
+      const sortVal = document.getElementById('dupSort')?.value || 'confidence';
+      const list    = document.getElementById('dupPairList');
+      if (!list) return;
+      const items = [...list.querySelectorAll('.dup-pair')];
+      items.sort((a, b) => {
+        if (sortVal === 'sessions') {
+          return Number(b.dataset.totalSessions) - Number(a.dataset.totalSessions);
+        }
+        if (sortVal === 'alpha') {
+          return (a.dataset.names || '').localeCompare(b.dataset.names || '');
+        }
+        // confidence: high=0, medium=1, low=2
+        const confRank = { high: 0, medium: 1, low: 2 };
+        return (confRank[a.dataset.conf] ?? 3) - (confRank[b.dataset.conf] ?? 3);
+      });
+      items.forEach(el => list.appendChild(el));
+    }
+
     function applyDupFilter() {
-      const search = (document.getElementById('dupFilterSearch')?.value || '').toLowerCase();
-      const conf   = document.getElementById('dupFilterConf')?.value || '';
+      const search   = (document.getElementById('dupFilterSearch')?.value || '').toLowerCase();
+      const conf     = document.getElementById('dupFilterConf')?.value || '';
+      const counselor = (document.getElementById('dupFilterCounselor')?.value || '').toLowerCase();
+      const type     = (document.getElementById('dupFilterType')?.value || '').toLowerCase();
       container.querySelectorAll('.dup-pair').forEach(pair => {
-        const nameMatch = !search || pair.dataset.names.includes(search);
-        const confMatch = !conf   || pair.dataset.conf === conf;
-        pair.style.display = (nameMatch && confMatch) ? '' : 'none';
+        const nameMatch     = !search   || pair.dataset.names.includes(search);
+        const confMatch     = !conf     || pair.dataset.conf === conf;
+        const counselorMatch = !counselor || pair.dataset.counselors.includes(counselor);
+        const typeMatch     = !type     || pair.dataset.types.includes(type);
+        pair.style.display  = (nameMatch && confMatch && counselorMatch && typeMatch) ? '' : 'none';
       });
       updateDupCount();
     }
 
     document.getElementById('dupFilterSearch').addEventListener('input', applyDupFilter);
     document.getElementById('dupFilterConf').addEventListener('change', applyDupFilter);
+    document.getElementById('dupFilterCounselor').addEventListener('change', applyDupFilter);
+    document.getElementById('dupFilterType').addEventListener('change', applyDupFilter);
+    document.getElementById('dupSort').addEventListener('change', () => { sortPairs(); updateDupCount(); });
+
+    // Initial sort (confidence)
+    sortPairs();
 
     // Wire dismiss buttons
     container.querySelectorAll('.dismiss-pair').forEach(btn => {
@@ -850,6 +938,26 @@ async function scanDuplicates() {
         document.getElementById('mergeModalDesc').innerHTML =
           `<strong>${escHtml(_pendingMerge.dropName)}</strong> (B) will be merged into <strong>${escHtml(_pendingMerge.keepName)}</strong> (A).<br>
            All sessions from B will be moved to A. B will be permanently deleted.`;
+        document.getElementById('mergeModalError').classList.add('hidden');
+        document.getElementById('mergeConfirmBtn').disabled = false;
+        document.getElementById('mergeConfirmBtn').textContent = 'Merge';
+        document.getElementById('mergeModal').classList.remove('hidden');
+      });
+    });
+
+    // Wire smart-merge buttons
+    container.querySelectorAll('.smart-merge-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _pendingMerge = {
+          keepId:   btn.dataset.keep,
+          dropId:   btn.dataset.drop,
+          keepName: btn.dataset.keepName,
+          dropName: btn.dataset.dropName,
+          pairKey:  btn.closest('.dup-pair').dataset.key,
+        };
+        document.getElementById('mergeModalDesc').innerHTML =
+          `<strong>${escHtml(_pendingMerge.dropName)}</strong> will be merged into <strong>${escHtml(_pendingMerge.keepName)}</strong> (has more sessions).<br>
+           All sessions will be moved to the kept record. The other record will be permanently deleted.`;
         document.getElementById('mergeModalError').classList.add('hidden');
         document.getElementById('mergeConfirmBtn').disabled = false;
         document.getElementById('mergeConfirmBtn').textContent = 'Merge';
