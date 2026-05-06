@@ -275,13 +275,50 @@
 
     <!-- ══ CHCI panel ════════════════════════════════════════════════════════════ -->
     <div class="reports-panel" id="tab-chci">
-      <div style="margin-bottom:0.5rem;">
-        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">
-          CHCI Reports
+      <div style="margin-bottom:1rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0 0 0.25rem;">
+          CHCI Billing — Upload Rx Office Reports
         </h3>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Upload the three Rx Office exports to generate PHFA invoice Excel files.</p>
       </div>
-      <div class="card">
-        <p style="color:var(--text-muted);font-size:0.875rem;">CHCI reporting coming soon.</p>
+
+      <!-- Upload row -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
+
+        <!-- Face-to-Face -->
+        <div class="card" style="padding:1rem;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.5rem;">Face-to-Face (F2F)</p>
+          <label class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;margin-bottom:0.5rem;">
+            Choose File <input type="file" id="f2fUpload" accept=".xlsx,.xls" style="display:none;">
+          </label>
+          <div id="f2fStatus" style="font-size:0.8125rem;color:var(--text-muted);"></div>
+          <div id="f2fPreview" style="margin-top:0.75rem;"></div>
+        </div>
+
+        <!-- M&D -->
+        <div class="card" style="padding:1rem;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.5rem;">Mortgage Delinquency (M&D)</p>
+          <label class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;margin-bottom:0.5rem;">
+            Choose File <input type="file" id="mdUpload" accept=".xlsx,.xls" style="display:none;">
+          </label>
+          <div id="mdStatus" style="font-size:0.8125rem;color:var(--text-muted);"></div>
+          <div id="mdPreview" style="margin-top:0.75rem;"></div>
+        </div>
+
+        <!-- D&D -->
+        <div class="card" style="padding:1rem;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.5rem;">Default & Delinquency (D&D)</p>
+          <label class="btn btn-secondary btn-sm" style="display:inline-block;cursor:pointer;margin-bottom:0.5rem;">
+            Choose File <input type="file" id="ddUpload" accept=".xlsx,.xls" style="display:none;">
+          </label>
+          <div id="ddStatus" style="font-size:0.8125rem;color:var(--text-muted);"></div>
+          <div id="ddPreview" style="margin-top:0.75rem;"></div>
+        </div>
+
+      </div>
+
+      <div style="text-align:right;">
+        <button id="generateChciBtn" class="btn btn-primary" disabled>Generate Invoices</button>
       </div>
     </div>
 
@@ -371,6 +408,7 @@
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports } from './js/reports.js?v=9';
     import { initHudReports } from './js/hud-reports.js';
+    import { initChciReports } from './js/chci-reports.js';
 
     document.querySelectorAll('.reports-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -384,6 +422,7 @@
     requireAuth(async (user, profile) => {
       setupNav(profile, 'reports');
       await initCdbgReports(user, profile);
+      initChciReports();
       if (profile.role === 'executive_director') {
         await initHudReports(user, profile);
       }
