@@ -76,6 +76,7 @@ scripts/reviews-output/
 
 # Source data files
 *.xlsx
+*.zip
 
 # CMC letter templates
 Andrusa 2025 CMC Letter Template .docx
