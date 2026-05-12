@@ -26,6 +26,7 @@
 
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { amiDisplayLabel } from './data.js';
 import { openDrivePicker, openDriveFolderPicker } from './picker.js';
 import {
   collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
@@ -34,14 +35,18 @@ import {
 // ── AMI helpers ───────────────────────────────────────────────────────────────
 
 const AMI_NUMERIC = {
-  'Extremely Low': 30,
-  'Low':           50,
-  'Moderate':      80,
+  'Extremely Low':    30,
+  'Very Low':         50,
+  'Low':              80,
+  'Moderate':         100,
   'Non Low-Moderate': 120,
 };
 
-function amiNumeric(label) {
-  return AMI_NUMERIC[label] ?? 120;
+function amiNumeric(val) {
+  if (val == null || val === '') return 120;
+  const n = Number(val);
+  if (!isNaN(n) && n > 0) return n;
+  return AMI_NUMERIC[String(val)] ?? 120;
 }
 
 function amiTier(label) {
@@ -171,7 +176,7 @@ function render() {
   let filtered = allRows.filter(r => {
     if (statusFilter && r.status !== statusFilter) return false;
     if (tierFilter   && amiTier(r.amiPercent) !== tierFilter) return false;
-    if (search       && !r.clientName?.toLowerCase().includes(search)) return false;
+    if (search       && !String(r.clientName || '').toLowerCase().includes(search)) return false;
     return true;
   });
 
@@ -200,7 +205,7 @@ function render() {
     return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
       <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
       <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
-      <td>${esc(r.amiPercent)}</td>
+      <td>${esc(amiDisplayLabel(r.amiPercent))}</td>
       <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
       <td>${r.estimatedBudget ? '$' + Number(r.estimatedBudget).toLocaleString() : '—'}</td>
       <td>${r.estimatedDays || '—'}</td>
@@ -405,7 +410,7 @@ async function renderHigLinkResults() {
     <div class="client-selector-item" data-client-id="${c.id}">
       <div>
         <div class="cs-name">${esc(toTitleCase(c.clientName || ''))}</div>
-        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(c.amiPercent || '')}</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(amiDisplayLabel(c.amiPercent))}</div>
       </div>
       <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Link →</span>
     </div>`).join('');
@@ -536,7 +541,7 @@ function renderClientSelector() {
     <div class="client-selector-item" data-client-id="${c.id}">
       <div>
         <div class="cs-name">${esc(toTitleCase(c.clientName))}</div>
-        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.amiPercent || '')} · POST</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(amiDisplayLabel(c.amiPercent))} · POST</div>
       </div>
       <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Add →</span>
     </div>`).join('');
@@ -580,7 +585,8 @@ async function addClientToList(clientId) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function esc(str) {
-  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function toTitleCase(str) {
