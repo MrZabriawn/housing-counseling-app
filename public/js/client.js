@@ -937,8 +937,8 @@ async function loadListMembership() {
       getDocs(query(collection(db, 'ccaList'),    where('clientId', '==', clientId), limit(1))),
       getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId), limit(1))),
     ]);
-    renderListSlot('buyerReadySlot',  ccaSnap.empty  ? null : ccaSnap.docs[0].id,  'Buyer Ready',  'cca-list');
-    renderListSlot('homeRepairsSlot', higSnap.empty  ? null : higSnap.docs[0].id,  'Home Repairs', 'hig-waitlist');
+    renderListSlot('buyerReadySlot',  ccaSnap.empty  ? null : ccaSnap.docs[0].id,  'Buyer Ready',  'buyer-ready');
+    renderListSlot('homeRepairsSlot', higSnap.empty  ? null : higSnap.docs[0].id,  'Home Repairs', 'repair-ready');
   } catch (_) {}
 }
 
@@ -973,9 +973,9 @@ async function addToList(slotId, label, page) {
       enrolledAt:          serverTimestamp(),
       updatedAt:           serverTimestamp(),
       notes:               '',
-      status:              page === 'cca-list' ? 'eligible' : 'waitlisted',
+      status:              page === 'buyer-ready' ? 'eligible' : 'waitlisted',
     };
-    if (page === 'cca-list') {
+    if (page === 'buyer-ready') {
       Object.assign(base, { counselor: _client.counselor || '', closingDate: null, ccaAmount: 0 });
       await addDoc(collection(db, 'ccaList'), base);
     } else {

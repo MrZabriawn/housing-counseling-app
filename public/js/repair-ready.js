@@ -114,7 +114,7 @@ let _editFile      = null;
 let _editFolder    = null;
 
 requireAuth(async (user, profile) => {
-  setupNav(profile, 'hig-waitlist');
+  setupNav(profile, 'repair-ready');
 
   // Load weights from Firestore config
   const wSnap = await getDoc(doc(db, 'config', 'higWeights'));

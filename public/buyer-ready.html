@@ -40,14 +40,20 @@
       <div class="form-group">
         <label>Status</label>
         <select id="filterStatus">
-          <option value="">All</option>
+          <option value="">All Active</option>
           <option value="eligible">Eligible</option>
           <option value="under_contract">Under Contract</option>
+          <option value="closed">Closed</option>
         </select>
       </div>
       <div class="form-group">
         <label>Search</label>
         <input type="text" id="filterSearch" placeholder="Client, counselor, or area…">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:0.2rem;">
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.8125rem;font-weight:600;color:var(--text-muted);">
+          <input type="checkbox" id="showClosed"> Show Closed
+        </label>
       </div>
     </div>
 
@@ -124,7 +130,63 @@
           <select id="editCcaStatus">
             <option value="eligible">Eligible</option>
             <option value="under_contract">Under Contract</option>
+            <option value="closed">Closed</option>
           </select>
+        </div>
+
+        <!-- Closure details — revealed when status = closed -->
+        <div id="closureSection" class="form-group full-width hidden" style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;background:#f8f9fb;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">Closure Details</p>
+          <div class="form-grid" style="margin:0;">
+            <div class="form-group full-width">
+              <label for="editClosureOutcome">Outcome</label>
+              <select id="editClosureOutcome">
+                <option value="purchased">Purchased a Home</option>
+                <option value="did_not_purchase">Did Not Purchase</option>
+              </select>
+            </div>
+
+            <!-- Purchased fields -->
+            <div id="purchasedFields" class="form-group full-width" style="display:contents;">
+              <div class="form-group">
+                <label for="editSettlementDate">Settlement Date</label>
+                <input type="date" id="editSettlementDate">
+              </div>
+              <div class="form-group">
+                <label for="editPurchasePrice">Purchase Price ($)</label>
+                <input type="number" id="editPurchasePrice" min="0" step="1000">
+              </div>
+              <div class="form-group">
+                <label for="editLoanAmount">Loan Amount ($)</label>
+                <input type="number" id="editLoanAmount" min="0" step="1000">
+              </div>
+              <div class="form-group">
+                <label for="editLenderName">Lender</label>
+                <input type="text" id="editLenderName" placeholder="e.g. First Keystone">
+              </div>
+              <div class="form-group">
+                <label for="editCcaProvided">CCA Amount Provided ($)</label>
+                <input type="number" id="editCcaProvided" min="0" step="0.01">
+              </div>
+            </div>
+
+            <!-- Did Not Purchase fields -->
+            <div id="didNotPurchaseFields" class="form-group full-width hidden">
+              <label for="editDnpReason">Reason</label>
+              <select id="editDnpReason">
+                <option value="Could Not Qualify">Could Not Qualify</option>
+                <option value="Withdrew">Withdrew</option>
+                <option value="Circumstances Changed">Circumstances Changed</option>
+                <option value="Referred Elsewhere">Referred Elsewhere</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="editClosureNotes">Closure Notes</label>
+              <textarea id="editClosureNotes" rows="2" placeholder="Optional notes…"></textarea>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label for="editClosingDate">Closing Date</label>
@@ -168,6 +230,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/cca-list.js"></script>
+  <script type="module" src="js/buyer-ready.js"></script>
 </body>
 </html>

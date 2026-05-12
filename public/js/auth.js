@@ -54,8 +54,8 @@ export function setupNav(profile, activePage) {
       <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
       <div class="nav-links">
         <a href="clients.html"      data-page="clients">Counseling Log</a>
-        <a href="cca-list.html"     data-page="cca-list">Buyer Ready</a>
-        <a href="hig-waitlist.html" data-page="hig-waitlist">Repair Ready</a>
+        <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
+        <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
         <a href="outreach.html"     data-page="outreach">Outreach</a>
         <a href="hud-time.html"     data-page="hud-time">My HUD Time</a>
         <a href="operations.html"   data-page="operations">Operations</a>

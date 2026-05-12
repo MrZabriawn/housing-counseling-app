@@ -4,8 +4,8 @@ import {
   collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const STATUS_LABELS = { eligible: 'Eligible', under_contract: 'Under Contract' };
-const STATUS_COLORS = { eligible: 'badge-blue', under_contract: 'badge-green' };
+const STATUS_LABELS = { eligible: 'Eligible', under_contract: 'Under Contract', closed: 'Closed' };
+const STATUS_COLORS = { eligible: 'badge-blue', under_contract: 'badge-green', closed: 'badge-gray' };
 
 let allRows      = [];
 let _allClients  = [];
@@ -14,7 +14,7 @@ let _editingRecord = null;
 let _editingAreas  = [];
 
 requireAuth(async (user, profile) => {
-  setupNav(profile, 'cca-list');
+  setupNav(profile, 'buyer-ready');
 
   const snap = await getDocs(query(collection(db, 'ccaList'), orderBy('enrolledAt', 'asc')));
   allRows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => {
@@ -28,6 +28,9 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('filterSearch').addEventListener('input', render);
   document.getElementById('filterStatus').addEventListener('change', render);
+  document.getElementById('showClosed').addEventListener('change', render);
+  document.getElementById('editCcaStatus').addEventListener('change', toggleClosureSection);
+  document.getElementById('editClosureOutcome').addEventListener('change', togglePurchaseFields);
 
   document.getElementById('ccaEditCancel').addEventListener('click', closeModal);
   document.getElementById('ccaEditSave').addEventListener('click', saveEdit);
@@ -66,11 +69,17 @@ requireAuth(async (user, profile) => {
 // ── Render table ──────────────────────────────────────────────────────────────
 
 function render() {
-  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
-  const status = document.getElementById('filterStatus').value;
+  const search     = document.getElementById('filterSearch').value.toLowerCase().trim();
+  const status     = document.getElementById('filterStatus').value;
+  const showClosed = document.getElementById('showClosed').checked;
 
   const filtered = allRows.filter(r => {
-    if (status && r.status !== status) return false;
+    const isClosed = r.status === 'closed';
+    if (status) {
+      if (r.status !== status) return false;
+    } else {
+      if (isClosed && !showClosed) return false;
+    }
     if (!search) return true;
     if ((r.clientName || '').toLowerCase().includes(search)) return true;
     if ((r.counselor  || '').toLowerCase().includes(search)) return true;
@@ -113,7 +122,7 @@ function render() {
     const statusLabel = STATUS_LABELS[r.status] || r.status || 'Eligible';
     const statusBadge = STATUS_COLORS[r.status] || 'badge-blue';
 
-    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
+    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}" style="${r.status === 'closed' ? 'opacity:0.55;' : ''}">
       <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(r.counselor)}</td>
       <td><span class="badge ${statusBadge}">${statusLabel}</span></td>
@@ -145,6 +154,21 @@ function render() {
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
 
+function toggleClosureSection() {
+  const isClosed = document.getElementById('editCcaStatus').value === 'closed';
+  document.getElementById('closureSection').classList.toggle('hidden', !isClosed);
+  if (isClosed && !document.getElementById('editSettlementDate').value) {
+    document.getElementById('editSettlementDate').value = new Date().toISOString().split('T')[0];
+  }
+  if (isClosed) togglePurchaseFields();
+}
+
+function togglePurchaseFields() {
+  const purchased = document.getElementById('editClosureOutcome').value === 'purchased';
+  document.getElementById('purchasedFields').classList.toggle('hidden', !purchased);
+  document.getElementById('didNotPurchaseFields').classList.toggle('hidden', purchased);
+}
+
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
@@ -161,6 +185,20 @@ function openEditModal(id) {
   document.getElementById('editCcaNotes').value            = r.notes  || '';
   document.getElementById('areaChipInput').value           = '';
   document.getElementById('ccaEditError').classList.add('hidden');
+
+  // Closure fields
+  const isPurchased = r.closureOutcome === 'Purchased' || r.closureOutcomeType === 'purchased';
+  document.getElementById('editClosureOutcome').value    = (r.closureOutcomeRaw === 'did_not_purchase' || (!isPurchased && r.closureOutcome)) ? 'did_not_purchase' : 'purchased';
+  document.getElementById('editSettlementDate').value    = r.closureDate
+    ? (r.closureDate.toDate ? r.closureDate.toDate() : new Date(r.closureDate)).toISOString().split('T')[0]
+    : '';
+  document.getElementById('editPurchasePrice').value     = r.closureOutcomeValue || '';
+  document.getElementById('editLoanAmount').value        = r.loanAmount     || '';
+  document.getElementById('editLenderName').value        = r.lenderName     || '';
+  document.getElementById('editCcaProvided').value       = r.ccaAmountProvided || '';
+  document.getElementById('editDnpReason').value         = r.dnpReason      || 'Could Not Qualify';
+  document.getElementById('editClosureNotes').value      = r.closureNotes   || '';
+  toggleClosureSection();
 
   const naChecked = !!r.closingDateNA;
   document.getElementById('editClosingNA').checked   = naChecked;
@@ -213,21 +251,71 @@ async function saveEdit() {
   saveBtn.textContent = 'Saving…';
 
   try {
-    const dateVal   = document.getElementById('editClosingDate').value;
-    const naChecked = document.getElementById('editClosingNA').checked;
+    const dateVal      = document.getElementById('editClosingDate').value;
+    const naChecked    = document.getElementById('editClosingNA').checked;
+    const status       = document.getElementById('editCcaStatus').value;
+    const isClosed     = status === 'closed';
+    const isPurchased  = document.getElementById('editClosureOutcome').value === 'purchased';
+
+    const closureFields = isClosed ? (() => {
+      if (isPurchased) {
+        const settlementVal = document.getElementById('editSettlementDate').value;
+        return {
+          closureOutcomeRaw:   'purchased',
+          closureOutcome:      'Purchased',
+          closureDate:         settlementVal ? new Date(settlementVal + 'T12:00:00') : null,
+          closureOutcomeValue: parseFloat(document.getElementById('editPurchasePrice').value) || 0,
+          closureAwardType:    'Direct Assistance',
+          loanAmount:          parseFloat(document.getElementById('editLoanAmount').value) || 0,
+          lenderName:          document.getElementById('editLenderName').value.trim(),
+          ccaAmountProvided:   parseFloat(document.getElementById('editCcaProvided').value) || 0,
+          dnpReason:           '',
+          closureNotes:        document.getElementById('editClosureNotes').value.trim(),
+        };
+      } else {
+        const reason = document.getElementById('editDnpReason').value;
+        return {
+          closureOutcomeRaw:   'did_not_purchase',
+          closureOutcome:      `Did Not Purchase — ${reason}`,
+          closureDate:         new Date(),
+          closureOutcomeValue: 0,
+          closureAwardType:    '',
+          loanAmount:          0,
+          lenderName:          '',
+          ccaAmountProvided:   0,
+          dnpReason:           reason,
+          closureNotes:        document.getElementById('editClosureNotes').value.trim(),
+        };
+      }
+    })() : {};
+
     const updates = {
       priceRangeMin:   parseFloat(document.getElementById('editPriceMin').value) || 0,
       priceRangeMax:   parseFloat(document.getElementById('editPriceMax').value) || 0,
       bedrooms:        document.getElementById('editBedrooms').value || '',
       areasOfInterest: [..._editingAreas],
-      status:          document.getElementById('editCcaStatus').value,
+      status,
       closingDateNA:   naChecked,
       closingDate:     (!naChecked && dateVal) ? new Date(dateVal + 'T12:00:00') : null,
       ccaAmount:       parseFloat(document.getElementById('editCcaAmount').value) || 0,
       notes:           document.getElementById('editCcaNotes').value.trim(),
       updatedAt:       serverTimestamp(),
+      ...closureFields,
     };
     await updateDoc(doc(db, 'ccaList', editingId), updates);
+
+    // Sync closure to linked client profile
+    if (isClosed && _editingRecord?.clientId) {
+      await updateDoc(doc(db, 'clients', _editingRecord.clientId), {
+        status:              'closed',
+        closureDate:         closureFields.closureDate || null,
+        closureOutcome:      closureFields.closureOutcome || '',
+        closureOutcomeValue: closureFields.closureOutcomeValue || 0,
+        closureAwardType:    closureFields.closureAwardType || '',
+        ccaAmountProvided:   closureFields.ccaAmountProvided || 0,
+        updatedAt:           serverTimestamp(),
+      });
+    }
 
     const idx = allRows.findIndex(x => x.id === editingId);
     if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
