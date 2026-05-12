@@ -26,7 +26,7 @@
 
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
-import { amiDisplayLabel } from './data.js';
+import { amiDisplayLabel, AWARD_TYPES } from './data.js';
 import { openDrivePicker, openDriveFolderPicker } from './picker.js';
 import {
   collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
@@ -94,6 +94,7 @@ const STATUS_LABELS = {
   er_review:    'ER Review',
   repair_ready: 'Repair Ready',
   complete:     'Complete',
+  closed:       'Closed',
 };
 
 const STATUS_COLORS = {
@@ -101,6 +102,7 @@ const STATUS_COLORS = {
   er_review:    'badge-blue',
   repair_ready: 'badge-green',
   complete:     'badge-gray',
+  closed:       'badge-gray',
 };
 
 let allRows        = [];
@@ -128,9 +130,22 @@ requireAuth(async (user, profile) => {
 
   render();
 
+  // Populate award type options, pre-select Direct Assistance
+  const awardSel = document.getElementById('editClosureAwardType');
+  AWARD_TYPES.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = t;
+    if (t === 'Direct Assistance') opt.selected = true;
+    awardSel.appendChild(opt);
+  });
+
+  // Show/hide closure section when status changes
+  document.getElementById('editHigStatus').addEventListener('change', toggleClosureSection);
+
   document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('filterTier').addEventListener('input', render);
   document.getElementById('filterSearch').addEventListener('input', render);
+  document.getElementById('showClosed').addEventListener('change', render);
 
   document.getElementById('higEditCancel').addEventListener('click', closeModal);
   document.getElementById('higEditSave').addEventListener('click', saveEdit);
@@ -172,11 +187,17 @@ function render() {
   const statusFilter = document.getElementById('filterStatus').value;
   const tierFilter   = document.getElementById('filterTier').value;
   const search       = document.getElementById('filterSearch').value.toLowerCase();
+  const showClosed   = document.getElementById('showClosed').checked;
 
   let filtered = allRows.filter(r => {
-    if (statusFilter && r.status !== statusFilter) return false;
-    if (tierFilter   && amiTier(r.amiPercent) !== tierFilter) return false;
-    if (search       && !String(r.clientName || '').toLowerCase().includes(search)) return false;
+    const isClosed = r.status === 'closed';
+    if (statusFilter) {
+      if (r.status !== statusFilter) return false;
+    } else {
+      if (isClosed && !showClosed) return false;
+    }
+    if (tierFilter && amiTier(r.amiPercent) !== tierFilter) return false;
+    if (search     && !String(r.clientName || '').toLowerCase().includes(search)) return false;
     return true;
   });
 
@@ -202,7 +223,7 @@ function render() {
       : '';
     const docs = (docLink || folderLink) ? (docLink + folderLink) : '<span class="text-muted">—</span>';
 
-    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
+    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}" style="${r.status === 'closed' ? 'opacity:0.55;' : ''}">
       <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
       <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
       <td>${esc(amiDisplayLabel(r.amiPercent))}</td>
@@ -234,6 +255,14 @@ function render() {
   });
 }
 
+function toggleClosureSection() {
+  const isClosed = document.getElementById('editHigStatus').value === 'closed';
+  document.getElementById('closureSection').classList.toggle('hidden', !isClosed);
+  if (isClosed && !document.getElementById('editClosureDate').value) {
+    document.getElementById('editClosureDate').value = new Date().toISOString().split('T')[0];
+  }
+}
+
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
@@ -244,8 +273,17 @@ function openEditModal(id) {
   document.getElementById('editHigScope').value        = r.scopeOfWork     || '';
   document.getElementById('editHigBudget').value       = r.estimatedBudget || '';
   document.getElementById('editHigDays').value         = r.estimatedDays   || '';
-  document.getElementById('editHigStatus').value       = r.status          || 'waitlisted';
+  document.getElementById('editHigStatus').value       = r.status          || 'needs_scope';
   document.getElementById('editHigNotes').value        = r.notes           || '';
+
+  // Closure fields
+  document.getElementById('editClosureDate').value     = r.closureDate
+    ? (r.closureDate.toDate ? r.closureDate.toDate() : new Date(r.closureDate)).toISOString().split('T')[0]
+    : '';
+  document.getElementById('editClosureValue').value    = r.closureOutcomeValue || '';
+  document.getElementById('editClosureAwardType').value = r.closureAwardType || 'Direct Assistance';
+  document.getElementById('editClosureOutcome').value  = r.closureOutcome  || '';
+  toggleClosureSection();
 
   _editFile   = r.driveFileId   ? { id: r.driveFileId,   name: r.driveFileName   || '', url: r.driveFileUrl   || '' } : null;
   _editFolder = r.driveFolderId ? { id: r.driveFolderId, name: r.driveFolderName || '', url: r.driveFolderUrl || '' } : null;
@@ -346,11 +384,22 @@ async function saveEdit() {
   saveBtn.textContent = 'Saving…';
 
   try {
+    const status = document.getElementById('editHigStatus').value;
+    const isClosed = status === 'closed';
+
+    const closureDateVal = document.getElementById('editClosureDate').value;
+    const closureFields = isClosed ? {
+      closureDate:          closureDateVal ? new Date(closureDateVal + 'T12:00:00') : null,
+      closureOutcomeValue:  parseFloat(document.getElementById('editClosureValue').value) || 0,
+      closureAwardType:     document.getElementById('editClosureAwardType').value,
+      closureOutcome:       document.getElementById('editClosureOutcome').value.trim(),
+    } : {};
+
     const updates = {
       scopeOfWork:     document.getElementById('editHigScope').value.trim(),
       estimatedBudget: parseFloat(document.getElementById('editHigBudget').value) || 0,
       estimatedDays:   parseInt(document.getElementById('editHigDays').value, 10) || 0,
-      status:          document.getElementById('editHigStatus').value,
+      status,
       notes:           document.getElementById('editHigNotes').value.trim(),
       driveFileId:     _editFile?.id    || '',
       driveFileName:   _editFile?.name  || '',
@@ -359,8 +408,18 @@ async function saveEdit() {
       driveFolderName: _editFolder?.name || '',
       driveFolderUrl:  _editFolder?.url  || '',
       updatedAt:       serverTimestamp(),
+      ...closureFields,
     };
     await updateDoc(doc(db, 'higWaitlist', editingId), updates);
+
+    // Sync closure to linked client profile
+    if (isClosed && _editingRecord?.clientId) {
+      await updateDoc(doc(db, 'clients', _editingRecord.clientId), {
+        status:              'closed',
+        ...closureFields,
+        updatedAt:           serverTimestamp(),
+      });
+    }
 
     const idx = allRows.findIndex(x => x.id === editingId);
     if (idx !== -1) allRows[idx] = { ...allRows[idx], ...updates };
