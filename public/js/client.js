@@ -177,30 +177,165 @@ async function loadSessions() {
   renderSessionsTable(_sessions);
 }
 
-// Check cmcLog for any letter linked to this client and show the banner
+// Check cmcLog for any letter linked to this client and show the banner.
+// If none is linked, show a button letting the counselor link one.
 async function loadCmcLink() {
+  const banner = document.getElementById('cmcBanner');
   try {
     const snap = await getDocs(
       query(collection(db, 'cmcLog'), where('linkedClientId', '==', clientId))
     );
-    const banner = document.getElementById('cmcBanner');
-    if (snap.empty) return;
 
-    // Build one line per linked CMC letter (usually just one, but handle multiples)
-    const lines = snap.docs.map(d => {
-      const r = d.data();
-      const dateStr = r.dateSent
-        ? (r.dateSent.toDate ? r.dateSent.toDate() : new Date(r.dateSent))
-            .toLocaleDateString('en-US', { timeZone: 'UTC' })
-        : '';
-      return `CMC letter sent${dateStr ? ' ' + dateStr : ''}${r.counselor ? ' by ' + r.counselor : ''}`;
-    });
-
-    banner.innerHTML = '&#9993; ' + lines.join(' &nbsp;·&nbsp; ');
-    banner.classList.remove('hidden');
+    if (!snap.empty) {
+      const lines = snap.docs.map(d => {
+        const r = d.data();
+        const dateStr = r.dateSent
+          ? (r.dateSent.toDate ? r.dateSent.toDate() : new Date(r.dateSent))
+              .toLocaleDateString('en-US', { timeZone: 'UTC' })
+          : '';
+        return `CMC letter sent${dateStr ? ' ' + dateStr : ''}${r.counselor ? ' by ' + r.counselor : ''}`;
+      });
+      banner.innerHTML = '&#9993; ' + lines.join(' &nbsp;·&nbsp; ');
+      banner.classList.remove('hidden');
+    } else {
+      banner.innerHTML =
+        '<span style="color:var(--text-muted);">No CMC letter linked.</span>' +
+        '<button id="openCmcLinkBtn" class="btn btn-sm btn-secondary" style="margin-left:0.75rem;font-size:0.78rem;">Link CMC Letter</button>';
+      banner.classList.remove('hidden');
+      document.getElementById('openCmcLinkBtn').addEventListener('click', openCmcLinkPanel);
+    }
   } catch (_) {
     // cmcLog collection may not exist yet — silently ignore
   }
+}
+
+async function openCmcLinkPanel() {
+  const panel = document.getElementById('cmcLinkPanel');
+  panel.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;padding:0.5rem 0;">Loading letters…</p>';
+  panel.classList.remove('hidden');
+
+  try {
+    const snap = await getDocs(query(collection(db, 'cmcLog'), orderBy('dateSent', 'desc')));
+    const unlinked = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => !r.linkedClientId);
+
+    if (!unlinked.length) {
+      panel.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;padding:0.5rem 0;">No unlinked CMC letters found.</p>';
+      return;
+    }
+
+    function rowHtml(r) {
+      const dateStr = r.dateSent
+        ? (r.dateSent.toDate ? r.dateSent.toDate() : new Date(r.dateSent))
+            .toLocaleDateString('en-US', { timeZone: 'UTC' })
+        : '—';
+      return `<div class="cmc-link-row" data-id="${escAttr(r.id)}"
+        style="padding:0.5rem 0.75rem;cursor:pointer;border-bottom:1px solid #f0f1f3;font-size:0.875rem;">
+        <strong>${escHtml(r.recipientName || '—')}</strong>
+        <span style="color:var(--text-muted);font-size:0.8rem;margin-left:0.5rem;">${escHtml(dateStr)}${r.counselor ? ' · ' + escHtml(r.counselor) : ''}</span>
+      </div>`;
+    }
+
+    panel.innerHTML = `
+      <div style="border:1px solid var(--primary);border-radius:var(--radius);padding:1rem;background:#f0f4ff;">
+        <div style="font-weight:600;margin-bottom:0.5rem;font-size:0.875rem;">Select CMC Letter to Link</div>
+        <input type="text" id="cmcLinkSearch" placeholder="Search by name…"
+          style="width:100%;margin-bottom:0.5rem;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem;">
+        <div id="cmcLinkList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff;">
+          ${unlinked.map(rowHtml).join('')}
+        </div>
+        <div id="cmcLinkSelected" style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-muted);">No letter selected.</div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+          <button id="cmcLinkConfirmBtn" class="btn btn-primary btn-sm" disabled>Link &amp; Add to Sessions</button>
+          <button id="cmcLinkCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        <p id="cmcLinkError" class="hidden" style="color:var(--danger);font-size:0.8rem;margin-top:0.4rem;"></p>
+      </div>`;
+
+    let _selectedCmc = null;
+
+    document.getElementById('cmcLinkSearch').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      panel.querySelectorAll('.cmc-link-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+
+    panel.querySelectorAll('.cmc-link-row').forEach(row => {
+      row.addEventListener('mouseenter', () => { if (row.style.background !== 'var(--primary-light)') row.style.background = '#f8f9fb'; });
+      row.addEventListener('mouseleave', () => { if (row.style.background !== 'var(--primary-light)') row.style.background = ''; });
+      row.addEventListener('click', () => {
+        panel.querySelectorAll('.cmc-link-row').forEach(r => { r.style.background = ''; });
+        row.style.background = 'var(--primary-light)';
+        _selectedCmc = unlinked.find(r => r.id === row.dataset.id);
+        const dateStr = _selectedCmc.dateSent
+          ? ((_selectedCmc.dateSent.toDate ? _selectedCmc.dateSent.toDate() : new Date(_selectedCmc.dateSent))
+              .toLocaleDateString('en-US', { timeZone: 'UTC' }))
+          : '—';
+        document.getElementById('cmcLinkSelected').textContent =
+          `Selected: ${_selectedCmc.recipientName || '—'} — ${dateStr}`;
+        document.getElementById('cmcLinkSelected').style.color = 'var(--primary)';
+        document.getElementById('cmcLinkConfirmBtn').disabled = false;
+      });
+    });
+
+    document.getElementById('cmcLinkCancelBtn').addEventListener('click', () => {
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+    });
+
+    document.getElementById('cmcLinkConfirmBtn').addEventListener('click', async () => {
+      if (!_selectedCmc) return;
+      const btn   = document.getElementById('cmcLinkConfirmBtn');
+      const errEl = document.getElementById('cmcLinkError');
+      btn.disabled    = true;
+      btn.textContent = 'Linking…';
+      errEl.classList.add('hidden');
+      try {
+        await performCmcLink(_selectedCmc);
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+      } catch (err) {
+        errEl.textContent = 'Failed: ' + err.message;
+        errEl.classList.remove('hidden');
+        btn.disabled    = false;
+        btn.textContent = 'Link & Add to Sessions';
+      }
+    });
+
+  } catch (err) {
+    panel.innerHTML = `<p class="error-msg" style="padding:0.5rem 0;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
+async function performCmcLink(cmcRecord) {
+  // 1. Mark the CMC log record as linked to this client
+  await updateDoc(doc(db, 'cmcLog', cmcRecord.id), {
+    linkedClientId:   clientId,
+    linkedClientName: _client?.clientName || '',
+    updatedAt:        serverTimestamp(),
+  });
+
+  // 2. Add a session entry so the outreach contact appears in session history
+  const letterDate = cmcRecord.dateSent
+    ? (cmcRecord.dateSent.toDate ? cmcRecord.dateSent.toDate() : new Date(cmcRecord.dateSent))
+    : new Date();
+
+  await addDoc(collection(db, 'clients', clientId, 'sessions'), {
+    date:           letterDate,
+    counselor:      cmcRecord.counselor || _profile?.name || '',
+    caseStatus:     'CMC Outreach',
+    notes:          `CMC letter sent to ${cmcRecord.recipientName || 'client'}`,
+    source:         'cmc',
+    cmcLogId:       cmcRecord.id,
+    hours:          0,
+    createdAt:      serverTimestamp(),
+    clientSnapshot: buildClientSnapshot(),
+  });
+
+  // 3. Refresh denormalized counts, sessions table, and banner
+  await refreshClientDenormalized();
+  await loadSessions();
+  await loadCmcLink();
 }
 
 // ── Build selects ─────────────────────────────────────────────────────────────
