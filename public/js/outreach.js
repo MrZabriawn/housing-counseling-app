@@ -395,7 +395,7 @@ async function loadCalls() {
 function renderCallLog(calls) {
   const tbody = document.getElementById('callLogBody');
   if (!calls.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">No calls logged yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">No calls logged yet.</td></tr>';
     return;
   }
 
@@ -407,6 +407,9 @@ function renderCallLog(calls) {
       ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;">${escHtml(toTitleCase(c.contactName || ''))}</a>`
       : escHtml(toTitleCase(c.contactName || '—'));
     const phoneStr = c.phone ? ` <span style="font-size:0.78rem;color:var(--text-muted);">${escHtml(c.phone)}</span>` : '';
+    const linkedCell = c.linkedClientId
+      ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;font-size:0.875rem;">${escHtml(c.linkedClientName || 'View Client')}</a>`
+      : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`;
 
     return `<tr>
       <td style="white-space:nowrap;">${fmtDate(c.date)}</td>
@@ -415,8 +418,16 @@ function renderCallLog(calls) {
       <td style="font-size:0.875rem;">${escHtml(c.counselor || '—')}</td>
       <td style="font-size:0.875rem;">${escHtml(c.outcome || '—')}</td>
       <td style="font-size:0.8rem;color:var(--text-muted);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escAttr(c.notes || '')}">${escHtml(c.notes || '—')}</td>
+      <td>${linkedCell}</td>
     </tr>`;
   }).join('');
+
+  tbody.querySelectorAll('.call-link-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const record = _allCalls.find(r => r.id === btn.dataset.id);
+      if (record) openCmcLinkModal(record, 'call');
+    });
+  });
 }
 
 // ── Call Modal ────────────────────────────────────────────────────────────────
@@ -698,10 +709,12 @@ function mercerLetter(date, name, addr1, addr2, propAddr, lender, counselor, log
 
 let _cmcLinkRecord      = null;
 let _cmcSelectedClient  = null;
+let _linkTargetType     = 'cmc'; // 'cmc' | 'call'
 
-function openCmcLinkModal(record) {
+function openCmcLinkModal(record, targetType = 'cmc') {
   _cmcLinkRecord     = record;
   _cmcSelectedClient = null;
+  _linkTargetType    = targetType;
   document.getElementById('cmcLinkSubtitle').textContent =
     `Letter to: ${record.recipientName || '—'} · ${fmtDate(record.dateSent)}`;
   document.getElementById('cmcClientSearch').value = '';
@@ -786,35 +799,45 @@ async function confirmCmcLink() {
     const clientId   = _cmcSelectedClient.id;
     const clientName = _cmcSelectedClient.clientName || '';
 
-    // Update cmcLog record
-    await updateDoc(doc(db, 'cmcLog', _cmcLinkRecord.id), {
-      linkedClientId:   clientId,
-      linkedClientName: clientName,
-      updatedAt:        serverTimestamp(),
-    });
-
-    // Add read-only session on client profile
-    const letterDate = _cmcLinkRecord.dateSent
-      ? (_cmcLinkRecord.dateSent.toDate ? _cmcLinkRecord.dateSent.toDate() : new Date(_cmcLinkRecord.dateSent))
-      : new Date();
-    await addDoc(collection(db, 'clients', clientId, 'sessions'), {
-      date:        letterDate,
-      counselor:   _cmcLinkRecord.counselor || '',
-      caseStatus:  'CMC Outreach',
-      notes:       `CMC letter sent to ${_cmcLinkRecord.recipientName || 'client'}`,
-      source:      'cmc',
-      cmcLogId:    _cmcLinkRecord.id,
-      hours:       0,
-      createdAt:   serverTimestamp(),
-    });
-
-    // Update local cache and re-render
-    const idx = _allRecords.findIndex(r => r.id === _cmcLinkRecord.id);
-    if (idx !== -1) {
-      _allRecords[idx] = { ..._allRecords[idx], linkedClientId: clientId, linkedClientName: clientName };
+    if (_linkTargetType === 'call') {
+      // Link call record — no session added (call lives in phone log)
+      await updateDoc(doc(db, 'outreachCalls', _cmcLinkRecord.id), {
+        linkedClientId:   clientId,
+        linkedClientName: clientName,
+        updatedAt:        serverTimestamp(),
+      });
+      const idx = _allCalls.findIndex(r => r.id === _cmcLinkRecord.id);
+      if (idx !== -1) {
+        _allCalls[idx] = { ..._allCalls[idx], linkedClientId: clientId, linkedClientName: clientName };
+      }
+      renderCallLog(_allCalls);
+    } else {
+      // Link CMC letter — also creates a session on the client profile
+      await updateDoc(doc(db, 'cmcLog', _cmcLinkRecord.id), {
+        linkedClientId:   clientId,
+        linkedClientName: clientName,
+        updatedAt:        serverTimestamp(),
+      });
+      const letterDate = _cmcLinkRecord.dateSent
+        ? (_cmcLinkRecord.dateSent.toDate ? _cmcLinkRecord.dateSent.toDate() : new Date(_cmcLinkRecord.dateSent))
+        : new Date();
+      await addDoc(collection(db, 'clients', clientId, 'sessions'), {
+        date:        letterDate,
+        counselor:   _cmcLinkRecord.counselor || '',
+        caseStatus:  'CMC Outreach',
+        notes:       `CMC letter sent to ${_cmcLinkRecord.recipientName || 'client'}`,
+        source:      'cmc',
+        cmcLogId:    _cmcLinkRecord.id,
+        hours:       0,
+        createdAt:   serverTimestamp(),
+      });
+      const idx = _allRecords.findIndex(r => r.id === _cmcLinkRecord.id);
+      if (idx !== -1) {
+        _allRecords[idx] = { ..._allRecords[idx], linkedClientId: clientId, linkedClientName: clientName };
+      }
+      renderTable(_allRecords);
+      renderStats(_allRecords);
     }
-    renderTable(_allRecords);
-    renderStats(_allRecords);
     closeCmcLinkModal();
   } catch (err) {
     errEl.textContent = 'Link failed: ' + err.message;
