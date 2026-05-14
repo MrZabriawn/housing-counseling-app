@@ -26,7 +26,7 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import {
-  collection, addDoc, getDocs, query, orderBy, serverTimestamp
+  collection, addDoc, getDocs, getDoc, doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let _county       = 'dan';    // active CMC template: 'dan' | 'andrusa' | 'mercer'
@@ -53,6 +53,25 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('batchDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('callDate').value  = new Date().toISOString().split('T')[0];
+
+  // Tab switching
+  document.querySelectorAll('.outreach-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.outreach-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.outreach-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.panel).classList.add('active');
+    });
+  });
+
+  // CMC link modal wiring
+  document.getElementById('cmcLinkCancel').addEventListener('click', closeCmcLinkModal);
+  document.getElementById('cmcLinkModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('cmcLinkModal')) closeCmcLinkModal();
+  });
+  document.getElementById('cmcClientSearch').addEventListener('input', renderCmcClientSearch);
+  document.getElementById('cmcClientClear').addEventListener('click', clearCmcClientSelection);
+  document.getElementById('cmcLinkConfirm').addEventListener('click', confirmCmcLink);
 
   await loadCounselorOptions();
 
@@ -302,7 +321,7 @@ function renderTable(records) {
   tbody.innerHTML = records.map(r => {
     const linkedCell = r.linkedClientId
       ? `<a href="client.html?id=${r.linkedClientId}" style="font-weight:600;">${escHtml(r.linkedClientName || 'View Client')}</a>`
-      : '<span style="color:var(--text-muted);">—</span>';
+      : `<button class="btn btn-secondary btn-sm cmc-link-btn" data-id="${escAttr(r.id)}" style="white-space:nowrap;">Link to Client</button>`;
     const mailingDisplay = [r.mailingAddress, r.mailingAddress2].filter(Boolean).join(', ');
 
     return `<tr>
@@ -319,6 +338,13 @@ function renderTable(records) {
 
   tbody.querySelectorAll('.row-cb').forEach(cb => {
     cb.addEventListener('change', updateGenerateBar);
+  });
+
+  tbody.querySelectorAll('.cmc-link-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const record = _allRecords.find(r => r.id === btn.dataset.id);
+      if (record) openCmcLinkModal(record);
+    });
   });
 }
 
@@ -666,6 +692,136 @@ function mercerLetter(date, name, addr1, addr2, propAddr, lender, counselor, log
     </div>
   </div>
 </div>`;
+}
+
+// ── CMC → Client link modal ───────────────────────────────────────────────────
+
+let _cmcLinkRecord      = null;
+let _cmcSelectedClient  = null;
+
+function openCmcLinkModal(record) {
+  _cmcLinkRecord     = record;
+  _cmcSelectedClient = null;
+  document.getElementById('cmcLinkSubtitle').textContent =
+    `Letter to: ${record.recipientName || '—'} · ${fmtDate(record.dateSent)}`;
+  document.getElementById('cmcClientSearch').value = '';
+  document.getElementById('cmcClientResults').innerHTML =
+    '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>';
+  document.getElementById('cmcClientSelected').classList.add('hidden');
+  document.getElementById('cmcLinkConfirm').disabled = true;
+  document.getElementById('cmcLinkError').classList.add('hidden');
+  document.getElementById('cmcLinkModal').classList.remove('hidden');
+  document.getElementById('cmcClientSearch').focus();
+}
+
+function closeCmcLinkModal() {
+  _cmcLinkRecord     = null;
+  _cmcSelectedClient = null;
+  document.getElementById('cmcLinkModal').classList.add('hidden');
+}
+
+async function renderCmcClientSearch() {
+  const q       = document.getElementById('cmcClientSearch').value.toLowerCase().trim();
+  const results = document.getElementById('cmcClientResults');
+  if (!q) {
+    results.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>';
+    return;
+  }
+
+  if (!_allClients.length) {
+    results.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Loading…</div>';
+    try {
+      const snap = await getDocs(collection(db, 'clients'));
+      _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) { _allClients = []; }
+  }
+
+  const matches = _allClients.filter(c =>
+    (c.clientName || '').toLowerCase().includes(q) ||
+    (c.counselor  || '').toLowerCase().includes(q) ||
+    (c.rxNumbers  || []).some(rx => String(rx).toLowerCase().includes(q))
+  ).slice(0, 20);
+
+  if (!matches.length) {
+    results.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">No clients found.</div>';
+    return;
+  }
+
+  results.innerHTML = matches.map(c => `
+    <div class="csr-item" data-client-id="${escAttr(c.id)}">
+      <div class="csr-name">${escHtml(c.clientName || '—')}</div>
+      <div class="csr-meta">${escHtml(c.counselor || '')} · ${escHtml(c.counselingType || '')}</div>
+    </div>`).join('');
+
+  results.querySelectorAll('.csr-item').forEach(item => {
+    item.addEventListener('click', () => {
+      _cmcSelectedClient = _allClients.find(c => c.id === item.dataset.clientId);
+      document.getElementById('cmcClientSelectedName').textContent = _cmcSelectedClient?.clientName || '';
+      document.getElementById('cmcClientSelected').classList.remove('hidden');
+      document.getElementById('cmcClientResults').innerHTML = '';
+      document.getElementById('cmcClientSearch').value = '';
+      document.getElementById('cmcLinkConfirm').disabled = false;
+    });
+  });
+}
+
+function clearCmcClientSelection() {
+  _cmcSelectedClient = null;
+  document.getElementById('cmcClientSelected').classList.add('hidden');
+  document.getElementById('cmcLinkConfirm').disabled = true;
+  document.getElementById('cmcClientSearch').value = '';
+  document.getElementById('cmcClientResults').innerHTML =
+    '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>';
+}
+
+async function confirmCmcLink() {
+  if (!_cmcLinkRecord || !_cmcSelectedClient) return;
+  const btn   = document.getElementById('cmcLinkConfirm');
+  const errEl = document.getElementById('cmcLinkError');
+  btn.disabled    = true;
+  btn.textContent = 'Linking…';
+  errEl.classList.add('hidden');
+
+  try {
+    const clientId   = _cmcSelectedClient.id;
+    const clientName = _cmcSelectedClient.clientName || '';
+
+    // Update cmcLog record
+    await updateDoc(doc(db, 'cmcLog', _cmcLinkRecord.id), {
+      linkedClientId:   clientId,
+      linkedClientName: clientName,
+      updatedAt:        serverTimestamp(),
+    });
+
+    // Add read-only session on client profile
+    const letterDate = _cmcLinkRecord.dateSent
+      ? (_cmcLinkRecord.dateSent.toDate ? _cmcLinkRecord.dateSent.toDate() : new Date(_cmcLinkRecord.dateSent))
+      : new Date();
+    await addDoc(collection(db, 'clients', clientId, 'sessions'), {
+      date:        letterDate,
+      counselor:   _cmcLinkRecord.counselor || '',
+      caseStatus:  'CMC Outreach',
+      notes:       `CMC letter sent to ${_cmcLinkRecord.recipientName || 'client'}`,
+      source:      'cmc',
+      cmcLogId:    _cmcLinkRecord.id,
+      hours:       0,
+      createdAt:   serverTimestamp(),
+    });
+
+    // Update local cache and re-render
+    const idx = _allRecords.findIndex(r => r.id === _cmcLinkRecord.id);
+    if (idx !== -1) {
+      _allRecords[idx] = { ..._allRecords[idx], linkedClientId: clientId, linkedClientName: clientName };
+    }
+    renderTable(_allRecords);
+    renderStats(_allRecords);
+    closeCmcLinkModal();
+  } catch (err) {
+    errEl.textContent = 'Link failed: ' + err.message;
+    errEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'Link & Add to Sessions';
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -859,7 +859,7 @@ function renderSessionsTable(sessions) {
       <td style="text-align:right">${s.hours || '—'}</td>
       <td>${escHtml(s.caseStatus || '—')}</td>
       <td class="session-notes" title="${escHtml(s.notes || '')}">${escHtml(s.notes || '—')}</td>
-      <td><button class="btn btn-sm btn-secondary" data-session-id="${s.id}">Edit</button></td>
+      <td>${s.source === 'cmc' ? '' : `<button class="btn btn-sm btn-secondary" data-session-id="${s.id}">Edit</button>`}</td>
     </tr>`).join('');
 
   tbody.querySelectorAll('button[data-session-id]').forEach(btn => {
