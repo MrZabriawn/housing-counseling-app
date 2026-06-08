@@ -41,6 +41,7 @@ requireAuth(async (user, profile) => {
   populateFilters();
   restoreFilters();
   await loadClients();
+  showIncompleteBanner();
 
   document.getElementById('filterForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -724,4 +725,62 @@ async function saveWs() {
 function wsAddAnother() {
   const btn = document.getElementById('wsAddAnotherBtn');
   openWsModal(btn.dataset.name || '', btn.dataset.date || '');
+}
+
+// ── Incomplete files banner ────────────────────────────────────────────────────
+function showIncompleteBanner() {
+  const banner = document.getElementById('incompleteBanner');
+  if (!banner || !_user || !_profile) return;
+
+  const storageKey = `incompleteHidden-${_user.uid}`;
+  if (sessionStorage.getItem(storageKey)) return;
+
+  const myName    = _profile.name || '';
+  const incomplete = allClients
+    .filter(c => c.counselor === myName && c.status !== 'closed')
+    .reduce((acc, c) => {
+      const issues = [];
+      if (!c.amiPercent)               issues.push('AMI');
+      if (!c.reCode)                   issues.push('R/E');
+      if (!c.rxNumbers?.length)        issues.push('Rx/Guarantor');
+      if (issues.length) acc.push({ ...c, issues });
+      return acc;
+    }, []);
+
+  if (!incomplete.length) return;
+
+  const shown = incomplete.slice(0, 5);
+  const extra = incomplete.length - 5;
+
+  const rows = shown.map(c => {
+    const chips = c.issues.map(i =>
+      `<span style="background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.7rem;font-weight:700;">${escHtml(i)}</span>`
+    ).join(' ');
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.2rem 0;border-bottom:1px solid rgba(0,0,0,0.06);">
+      <a href="client.html?id=${escAttr(c.id)}" style="font-weight:600;font-size:0.8125rem;color:var(--primary);">${escHtml(c.clientName || '—')}</a>
+      <span style="display:flex;gap:0.25rem;">${chips}</span>
+    </div>`;
+  }).join('');
+
+  const moreHtml = extra > 0
+    ? `<div style="margin-top:0.35rem;font-size:0.78rem;color:var(--text-muted);">…and ${extra} more &nbsp;·&nbsp; <a href="reports.html?tab=incomplete" style="color:var(--primary);font-weight:600;">Review all →</a></div>`
+    : `<div style="margin-top:0.35rem;font-size:0.78rem;"><a href="reports.html?tab=incomplete" style="color:var(--primary);font-weight:600;">Review all incomplete files →</a></div>`;
+
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.8125rem;margin-bottom:0.4rem;color:#92400e;">
+          ${incomplete.length} client file${incomplete.length !== 1 ? 's' : ''} with missing info needed for billing
+        </div>
+        ${rows}
+        ${moreHtml}
+      </div>
+      <button id="dismissIncompleteBtn" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.25rem;padding:0;line-height:1;flex-shrink:0;" title="Dismiss">&times;</button>
+    </div>`;
+
+  banner.classList.remove('hidden');
+  document.getElementById('dismissIncompleteBtn').addEventListener('click', () => {
+    sessionStorage.setItem(storageKey, '1');
+    banner.classList.add('hidden');
+  });
 }

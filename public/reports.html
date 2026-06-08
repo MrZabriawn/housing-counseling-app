@@ -91,6 +91,7 @@
       <button class="reports-tab" data-tab="tab-court">Court</button>
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
       <button class="reports-tab" id="hudTabBtn" data-tab="tab-hud">HUD</button>
+      <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
     </div>
 
     <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
@@ -402,6 +403,30 @@
       </div>
 
     </div>
+
+    <!-- ══ Incomplete Files panel ════════════════════════════════════════════════ -->
+    <div class="reports-panel no-print" id="tab-incomplete">
+      <div style="margin-bottom:1rem;" class="no-print">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:0.75rem;">
+          Incomplete Client Files
+        </h3>
+        <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+          <div class="form-group" style="margin:0;min-width:180px;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Counselor</label>
+            <select id="incompleteCounselor" style="font-size:0.875rem;">
+              <option value="">All Counselors</option>
+            </select>
+          </div>
+          <button id="loadIncompleteBtn" class="btn btn-primary btn-sm">Load</button>
+        </div>
+      </div>
+      <div id="incompleteResult"></div>
+      <div id="incompleteSaveBar" class="hidden" style="display:none;margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
+        <button id="incompletesSaveBtn" class="btn btn-primary btn-sm">Save AMI &amp; R/E Changes</button>
+        <span id="incompleteSaveMsg" class="hidden" style="font-size:0.8125rem;"></span>
+      </div>
+    </div>
+
   </main>
 
   <script type="module">
@@ -409,14 +434,19 @@
     import { initCdbgReports } from './js/reports.js?v=9';
     import { initHudReports } from './js/hud-reports.js';
     import { initChciReports } from './js/chci-reports.js';
+    import { initIncompleteReport } from './js/incomplete-report.js';
+
+    function switchReportsTab(tabId) {
+      document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.reports-panel').forEach(p => p.classList.remove('active'));
+      const btn = document.querySelector(`.reports-tab[data-tab="${tabId}"]`);
+      if (btn) btn.classList.add('active');
+      const panel = document.getElementById(tabId);
+      if (panel) panel.classList.add('active');
+    }
 
     document.querySelectorAll('.reports-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.reports-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
-      });
+      btn.addEventListener('click', () => switchReportsTab(btn.dataset.tab));
     });
 
     requireAuth(async (user, profile) => {
@@ -425,6 +455,13 @@
       initChciReports();
       if (profile.role === 'executive_director') {
         await initHudReports(user, profile);
+      }
+      await initIncompleteReport(user, profile);
+
+      // Auto-switch to incomplete tab if linked from the banner
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'incomplete') {
+        switchReportsTab('tab-incomplete');
       }
     });
   </script>

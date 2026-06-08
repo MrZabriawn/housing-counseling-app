@@ -57,7 +57,8 @@ export function setupNav(profile, activePage) {
         <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
         <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
         <a href="outreach.html"     data-page="outreach">Outreach</a>
-        <a href="hud-time.html"     data-page="hud-time">My HUD Time</a>
+        <a href="hud-time.html"     data-page="hud-time">HUD</a>
+        <a href="training.html"     data-page="training">Training</a>
         <a href="operations.html"   data-page="operations">Operations</a>
         <a href="reports.html"      data-page="reports">Reports</a>
         <a href="settings.html"     data-page="settings" class="admin-only hidden">Settings</a>
