@@ -14,9 +14,9 @@ const PAR_ROWS = {
 };
 
 const SECTION_LABELS = {
-  'PAR-S1': 'Section 1',
-  'PAR-S2': 'Section 2',
-  'PAR-S3': 'Section 3',
+  'PAR-S1': 'Section 1 – Direct Service',
+  'PAR-S2': 'Section 2 – Training',
+  'PAR-S3': 'Section 3 – Marketing',
   'CML':    'CML',
 };
 
@@ -337,9 +337,9 @@ function buildAddForm(dateStr) {
   return `
     <div class="add-entry-form" onclick="event.stopPropagation()">
       <div class="section-radios">
-        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S1" checked> Section 1</label>
-        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S2"> Section 2</label>
-        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S3"> Section 3</label>
+        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S1" checked> Section 1 – Direct Service</label>
+        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S2"> Section 2 – Training</label>
+        <label><input type="radio" name="parSection_${dateStr}" class="par-section-radio" value="PAR-S3"> Section 3 – Marketing</label>
       </div>
       <div class="add-form-row">
         <div class="form-group" style="flex:0 0 210px;">
