@@ -1075,9 +1075,11 @@ async function scanDuplicates() {
           dropName: btn.dataset.dropName,
           pairKey:  btn.closest('.dup-pair').dataset.key,
         };
+        const keptLabel = btn.textContent.trim() === 'Keep A' ? 'A' : 'B';
+        const dropLabel = keptLabel === 'A' ? 'B' : 'A';
         document.getElementById('mergeModalDesc').innerHTML =
-          `<strong>${escHtml(_pendingMerge.dropName)}</strong> (B) will be merged into <strong>${escHtml(_pendingMerge.keepName)}</strong> (A).<br>
-           All sessions from B will be moved to A. B will be permanently deleted.`;
+          `<strong>${escHtml(_pendingMerge.dropName)}</strong> (${dropLabel}) will be merged into <strong>${escHtml(_pendingMerge.keepName)}</strong> (${keptLabel}).<br>
+           All sessions from ${dropLabel} will be moved to ${keptLabel}. ${dropLabel} will be permanently deleted.`;
         document.getElementById('mergeModalError').classList.add('hidden');
         document.getElementById('mergeConfirmBtn').disabled = false;
         document.getElementById('mergeConfirmBtn').textContent = 'Merge';
