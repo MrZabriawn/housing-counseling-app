@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intake — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Intake</h2>
+        <p>Appointment confirmation letter</p>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:760px;">
+      <div class="card-title">Appointment Confirmation Letter</div>
+      <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Fill in the client details and uncheck any items that do not apply, then print.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1.5rem;margin-bottom:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Name</label>
+          <input type="text" id="intakeClientName" placeholder="Full name" style="font-size:0.875rem;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client Address</label>
+          <input type="text" id="intakeClientAddr" placeholder="Street address, City ST ZIP" style="font-size:0.875rem;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Date</label>
+          <input type="date" id="intakeApptDate" style="font-size:0.875rem;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Appointment Time</label>
+          <input type="time" id="intakeApptTime" style="font-size:0.875rem;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counseling Type</label>
+          <select id="intakeCounselingType" style="font-size:0.875rem;">
+            <option value="first time homebuyers' evaluation">First Time Homebuyer</option>
+            <option value="default and delinquency counseling">Default &amp; Delinquency</option>
+            <option value="post-purchase counseling">Post-Purchase</option>
+            <option value="BC Conciliation Program appointment">BC Conciliation</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor Name</label>
+          <input type="text" id="intakeCounselorName" style="font-size:0.875rem;" placeholder="Counselor name">
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">
+        <p style="font-size:0.8rem;font-weight:700;margin:0 0 0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Documents Checklist</p>
+        <div id="intakeChecklist" style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.875rem;">
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 most recent years federal tax return"> 2 most recent years federal tax return</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="2 months paystubs and any other income documentation"> 2 months paystubs and any other income documentation</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="2 most recent months of Bank Statements (all pages, even if blank)"> 2 most recent months of Bank Statements (all pages, even if blank)</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="1 most recent months utility bill"> 1 most recent months utility bill</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Photo Identification (Driver's License, etc.)"> Photo Identification (Driver's License, etc.)</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" checked data-item="Completed enclosed budget and employment history sheets"> Completed enclosed budget and employment history sheets</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Copy of all charge accounts, car payments and personal loans"> Copy of all charge accounts, car payments and personal loans</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="PHFA referral sheet (if applicable)"> PHFA referral sheet (if applicable)</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Loan estimate from lender"> Loan estimate from lender</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Most recent property tax bill"> Most recent property tax bill</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;"><input type="checkbox" data-item="Most recent mortgage statement(s)"> Most recent mortgage statement(s)</label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn btn-primary" id="printConfirmBtn">Print Confirmation Letter</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    requireAuth((user, profile) => {
+      setupNav(profile, 'intake');
+      const nameEl = document.getElementById('intakeCounselorName');
+      if (nameEl && profile.name) nameEl.value = profile.name;
+    });
+
+    document.getElementById('printConfirmBtn').addEventListener('click', () => {
+      const clientName     = document.getElementById('intakeClientName').value.trim() || '___________________________';
+      const clientAddr     = document.getElementById('intakeClientAddr').value.trim() || '___________________________';
+      const apptDateVal    = document.getElementById('intakeApptDate').value;
+      const apptTimeVal    = document.getElementById('intakeApptTime').value;
+      const counselingType = document.getElementById('intakeCounselingType').value;
+      const counselorName  = document.getElementById('intakeCounselorName').value.trim() || 'Counselor';
+
+      const apptDate = apptDateVal
+        ? new Date(apptDateVal + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+        : '_______________';
+      const apptTime = apptTimeVal
+        ? new Date('1970-01-01T' + apptTimeVal).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : '_______________';
+      const todayStr = new Date().toLocaleDateString('en-US');
+
+      const checkedItems = [...document.querySelectorAll('#intakeChecklist input[type="checkbox"]')]
+        .map(cb => ({ checked: cb.checked, text: cb.dataset.item }));
+
+      const checklistRows = checkedItems.map(item =>
+        `<tr>
+          <td style="width:60px;text-align:center;border:1px solid #555;padding:6px;">
+            ${item.checked ? '<strong>X</strong>' : '&nbsp;'}
+          </td>
+          <td style="border:1px solid #555;padding:6px;font-weight:bold;">${item.text}</td>
+        </tr>`
+      ).join('');
+
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Appointment Confirmation — ${clientName}</title>
+<style>
+  @page { margin: 0.75in; size: letter portrait; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; }
+  h2 { text-align: center; font-size: 12pt; border: 2px solid #000; padding: 6px; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; }
+  .lbl { font-weight: bold; }
+  p { margin: 0 0 8px; }
+  @media print { body { padding: 0; } }
+</style>
+</head><body>
+<h2>CONFIRMATION OF FACE-TO-FACE MEETING</h2>
+<p><span class="lbl">DATE:</span> &nbsp; ${todayStr}</p>
+<table style="margin-bottom:16px;">
+  <tr>
+    <td style="width:50%;vertical-align:top;">
+      <p class="lbl">TO: ${clientName}</p>
+      <p style="margin-left:24px;">${clientAddr}</p>
+    </td>
+    <td style="vertical-align:top;">
+      <p class="lbl">From: Housing Opportunities</p>
+      <p>293 Pinney Street</p>
+      <p>Rochester, PA 15074</p>
+    </td>
+  </tr>
+</table>
+<p><span class="lbl">This is to confirm your appointment in our office on</span> ${apptDate}, at ${apptTime} <span class="lbl">for your ${counselingType}.</span></p>
+<br>
+<p><strong>In order to expedite your appointment, please use the checklist below to prepare necessary paperwork for your meeting with our counselor.</strong></p>
+<br>
+<table style="margin-bottom:20px;">
+  ${checklistRows}
+</table>
+<p><strong>Housing Opportunities of Beaver County does not charge a fee for counseling services.*</strong></p>
+<p>* If applicable a $5 fee would apply to notarized documents.</p>
+<br><br>
+<p>Sincerely,</p>
+<br><br>
+<p>${counselorName}</p>
+<script>window.addEventListener('load', () => window.print());<\/script>
+</body></html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) { alert('Please allow pop-ups to print.'); return; }
+      win.document.write(html);
+      win.document.close();
+    });
+  </script>
+</body>
+</html>

@@ -16,6 +16,7 @@ requireED(async (user, profile) => {
   setupNav(profile, 'settings');
 
   await loadPendingUsers();
+  await loadAllUsers();
   await loadCounselors();
   await loadRemapTable();
   await loadWeights();
@@ -1581,16 +1582,100 @@ const ROLE_OPTIONS = [
   { value: 'admin',              label: 'Admin' },
 ];
 
+async function loadAllUsers() {
+  const container = document.getElementById('allUsersList');
+  try {
+    const snap = await getDocs(query(collection(db, 'users'), orderBy('name')));
+    if (snap.empty) {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No users found.</p>';
+      return;
+    }
+    const roleOpts = ROLE_OPTIONS.map(o =>
+      `<option value="${o.value}">${o.label}</option>`
+    ).join('');
+    const rows = snap.docs.map(d => {
+      const u = { id: d.id, ...d.data() };
+      return `<tr>
+        <td ${TD}>${escHtml(u.name || u.email || u.id)}</td>
+        <td ${TD} style="color:var(--text-muted);font-size:0.8rem;">${escHtml(u.email || '')}</td>
+        <td ${TD}>
+          <select class="all-user-role-sel" data-uid="${escAttr(u.id)}"
+            style="font-size:0.875rem;padding:0.25rem 0.4rem;">
+            <option value="">— pending —</option>
+            ${roleOpts}
+          </select>
+        </td>
+        <td ${TD}>
+          <button class="btn btn-sm btn-primary all-user-save-btn" data-uid="${escAttr(u.id)}">Save</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th ${TH}>Name</th><th ${TH}>Email</th><th ${TH}>Role</th><th ${TH}></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+
+    // Pre-select current roles
+    snap.docs.forEach(d => {
+      const u   = { id: d.id, ...d.data() };
+      const sel = container.querySelector(`.all-user-role-sel[data-uid="${u.id}"]`);
+      if (sel && u.role && u.role !== 'pending') sel.value = u.role;
+    });
+
+    container.querySelectorAll('.all-user-save-btn').forEach(btn => {
+      btn.addEventListener('click', () => changeUserRole(btn.dataset.uid, btn));
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
+async function changeUserRole(uid, btn) {
+  const sel  = document.querySelector(`.all-user-role-sel[data-uid="${uid}"]`);
+  const role = sel?.value;
+  if (!role) return;
+
+  const msgEl = document.getElementById('allUsersMsg');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await updateDoc(doc(db, 'users', uid), { role, updatedAt: serverTimestamp() });
+    msgEl.textContent = 'Role updated.';
+    msgEl.style.color = 'var(--accent)';
+    msgEl.classList.remove('hidden');
+    await loadAllUsers();
+    await loadPendingUsers();
+    setTimeout(() => msgEl.classList.add('hidden'), 3000);
+  } catch (err) {
+    msgEl.textContent = 'Failed: ' + err.message;
+    msgEl.style.color = 'var(--danger)';
+    msgEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'Save';
+  }
+}
+
 async function loadPendingUsers() {
   const container = document.getElementById('pendingUsersList');
   try {
-    const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'pending'), orderBy('createdAt', 'asc')));
+    const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'pending')));
     if (snap.empty) {
       container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No pending accounts.</p>';
       return;
     }
 
-    const rows = snap.docs.map(d => {
+    const pendingDocs = snap.docs.slice().sort((a, b) => {
+      const ta = a.data().createdAt?.toMillis?.() ?? 0;
+      const tb = b.data().createdAt?.toMillis?.() ?? 0;
+      return ta - tb;
+    });
+
+    const rows = pendingDocs.map(d => {
       const u = { id: d.id, ...d.data() };
       const roleOpts = ROLE_OPTIONS.map(o =>
         `<option value="${o.value}">${o.label}</option>`
