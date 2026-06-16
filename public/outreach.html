@@ -352,6 +352,51 @@
     </div>
   </div>
 
+  <!-- ── Convert Prospect to Client Modal ──────────────────────────── -->
+  <div id="convertProspectModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Open Client File</h3>
+      <div id="convertForm">
+        <div class="form-grid" style="margin-top:1rem;">
+          <div class="form-group">
+            <label for="convertName">Client Name *</label>
+            <input type="text" id="convertName">
+          </div>
+          <div class="form-group">
+            <label for="convertPhone">Phone</label>
+            <input type="text" id="convertPhone">
+          </div>
+          <div class="form-group">
+            <label for="convertType">Counseling Type *</label>
+            <select id="convertType">
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="convertCounselor">Counselor *</label>
+            <select id="convertCounselor">
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="convertDate">Intake Date</label>
+            <input type="date" id="convertDate">
+          </div>
+        </div>
+        <p id="convertError" class="error-msg hidden"></p>
+        <div class="form-actions">
+          <button id="convertSaveBtn" class="btn btn-primary">Create Client File</button>
+          <button id="convertCancelBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+      <div id="convertSuccess" class="hidden" style="padding:1rem 0;text-align:center;">
+        <p style="color:var(--success,#198754);font-weight:600;margin-bottom:1rem;">Client file created.</p>
+        <div id="convertSuccessLink"></div>
+        <button id="convertDoneBtn" class="btn btn-secondary" style="margin-top:1rem;">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TAL Hours Modal -->
   <div id="talModal" class="modal-overlay hidden">
     <div class="modal-box modal-box-wide">

@@ -21,6 +21,8 @@ let _counselorDocs   = [];    // { id, name, staffNumber } from counselors colle
 let _wsClientId   = null;
 let _wsClientName = null;
 
+let _metricsRendered = false; // true after first visit to Metrics tab
+
 requireAuth(async (user, profile) => {
   _user    = user;
   _profile = profile;
@@ -55,6 +57,11 @@ requireAuth(async (user, profile) => {
     await applyFilters();
   });
   document.getElementById('printReportBtn').addEventListener('click', printReport);
+
+  // ── Page tab switching ──────────────────────────────────────────────────
+  document.querySelectorAll('.page-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchPageTab(tab.dataset.tab));
+  });
 
   // ── Modal buttons ──────────────────────────────────────────────────────────
   document.getElementById('openCmBtn').addEventListener('click', openCmModal);
@@ -263,6 +270,7 @@ async function applyFilters() {
   _displayLimit    = 25;
   renderTable(rows);
   renderStats(rows);
+  if (_metricsRendered) renderMetrics();
 
   const label = hasDateFilter
     ? `${rows.length} client${rows.length !== 1 ? 's' : ''} with sessions in selected period`
@@ -788,4 +796,211 @@ function showIncompleteBanner() {
     sessionStorage.setItem(storageKey, '1');
     banner.classList.add('hidden');
   });
+}
+
+// ── Page tab switching ────────────────────────────────────────────────────────
+
+function switchPageTab(tabId) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
+  if (tabId === 'metrics-panel') {
+    _metricsRendered = true;
+    renderMetrics();
+  }
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+function getActiveDateRange() {
+  const startVal = document.getElementById('fDateStart').value;
+  const endVal   = document.getElementById('fDateEnd').value;
+  const monthVal = document.getElementById('fMonth').value;
+  const yearVal  = parseInt(document.getElementById('fYear').value, 10) || 0;
+
+  let start = startVal ? new Date(startVal + 'T00:00:00') : null;
+  let end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
+
+  if (!start && !end && monthVal) {
+    const y    = yearVal || new Date().getFullYear();
+    const mIdx = MONTHS.indexOf(monthVal);
+    start = new Date(y, mIdx, 1, 0, 0, 0);
+    end   = new Date(y, mIdx + 1, 0, 23, 59, 59);
+  } else if (!start && !end && yearVal) {
+    start = new Date(yearVal, 0, 1, 0, 0, 0);
+    end   = new Date(yearVal, 11, 31, 23, 59, 59);
+  }
+  return { start, end };
+}
+
+function getMetricSessions() {
+  const { start, end } = getActiveDateRange();
+  const ids = new Set(_filteredClients.map(c => c.id));
+  return _allSessions.filter(s => {
+    if (!ids.has(s.clientId)) return false;
+    const d = toDate(s.date);
+    if (start && d < start) return false;
+    if (end   && d > end)   return false;
+    return true;
+  });
+}
+
+function mxStat(label, value) {
+  return `<div class="mx-stat"><div class="mx-stat-label">${label}</div><div class="mx-stat-val">${value}</div></div>`;
+}
+
+function mxPct(n, total) {
+  return total > 0 ? Math.round((n / total) * 100) + '%' : '—';
+}
+
+function mxBarTable(rows, total) {
+  if (!rows.length) return '<p style="color:var(--text-muted);font-size:0.875rem;">No data</p>';
+  return `<table class="mx-table">
+    <thead><tr><th>Category</th><th>Count</th><th>%</th><th style="width:120px;"></th></tr></thead>
+    <tbody>${rows.map(([k, v]) => `<tr>
+      <td>${escHtml(k)}</td>
+      <td style="font-weight:600;">${v}</td>
+      <td style="color:var(--text-muted);">${mxPct(v, total)}</td>
+      <td><div class="mx-bar-track"><div class="mx-bar-fill" style="width:${Math.round((v/Math.max(total,1))*100)}%"></div></div></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderMetrics() {
+  const clients  = _filteredClients;
+  const sessions = getMetricSessions();
+  const total    = clients.length;
+  const { start, end } = getActiveDateRange();
+  const hasPeriod = !!(start || end);
+
+  // ── Overview ─────────────────────────────────────────────────────────────
+  const active   = clients.filter(c => (c.status || 'active') === 'active').length;
+  const closed   = clients.filter(c => c.status === 'closed').length;
+
+  let overviewHtml = `<div class="mx-stat-row">${
+    mxStat('Total Clients', total) +
+    mxStat('Active', active) +
+    mxStat('Closed', closed)
+  }`;
+
+  if (hasPeriod) {
+    const newIntakes = clients.filter(c => {
+      if (!c.intakeDate) return false;
+      const d = new Date(c.intakeDate);
+      if (start && d < start) return false;
+      if (end   && d > end)   return false;
+      return true;
+    }).length;
+    const closures = clients.filter(c => {
+      if (!c.closureDate) return false;
+      const d = toDate(c.closureDate);
+      if (start && d < start) return false;
+      if (end   && d > end)   return false;
+      return true;
+    }).length;
+    overviewHtml += mxStat('New Intakes', newIntakes) + mxStat('Closures', closures);
+  }
+
+  document.getElementById('mxOverviewBody').innerHTML = overviewHtml + '</div>';
+
+  // ── Sessions & Hours ─────────────────────────────────────────────────────
+  const totalSessions = sessions.length;
+  const totalHours    = sessions.reduce((s, r) => s + (Number(r.hours) || 0), 0);
+  const avgSessions   = total > 0 ? (totalSessions / total).toFixed(1) : '—';
+  const avgHours      = total > 0 ? (totalHours / total).toFixed(1) : '—';
+  const fmtH = h => h % 1 === 0 ? h.toLocaleString() : h.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  document.getElementById('mxSessionsBody').innerHTML =
+    `<div class="mx-stat-row">${
+      mxStat('Sessions', totalSessions) +
+      mxStat('Hours', fmtH(totalHours)) +
+      mxStat('Avg Sessions / Client', avgSessions) +
+      mxStat('Avg Hours / Client', avgHours)
+    }</div>`;
+
+  // ── By Counseling Type ───────────────────────────────────────────────────
+  const typeCounts = {};
+  clients.forEach(c => { const k = c.counselingType || '(none)'; typeCounts[k] = (typeCounts[k] || 0) + 1; });
+  document.getElementById('mxTypesBody').innerHTML =
+    mxBarTable(Object.entries(typeCounts).sort((a, b) => b[1] - a[1]), total);
+
+  // ── AMI Distribution ─────────────────────────────────────────────────────
+  const amiCounts = {};
+  clients.forEach(c => { const k = amiCategory(c.amiPercent) || '(not set)'; amiCounts[k] = (amiCounts[k] || 0) + 1; });
+  document.getElementById('mxAmiBody').innerHTML =
+    mxBarTable(Object.entries(amiCounts).sort((a, b) => b[1] - a[1]), total);
+
+  // ── Demographics ─────────────────────────────────────────────────────────
+  const hispanic    = clients.filter(c => c.hispanic).length;
+  const femaleHd    = clients.filter(c => c.femaleHeaded).length;
+  document.getElementById('mxDemoBody').innerHTML =
+    `<div class="mx-stat-row">${
+      mxStat('Hispanic / Latino', `${hispanic} (${mxPct(hispanic, total)})`) +
+      mxStat('Female-Headed HH', `${femaleHd} (${mxPct(femaleHd, total)})`)
+    }</div>`;
+
+  // ── Counselor Breakdown ──────────────────────────────────────────────────
+  const byCounselor = {};
+  sessions.forEach(s => {
+    const k = (s.counselor || '').trim() || '(unassigned)';
+    if (!byCounselor[k]) byCounselor[k] = { sessions: 0, hours: 0, clients: new Set() };
+    byCounselor[k].sessions++;
+    byCounselor[k].hours += Number(s.hours) || 0;
+    byCounselor[k].clients.add(s.clientId);
+  });
+  const counselorRows = Object.entries(byCounselor).sort((a, b) => b[1].sessions - a[1].sessions);
+  document.getElementById('mxCounselorsBody').innerHTML = counselorRows.length
+    ? `<table class="mx-table"><thead><tr>
+        <th>Counselor</th><th>Clients</th><th>Sessions</th><th>Hours</th>
+      </tr></thead><tbody>${counselorRows.map(([k, v]) =>
+        `<tr><td>${escHtml(k)}</td><td>${v.clients.size}</td><td style="font-weight:600;">${v.sessions}</td>
+         <td>${fmtH(v.hours)}</td></tr>`
+      ).join('')}</tbody></table>`
+    : '<p style="color:var(--text-muted);font-size:0.875rem;">No session data</p>';
+
+  // ── R&E Codes ────────────────────────────────────────────────────────────
+  const reCounts = {};
+  clients.forEach(c => { const k = c.reCode || '(not set)'; reCounts[k] = (reCounts[k] || 0) + 1; });
+  document.getElementById('mxReBody').innerHTML =
+    mxBarTable(Object.entries(reCounts).sort((a, b) => b[1] - a[1]), total);
+
+  // ── Court Activity ───────────────────────────────────────────────────────
+  const courtClients  = clients.filter(c => c.counselingType === 'COURT').length;
+  const courtSessions = sessions.filter(s => (s.caseStatus || '').startsWith('Court')).length;
+  const courtHours    = sessions
+    .filter(s => (s.caseStatus || '').startsWith('Court'))
+    .reduce((s, r) => s + (Number(r.hours) || 0), 0);
+  document.getElementById('mxCourtBody').innerHTML =
+    `<div class="mx-stat-row">${
+      mxStat('Court-Type Clients', courtClients) +
+      mxStat('Court Sessions', courtSessions) +
+      mxStat('Court Hours', fmtH(courtHours))
+    }</div>`;
+
+  // ── File Completeness ────────────────────────────────────────────────────
+  const REQUIRED_FIELDS = ['clientName', 'counselingType', 'counselor', 'reCode', 'amiPercent', 'intakeDate'];
+  let complete = 0;
+  const missingFreq = {};
+  clients.forEach(c => {
+    const missing = REQUIRED_FIELDS.filter(f => !c[f]);
+    if (!missing.length) { complete++; }
+    else { missing.forEach(f => { missingFreq[f] = (missingFreq[f] || 0) + 1; }); }
+  });
+  const incomplete = total - complete;
+  const pct = total > 0 ? Math.round((complete / total) * 100) : 0;
+  const missingRows = Object.entries(missingFreq).sort((a, b) => b[1] - a[1]);
+  const missingHtml = missingRows.length
+    ? `<table class="mx-table" style="margin-top:0.75rem;max-width:320px;">
+        <thead><tr><th>Missing Field</th><th>Files Affected</th></tr></thead>
+        <tbody>${missingRows.map(([k, v]) => `<tr><td style="font-family:monospace;font-size:0.8rem;">${escHtml(k)}</td><td>${v}</td></tr>`).join('')}</tbody>
+      </table>` : '';
+
+  document.getElementById('mxCompleteBody').innerHTML =
+    `<div class="mx-stat-row">${
+      mxStat('Complete Files', `${complete} (${pct}%)`) +
+      mxStat('Incomplete', incomplete)
+    }</div>${missingHtml}`;
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

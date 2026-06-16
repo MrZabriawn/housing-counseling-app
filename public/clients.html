@@ -9,6 +9,29 @@
     .radio-group { display:flex; flex-direction:column; gap:0.45rem; margin-top:0.35rem; }
     .radio-label { display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; cursor:pointer; font-weight:normal; }
     .radio-label input[type="radio"] { width:1rem; height:1rem; flex-shrink:0; cursor:pointer; }
+    /* Page-level tabs */
+    .page-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:1.25rem; }
+    .page-tab { padding:0.6rem 1.5rem; font-size:0.9rem; font-weight:600; cursor:pointer; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--text-muted); transition:color 0.12s,border-color 0.12s; }
+    .page-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .page-panel { display:none; }
+    .page-panel.active { display:block; }
+    /* Metrics collapsible sections */
+    .mx-section { background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .mx-section > summary { padding:0.75rem 1rem; font-weight:600; font-size:0.875rem; cursor:pointer; list-style:none; display:flex; align-items:center; gap:0.5rem; user-select:none; color:var(--text); }
+    .mx-section > summary::-webkit-details-marker { display:none; }
+    .mx-section > summary::before { content:'▶'; font-size:0.62rem; color:var(--text-muted); transition:transform 0.15s; flex-shrink:0; }
+    .mx-section[open] > summary::before { transform:rotate(90deg); }
+    .mx-body { padding:0.9rem 1rem; border-top:1px solid var(--border); }
+    .mx-stat-row { display:flex; gap:0.65rem; flex-wrap:wrap; }
+    .mx-stat { background:#f8f9fb; border-radius:var(--radius); padding:0.55rem 0.9rem; min-width:85px; }
+    .mx-stat-label { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; margin-bottom:0.15rem; }
+    .mx-stat-val { font-size:1.2rem; font-weight:800; color:var(--text); line-height:1.2; }
+    .mx-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .mx-table th { text-align:left; padding:0.3rem 0.5rem; border-bottom:2px solid var(--border); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; white-space:nowrap; }
+    .mx-table td { padding:0.35rem 0.5rem; border-bottom:1px solid var(--border); }
+    .mx-table tr:last-child td { border-bottom:none; }
+    .mx-bar-track { height:7px; background:#f0f1f3; border-radius:4px; min-width:60px; }
+    .mx-bar-fill { height:7px; background:var(--primary); border-radius:4px; transition:width 0.3s; }
   </style>
 </head>
 <body>
@@ -29,6 +52,15 @@
         <a href="new-client.html" class="btn btn-primary btn-sm">+ New Client</a>
       </div>
     </div>
+
+    <!-- Tab bar -->
+    <div class="page-tabs">
+      <button class="page-tab active" data-tab="clients-panel">Counseling Log</button>
+      <button class="page-tab"        data-tab="metrics-panel">Metrics</button>
+    </div>
+
+    <!-- ══ Counseling Log panel (default) ══════════════════════════════════ -->
+    <div id="clients-panel" class="page-panel active">
 
     <!-- Stats -->
     <div class="stat-grid">
@@ -158,6 +190,61 @@
         <table id="counselorTable"><tbody></tbody></table>
       </div>
     </div>
+
+    </div><!-- /clients-panel -->
+
+    <!-- ══ Metrics panel ════════════════════════════════════════════════════ -->
+    <div id="metrics-panel" class="page-panel">
+      <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:960px;">
+
+        <details class="mx-section" id="mxOverview" open>
+          <summary>Overview</summary>
+          <div class="mx-body" id="mxOverviewBody"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
+        </details>
+
+        <details class="mx-section" id="mxSessions" open>
+          <summary>Sessions &amp; Hours</summary>
+          <div class="mx-body" id="mxSessionsBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxTypes">
+          <summary>By Counseling Type</summary>
+          <div class="mx-body" id="mxTypesBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxAmi">
+          <summary>AMI Distribution</summary>
+          <div class="mx-body" id="mxAmiBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxDemo">
+          <summary>Demographics</summary>
+          <div class="mx-body" id="mxDemoBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxCounselors">
+          <summary>Counselor Breakdown</summary>
+          <div class="mx-body" id="mxCounselorsBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxRe">
+          <summary>R&amp;E Codes</summary>
+          <div class="mx-body" id="mxReBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxCourt">
+          <summary>Court Activity</summary>
+          <div class="mx-body" id="mxCourtBody"></div>
+        </details>
+
+        <details class="mx-section" id="mxComplete">
+          <summary>File Completeness</summary>
+          <div class="mx-body" id="mxCompleteBody"></div>
+        </details>
+
+      </div>
+    </div><!-- /metrics-panel -->
+
   </main>
 
   <!-- Case Management Modal -->

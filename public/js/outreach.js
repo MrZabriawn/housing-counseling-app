@@ -26,6 +26,7 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
 import { isDemoMode, demoClientName } from './demo-mode.js';
+import { COUNSELING_TYPES } from './data.js';
 import {
   collection, addDoc, getDocs, getDoc, doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -37,6 +38,7 @@ let _allClients   = [];       // lazy-loaded client list for the call modal sear
 let _callType     = 'client'; // current call modal type: 'client' | 'prospect'
 let _selectedClientId   = null; // clientId chosen in the call modal client search
 let _selectedClientName = null; // display name for the chosen client
+let _convertCallId      = null; // outreachCall ID being converted to a client
 
 // TAL Hours modal state
 let _talStaffNum    = null;  // staffNumber from counselors collection for logged-in user
@@ -128,6 +130,19 @@ requireAuth(async (user, profile) => {
   document.getElementById('courtSubmitBtn').addEventListener('click', submitCourtBatch);
   document.getElementById('courtLogAnotherBtn').addEventListener('click', resetCourtForm);
 
+  // Convert prospect modal
+  document.getElementById('convertSaveBtn').addEventListener('click', submitConvertProspect);
+  document.getElementById('convertCancelBtn').addEventListener('click', closeConvertModal);
+  document.getElementById('convertDoneBtn').addEventListener('click', closeConvertModal);
+  document.getElementById('convertProspectModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('convertProspectModal')) closeConvertModal();
+  });
+  COUNSELING_TYPES.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    document.getElementById('convertType').appendChild(o);
+  });
+
   addBatchRow();
   await Promise.all([loadRecords(), loadCalls()]);
 });
@@ -139,11 +154,12 @@ async function loadCounselorOptions() {
     const snap   = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const sel    = document.getElementById('callCounselor');
     const selCrt = document.getElementById('courtCounselorOut');
+    const selCnv = document.getElementById('convertCounselor');
     snap.docs
       .filter(d => d.data().active !== false)
       .forEach(d => {
         const name = d.data().name;
-        [sel, selCrt].forEach(s => {
+        [sel, selCrt, selCnv].forEach(s => {
           const o = document.createElement('option');
           o.value = name; o.textContent = name;
           s.appendChild(o);
@@ -152,6 +168,7 @@ async function loadCounselorOptions() {
     // Pre-select current counselor
     sel.value    = window._currentCounselor;
     selCrt.value = window._currentCounselor;
+    selCnv.value = window._currentCounselor;
 
     // Capture staffNumber + doc ID for the logged-in counselor (used by TAL modal)
     const myDoc = snap.docs.find(
@@ -424,7 +441,12 @@ function renderCallLog(calls) {
     const linkedName = demo && c.linkedClientId ? demoClientName(c.linkedClientId) : (c.linkedClientName || 'View Client');
     const linkedCell = c.linkedClientId
       ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;font-size:0.875rem;">${escHtml(linkedName)}</a>`
-      : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`;
+      : (c.type === 'prospect'
+          ? `<div style="display:flex;gap:4px;flex-wrap:wrap;">
+               <button class="btn btn-primary btn-sm call-convert-btn" data-id="${escAttr(c.id)}" data-name="${escAttr(c.contactName||'')}" data-phone="${escAttr(c.phone||'')}" style="white-space:nowrap;">Open Client File</button>
+               <button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Existing</button>
+             </div>`
+          : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`);
 
     return `<tr>
       <td style="white-space:nowrap;">${fmtDate(c.date)}</td>
@@ -442,6 +464,10 @@ function renderCallLog(calls) {
       const record = _allCalls.find(r => r.id === btn.dataset.id);
       if (record) openCmcLinkModal(record, 'call');
     });
+  });
+
+  tbody.querySelectorAll('.call-convert-btn').forEach(btn => {
+    btn.addEventListener('click', () => openConvertModal(btn.dataset.id, btn.dataset.name, btn.dataset.phone));
   });
 }
 
@@ -860,6 +886,82 @@ async function confirmCmcLink() {
     errEl.classList.remove('hidden');
     btn.disabled    = false;
     btn.textContent = 'Link & Add to Sessions';
+  }
+}
+
+// ── Convert Prospect to Client ────────────────────────────────────────────────
+
+function openConvertModal(callId, name, phone) {
+  _convertCallId = callId;
+  document.getElementById('convertName').value      = name || '';
+  document.getElementById('convertPhone').value     = phone || '';
+  document.getElementById('convertType').value      = '';
+  document.getElementById('convertCounselor').value = window._currentCounselor;
+  document.getElementById('convertDate').value      = new Date().toISOString().split('T')[0];
+  document.getElementById('convertError').classList.add('hidden');
+  document.getElementById('convertForm').classList.remove('hidden');
+  document.getElementById('convertSuccess').classList.add('hidden');
+  document.getElementById('convertProspectModal').classList.remove('hidden');
+}
+
+function closeConvertModal() {
+  _convertCallId = null;
+  document.getElementById('convertProspectModal').classList.add('hidden');
+}
+
+async function submitConvertProspect() {
+  const errEl = document.getElementById('convertError');
+  const btn   = document.getElementById('convertSaveBtn');
+  errEl.classList.add('hidden');
+
+  const name      = document.getElementById('convertName').value.trim();
+  const phone     = document.getElementById('convertPhone').value.trim();
+  const type      = document.getElementById('convertType').value;
+  const counselor = document.getElementById('convertCounselor').value;
+  const dateVal   = document.getElementById('convertDate').value;
+
+  if (!name)      { errEl.textContent = 'Client name is required.'; errEl.classList.remove('hidden'); return; }
+  if (!type)      { errEl.textContent = 'Please select a counseling type.'; errEl.classList.remove('hidden'); return; }
+  if (!counselor) { errEl.textContent = 'Please select a counselor.'; errEl.classList.remove('hidden'); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Creating…';
+
+  try {
+    const clientDoc = await addDoc(collection(db, 'clients'), {
+      clientName:    name,
+      phone,
+      counselingType: type,
+      counselor,
+      intakeDate:    dateVal ? new Date(dateVal + 'T12:00:00') : null,
+      createdAt:     serverTimestamp(),
+      updatedAt:     serverTimestamp(),
+    });
+
+    if (_convertCallId) {
+      await updateDoc(doc(db, 'outreachCalls', _convertCallId), {
+        linkedClientId:   clientDoc.id,
+        linkedClientName: name,
+        updatedAt:        serverTimestamp(),
+      });
+      const idx = _allCalls.findIndex(r => r.id === _convertCallId);
+      if (idx !== -1) {
+        _allCalls[idx] = { ..._allCalls[idx], linkedClientId: clientDoc.id, linkedClientName: name };
+      }
+    }
+
+    document.getElementById('convertForm').classList.add('hidden');
+    document.getElementById('convertSuccessLink').innerHTML =
+      `<a href="client.html?id=${clientDoc.id}" class="btn btn-primary" style="text-decoration:none;">Open Client File →</a>`;
+    document.getElementById('convertSuccess').classList.remove('hidden');
+
+    renderCallLog(_allCalls);
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Create Client File';
   }
 }
 

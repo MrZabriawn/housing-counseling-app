@@ -135,6 +135,15 @@
     <div id="cmcBanner" class="hidden" style="background:#f0f4ff;border-left:4px solid var(--primary);padding:0.65rem 1.25rem;border-radius:var(--radius);margin-bottom:0.35rem;font-size:0.875rem;"></div>
     <div id="cmcLinkPanel" class="hidden" style="margin-bottom:1rem;"></div>
 
+    <!-- Outreach History panel (lazy, only shown when calls exist) -->
+    <div id="outreachHistoryPanel" class="hidden" style="background:var(--surface,#f8f9fa);border:1px solid var(--border,#dee2e6);border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <span style="font-weight:600;font-size:0.875rem;">Outreach History</span>
+        <button id="logCallFromClientBtn" class="btn btn-secondary btn-sm">+ Log Call</button>
+      </div>
+      <div id="outreachHistoryList" style="font-size:0.875rem;"></div>
+    </div>
+
     <!-- Tab bar -->
     <div class="client-tabs">
       <button class="client-tab active" data-tab="overview">Overview</button>
@@ -919,6 +928,38 @@
       <div class="form-actions">
         <button id="closeFileConfirm" class="btn btn-danger">Close File</button>
         <button id="closeFileCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Log Call from Client Modal ──────────────────────────── -->
+  <div id="logCallFromClientModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Log Outreach Call</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="lcDate">Date *</label>
+          <input type="date" id="lcDate">
+        </div>
+        <div class="form-group">
+          <label for="lcCounselor">Counselor</label>
+          <select id="lcCounselor">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label for="lcOutcome">Outcome / Purpose</label>
+          <input type="text" id="lcOutcome" placeholder="e.g. Initial outreach, follow-up…">
+        </div>
+        <div class="form-group full-width">
+          <label for="lcNotes">Notes</label>
+          <textarea id="lcNotes" rows="3" placeholder="Call notes…"></textarea>
+        </div>
+      </div>
+      <p id="lcError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="lcSaveBtn" class="btn btn-primary">Save Call</button>
+        <button id="lcCancelBtn" class="btn btn-secondary">Cancel</button>
       </div>
     </div>
   </div>

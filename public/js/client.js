@@ -50,12 +50,13 @@ requireAuth(async (user, profile) => {
   ]);
 
   await loadClient();
-  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership()]);
+  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory()]);
 
   wireClientForm();
   wireSessionModal();
   wireCloseFileModal();
   wireDriveFolder();
+  wireLogCallModal();
 });
 
 // ── Data loading ──────────────────────────────────────────────────────────────
@@ -2828,3 +2829,96 @@ ${body}
   win.document.close();
   document.getElementById('exportModal').classList.add('hidden');
 }
+
+// ── Outreach History ──────────────────────────────────────────────────────────
+
+async function loadOutreachHistory() {
+  const panel = document.getElementById('outreachHistoryPanel');
+  const list  = document.getElementById('outreachHistoryList');
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'outreachCalls'), where('linkedClientId', '==', clientId))
+    );
+    if (snap.empty) return;
+
+    const calls = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = a.date ? (a.date.toDate ? a.date.toDate() : new Date(a.date)).getTime() : 0;
+        const tb = b.date ? (b.date.toDate ? b.date.toDate() : new Date(b.date)).getTime() : 0;
+        return tb - ta;
+      });
+    list.innerHTML = calls.map(c => {
+      const dateStr = c.date
+        ? (c.date.toDate ? c.date.toDate() : new Date(c.date)).toLocaleDateString('en-US', { timeZone: 'UTC' })
+        : '—';
+      return `<div style="display:flex;gap:0.75rem;padding:0.35rem 0;border-bottom:1px solid var(--border,#dee2e6);align-items:baseline;">
+        <span style="white-space:nowrap;color:var(--text-muted);font-size:0.8rem;">${dateStr}</span>
+        <span style="flex:1;">${escHtml(c.outcome || c.notes || '—')}</span>
+        ${c.counselor ? `<span style="font-size:0.8rem;color:var(--text-muted);">${escHtml(c.counselor)}</span>` : ''}
+      </div>`;
+    }).join('');
+    panel.classList.remove('hidden');
+  } catch (_) {}
+}
+
+function wireLogCallModal() {
+  const modal   = document.getElementById('logCallFromClientModal');
+  const saveBtn = document.getElementById('lcSaveBtn');
+  const cancelBtn = document.getElementById('lcCancelBtn');
+
+  document.getElementById('logCallFromClientBtn').addEventListener('click', () => {
+    document.getElementById('lcDate').value     = new Date().toISOString().split('T')[0];
+    document.getElementById('lcOutcome').value  = '';
+    document.getElementById('lcNotes').value    = '';
+    document.getElementById('lcError').classList.add('hidden');
+    // Pre-select current counselor
+    const sel = document.getElementById('lcCounselor');
+    if (sel && _profile) sel.value = _profile.name || '';
+    modal.classList.remove('hidden');
+  });
+
+  cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  // Populate counselor dropdown
+  loadCounselorOptions('lcCounselor');
+
+  saveBtn.addEventListener('click', async () => {
+    const errEl   = document.getElementById('lcError');
+    const dateVal = document.getElementById('lcDate').value;
+    const outcome = document.getElementById('lcOutcome').value.trim();
+    const notes   = document.getElementById('lcNotes').value.trim();
+    const counselor = document.getElementById('lcCounselor').value;
+
+    errEl.classList.add('hidden');
+    if (!dateVal) { errEl.textContent = 'Date is required.'; errEl.classList.remove('hidden'); return; }
+
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      await addDoc(collection(db, 'outreachCalls'), {
+        date:           new Date(dateVal + 'T12:00:00'),
+        counselor,
+        type:           'client',
+        linkedClientId: clientId,
+        linkedClientName: _client?.clientName || '',
+        contactName:    _client?.clientName || '',
+        phone:          _client?.phone || '',
+        outcome,
+        notes,
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
+      });
+      modal.classList.add('hidden');
+      await loadOutreachHistory();
+    } catch (err) {
+      errEl.textContent = 'Save failed: ' + err.message;
+      errEl.classList.remove('hidden');
+    } finally {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save Call';
+    }
+  });
+}
+
