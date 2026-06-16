@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { isDemoMode } from './demo-mode.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -271,6 +272,7 @@ function updateGenerateBar() {
 // ── Print window ──────────────────────────────────────────────────────────────
 
 function openPrintWindow(pages) {
+  if (isDemoMode()) return;
   const win = window.open('', '_blank');
   if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site.'); return; }
   win.document.write(`<!DOCTYPE html>

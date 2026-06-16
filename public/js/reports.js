@@ -1,4 +1,5 @@
 import { db } from './firebase-config.js';
+import { isDemoMode, demoClientName } from './demo-mode.js';
 import { MONTHS, RE_CODES, RE_CODE_LABELS, AMI_LEVELS, amiCategory, amiCdbgCategory, DEFAULT_RATE, COURT_RATE } from './data.js';
 import {
   collection, collectionGroup, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy
@@ -34,6 +35,7 @@ export async function initCdbgReports(user, profile) {
   document.getElementById('reportCounselor').addEventListener('change', loadMonth);
 
   document.getElementById('printCdbgBtn').addEventListener('click', () => {
+    if (isDemoMode()) return;
     const dateEl = document.getElementById('printInvoiceDate');
     if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-US');
     window.print();
@@ -41,9 +43,22 @@ export async function initCdbgReports(user, profile) {
 
   await loadMonth();
 
-  // Court report
-  document.getElementById('courtReportYear').value = new Date().getFullYear();
+  // Court report — default to current month
+  const now = new Date();
+  document.getElementById('courtReportMonth').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  document.getElementById('courtReportYear').value  = now.getFullYear();
   document.getElementById('loadCourtReportBtn').addEventListener('click', loadCourtReport);
+
+  // Court counselor filter
+  try {
+    const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const cSel  = document.getElementById('courtReportCounselor');
+    cSnap.docs.filter(d => d.data().active !== false).forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.data().name; o.textContent = d.data().name;
+      cSel.appendChild(o);
+    });
+  } catch (_) {}
 }
 
 // ── Load & render CDBG data ───────────────────────────────────────────────────
@@ -369,7 +384,7 @@ function renderClientDetail(allRows, unique) {
 
           return `<tr>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:right;color:var(--text-muted);">${i + 1}</td>
-            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(r.clientName || '—')}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(isDemoMode() ? demoClientName(r._clientId) : (r.clientName || '—'))}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${esc(r.counselor || '—')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${entry.sessions.join(', ')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.75rem;font-weight:700;color:${srcColor};">${src}</td>
@@ -609,36 +624,45 @@ function amiLabel(level) {
 // ── Court Appearance Report ───────────────────────────────────────────────────
 
 async function loadCourtReport() {
-  const year     = parseInt(document.getElementById('courtReportYear').value, 10);
-  const resultEl = document.getElementById('courtReportResult');
+  const monthVal  = document.getElementById('courtReportMonth').value; // "YYYY-MM" or ""
+  const year      = parseInt(document.getElementById('courtReportYear').value, 10);
+  const counselor = document.getElementById('courtReportCounselor').value;
+  const resultEl  = document.getElementById('courtReportResult');
 
-  if (!year || isNaN(year)) {
-    resultEl.innerHTML = '<span style="color:var(--danger);">Please enter a valid year.</span>';
-    return;
+  // Month takes priority over year; if neither, load all time
+  let startDate, endDate, rangeLabel;
+  if (monthVal) {
+    const [yr, mo] = monthVal.split('-').map(Number);
+    startDate  = new Date(`${yr}-${String(mo).padStart(2,'0')}-01T00:00:00`);
+    endDate    = new Date(yr, mo, 0, 23, 59, 59); // last day of month
+    rangeLabel = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  } else if (year && !isNaN(year)) {
+    startDate  = new Date(`${year}-01-01T00:00:00`);
+    endDate    = new Date(`${year}-12-31T23:59:59`);
+    rangeLabel = String(year);
+  } else {
+    startDate  = null;
+    endDate    = null;
+    rangeLabel = 'all time';
   }
 
   resultEl.textContent = 'Loading…';
   document.getElementById('loadCourtReportBtn').disabled = true;
 
   try {
-    const startDate = new Date(`${year}-01-01T00:00:00`);
-    const endDate   = new Date(`${year}-12-31T23:59:59`);
+    let q = query(collectionGroup(db, 'sessions'), orderBy('date', 'asc'));
+    if (startDate) q = query(collectionGroup(db, 'sessions'), where('date', '>=', startDate), where('date', '<=', endDate), orderBy('date', 'asc'));
 
-    const snap = await getDocs(
-      query(
-        collectionGroup(db, 'sessions'),
-        where('date', '>=', startDate),
-        where('date', '<=', endDate),
-        orderBy('date', 'asc')
-      )
-    );
+    const snap = await getDocs(q);
 
-    const sessions = snap.docs
+    let sessions = snap.docs
       .map(d => ({ id: d.id, clientId: d.ref.parent.parent.id, ...d.data() }))
       .filter(s => (s.caseStatus || '').startsWith('Court'));
 
+    if (counselor) sessions = sessions.filter(s => s.counselor === counselor);
+
     if (!sessions.length) {
-      resultEl.innerHTML = `<span style="color:var(--text-muted);">No court appearances logged in ${year}.</span>`;
+      resultEl.innerHTML = `<span style="color:var(--text-muted);">No court appearances found for ${counselor ? counselor + ' in ' : ''}${rangeLabel}.</span>`;
       return;
     }
 
@@ -653,24 +677,28 @@ async function loadCourtReport() {
       const g = groups[key];
       if (s.counselor) g.counselors.add(s.counselor);
       const name = (s.clientName || '').trim();
-      if (name && !g.clients.includes(name)) g.clients.push(name);
+      const cid  = s.clientId || '';
+      if ((name || cid) && !g.clients.find(c => c.clientId === cid && c.name === name)) {
+        g.clients.push({ name, clientId: cid, notes: s.notes || '' });
+      }
     }
 
     const sorted       = Object.values(groups).sort((a, b) => b.dateMs - a.dateMs);
     const totalDates   = sorted.length;
     const totalClients = sorted.reduce((s, g) => s + g.clients.length, 0);
+    const filterNote   = counselor ? ` · Counselor: ${esc(counselor)}` : '';
 
     resultEl.innerHTML = `
       <div style="margin-bottom:0.75rem;font-size:0.8125rem;color:var(--text-muted);">
         <strong style="color:var(--text);">${totalDates}</strong> court date${totalDates !== 1 ? 's' : ''} &nbsp;·&nbsp;
-        <strong style="color:var(--text);">${totalClients}</strong> total client appearances in ${year}
+        <strong style="color:var(--text);">${totalClients}</strong> total client appearances &nbsp;·&nbsp; ${esc(rangeLabel)}${filterNote}
       </div>
       <table style="font-size:0.875rem;">
         <thead>
           <tr>
             <th>Court Date</th><th>County</th>
             <th style="text-align:right;"># Clients</th>
-            <th>Counselor(s)</th><th>Clients</th>
+            <th>Counselor(s)</th><th>Clients</th><th>Notes</th>
           </tr>
         </thead>
         <tbody>
@@ -680,8 +708,9 @@ async function loadCourtReport() {
               <td>${esc(g.county)}</td>
               <td style="text-align:right;font-weight:600;">${g.clients.length}</td>
               <td>${esc([...g.counselors].join(', ') || '—')}</td>
-              <td style="font-size:0.8rem;color:var(--text-muted);">${
-                g.clients.length ? g.clients.map(n => esc(titleCase(n))).join(', ') : '—'
+              <td style="font-size:0.8rem;">${g.clients.map(c => esc(isDemoMode() ? demoClientName(c.clientId) : titleCase(c.name))).join(', ') || '—'}</td>
+              <td style="font-size:0.78rem;color:var(--text-muted);">${
+                g.clients.some(c => c.notes) ? g.clients.filter(c => c.notes).map(c => esc(c.notes)).join('; ') : '—'
               }</td>
             </tr>`).join('')}
         </tbody>

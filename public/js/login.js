@@ -1,14 +1,19 @@
-import { auth } from './firebase-config.js';
+import { auth, db } from './firebase-config.js';
 import {
   GoogleAuthProvider,
   signInWithPopup,
   onAuthStateChanged,
   signOut
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const ALLOWED_DOMAIN = 'housingopps.org';
 
-// If already signed in, skip straight to dashboard
+// If already in demo mode or signed in, skip straight to dashboard
+if (sessionStorage.getItem('demoMode') === '1') {
+  window.location.href = 'log.html';
+}
+
 onAuthStateChanged(auth, (user) => {
   if (user) window.location.href = 'log.html';
 });
@@ -46,6 +51,47 @@ submitBtn.addEventListener('click', async () => {
     submitBtn.textContent = 'Sign in with Google';
   }
 });
+
+// ── Demo / Funder passcode ────────────────────────────────────────────────────
+
+const demoPasscodeEl = document.getElementById('demoPasscode');
+const demoBtn        = document.getElementById('demoBtn');
+const demoErrorEl    = document.getElementById('demoError');
+
+demoBtn.addEventListener('click', validateDemoPasscode);
+demoPasscodeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') validateDemoPasscode(); });
+
+async function validateDemoPasscode() {
+  const input = demoPasscodeEl.value.trim();
+  demoErrorEl.classList.add('hidden');
+
+  if (!input) {
+    demoErrorEl.textContent = 'Please enter the demo passcode.';
+    demoErrorEl.classList.remove('hidden');
+    return;
+  }
+
+  demoBtn.disabled    = true;
+  demoBtn.textContent = 'Checking…';
+
+  try {
+    const snap = await getDoc(doc(db, 'config', 'demo'));
+    if (!snap.exists()) throw new Error('not-configured');
+    const stored = snap.data().passcode;
+    if (!stored || input !== stored) throw new Error('wrong-passcode');
+
+    sessionStorage.setItem('demoMode', '1');
+    window.location.href = 'log.html';
+  } catch (err) {
+    demoErrorEl.textContent =
+      err.message === 'wrong-passcode'   ? 'Incorrect passcode.' :
+      err.message === 'not-configured'   ? 'Demo mode is not configured.' :
+                                           'Unable to verify. Please try again.';
+    demoErrorEl.classList.remove('hidden');
+    demoBtn.disabled    = false;
+    demoBtn.textContent = 'Enter Demo Mode';
+  }
+}
 
 function friendlyError(code) {
   const map = {

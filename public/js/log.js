@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
+import { isDemoMode } from './demo-mode.js';
 import { MONTHS, AMI_LEVELS, RE_CODES, COUNSELING_TYPES, amiCategory } from './data.js';
 import {
   collection, getDocs, deleteDoc, doc
@@ -30,6 +31,7 @@ requireAuth(async (user, profile) => {
 });
 
 function printReport() {
+  if (isDemoMode()) return;
   const filterDesc = getFilterDescription();
   const unique      = uniqueHouseholds(currentRows());
   const rows        = currentRows();

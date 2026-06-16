@@ -2,6 +2,9 @@ import { db } from './firebase-config.js';
 import { requireED, setupNav } from './auth.js';
 import { amiCategory, AMI_IMPORT_MAP } from './data.js';
 import {
+  findReasons, pairKey, confidenceColor, confidenceLabel, confRank,
+} from './duplicate-scanner.js';
+import {
   collection, collectionGroup, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch,
   query, where, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -12,10 +15,12 @@ const _sessionMonthCache = new Map(); // "YYYY-MM" → Set<clientId>
 requireED(async (user, profile) => {
   setupNav(profile, 'settings');
 
+  await loadPendingUsers();
   await loadCounselors();
   await loadRemapTable();
   await loadWeights();
   await loadRates();
+  await loadDemoPasscode();
 
   // Add counselor
   document.getElementById('addCounselorBtn').addEventListener('click', addCounselor);
@@ -64,6 +69,9 @@ requireED(async (user, profile) => {
   // Auto-link list records to client profiles
   document.getElementById('scanUnlinkedBtn').addEventListener('click', scanUnlinkedListRecords);
   document.getElementById('applyAutoLinkBtn').addEventListener('click', applyAutoLinks);
+
+  // Demo passcode
+  document.getElementById('saveDemoPasscodeBtn').addEventListener('click', saveDemoPasscode);
 });
 
 // ── Counselors ────────────────────────────────────────────────────────────────
@@ -259,6 +267,7 @@ async function saveEditCounselor() {
   } catch (err) {
     errorEl.textContent = 'Save failed: ' + err.message;
     errorEl.classList.remove('hidden');
+  } finally {
     saveBtn.disabled    = false;
     saveBtn.textContent = 'Save';
   }
@@ -702,86 +711,6 @@ async function saveRates() {
 let _dismissedPairs = new Set(); // pairKey → true, dismissed for this session
 let _pendingMerge   = null;      // { keepId, dropId, keepName, dropName }
 
-function nameTokens(name) {
-  return (name || '').toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(Boolean);
-}
-
-function tokenOverlapScore(a, b) {
-  const ta = new Set(nameTokens(a));
-  const tb = nameTokens(b);
-  if (!ta.size || !tb.length) return 0;
-  const shared = tb.filter(t => ta.has(t)).length;
-  return shared / Math.max(ta.size, tb.length);
-}
-
-// Simple edit distance (Levenshtein) — used on short normalized strings
-function editDistance(a, b) {
-  const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i-1] === b[j-1]
-        ? dp[i-1][j-1]
-        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-  return dp[m][n];
-}
-
-function nameSimilarity(a, b) {
-  const na = (a || '').toLowerCase().replace(/[^a-z]/g, '');
-  const nb = (b || '').toLowerCase().replace(/[^a-z]/g, '');
-  if (!na || !nb) return 0;
-  const maxLen = Math.max(na.length, nb.length);
-  return 1 - editDistance(na, nb) / maxLen;
-}
-
-// Reverse "Last, First" → "First Last" for comparison
-function reversedName(name) {
-  const m = (name || '').match(/^([^,]+),\s*(.+)$/);
-  return m ? `${m[2]} ${m[1]}` : name;
-}
-
-function rxOverlap(a, b) {
-  const rxA = (a.rxNumbers || []).filter(r => r && r.trim());
-  const rxB = new Set((b.rxNumbers || []).filter(r => r && r.trim()));
-  return rxA.filter(r => rxB.has(r));
-}
-
-function findReasons(a, b) {
-  const reasons = [];
-
-  // Shared Rx numbers
-  const shared = rxOverlap(a, b);
-  if (shared.length) reasons.push({ text: `Shared Rx: ${shared.join(', ')}`, confidence: 'high' });
-
-  // Name similarity signals
-  const overlap      = tokenOverlapScore(a.clientName, b.clientName);
-  const similarity   = nameSimilarity(a.clientName, b.clientName);
-  const reversedA    = reversedName(a.clientName);
-  const revSimilarity = nameSimilarity(reversedA, b.clientName);
-  const revOverlap   = tokenOverlapScore(reversedA, b.clientName);
-
-  if (overlap >= 0.99 || similarity >= 0.97) {
-    reasons.push({ text: 'Near-identical names', confidence: 'high' });
-  } else if (revSimilarity >= 0.85 || revOverlap >= 0.85) {
-    reasons.push({ text: 'Possible name reversal (Last, First vs First Last)', confidence: 'high' });
-  } else if (overlap >= 0.75 || similarity >= 0.80) {
-    reasons.push({ text: `Similar names (${Math.round(Math.max(overlap, similarity) * 100)}% match)`, confidence: 'medium' });
-  } else if (overlap >= 0.5 || similarity >= 0.65) {
-    reasons.push({ text: `Possible name misspelling (${Math.round(Math.max(overlap, similarity) * 100)}% match)`, confidence: 'low' });
-  }
-
-  // Same zip + same counseling type + any name similarity
-  if (!reasons.length && a.zipCode && a.zipCode === b.zipCode && a.counselingType === b.counselingType && overlap >= 0.3) {
-    reasons.push({ text: `Same zip (${a.zipCode}) + same counseling type + partial name match`, confidence: 'low' });
-  }
-
-  return reasons;
-}
-
-function pairKey(a, b) {
-  return [a.id, b.id].sort().join('|');
-}
 
 async function scanDuplicates() {
   const btn       = document.getElementById('scanDuplicatesBtn');
@@ -812,9 +741,7 @@ async function scanDuplicates() {
       return;
     }
 
-    const rank = r => r.confidence === 'high' ? 0 : r.confidence === 'medium' ? 1 : 2;
-    const confidenceColor = { high: 'var(--danger)', medium: '#e65100', low: 'var(--text-muted)' };
-    const confidenceLabel = { high: 'Strong match', medium: 'Possible match', low: 'Weak signal' };
+    const rank = confRank;
 
     function fmtLastSession(ts) {
       if (!ts) return '—';
@@ -980,8 +907,8 @@ async function scanDuplicates() {
           return (a.dataset.names || '').localeCompare(b.dataset.names || '');
         }
         // confidence: high=0, medium=1, low=2
-        const confRank = { high: 0, medium: 1, low: 2 };
-        return (confRank[a.dataset.conf] ?? 3) - (confRank[b.dataset.conf] ?? 3);
+        const rankMap = { high: 0, medium: 1, low: 2 };
+        return (rankMap[a.dataset.conf] ?? 3) - (rankMap[b.dataset.conf] ?? 3);
       });
       items.forEach(el => list.appendChild(el));
     }
@@ -1644,4 +1571,117 @@ function showMsg(el, text, success) {
   el.textContent = text;
   el.style.color = success ? 'var(--accent)' : 'var(--danger)';
   el.classList.remove('hidden');
+}
+
+// ── Pending Users ─────────────────────────────────────────────────────────────
+
+const ROLE_OPTIONS = [
+  { value: 'counselor',          label: 'Counselor' },
+  { value: 'executive_director', label: 'Executive Director' },
+  { value: 'admin',              label: 'Admin' },
+];
+
+async function loadPendingUsers() {
+  const container = document.getElementById('pendingUsersList');
+  try {
+    const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'pending'), orderBy('createdAt', 'asc')));
+    if (snap.empty) {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No pending accounts.</p>';
+      return;
+    }
+
+    const rows = snap.docs.map(d => {
+      const u = { id: d.id, ...d.data() };
+      const roleOpts = ROLE_OPTIONS.map(o =>
+        `<option value="${o.value}">${o.label}</option>`
+      ).join('');
+      return `<tr>
+        <td ${TD}>${escHtml(u.name || u.email || u.id)}</td>
+        <td ${TD} style="color:var(--text-muted);font-size:0.8rem;">${escHtml(u.email || '')}</td>
+        <td ${TD}>
+          <select class="pending-role-sel" data-uid="${escAttr(u.id)}" style="font-size:0.875rem;padding:0.25rem 0.4rem;">
+            ${roleOpts}
+          </select>
+        </td>
+        <td ${TD}>
+          <button class="btn btn-sm btn-primary promote-btn" data-uid="${escAttr(u.id)}">Approve</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th ${TH}>Name</th><th ${TH}>Email</th><th ${TH}>Assign Role</th><th ${TH}></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+
+    container.querySelectorAll('.promote-btn').forEach(btn => {
+      btn.addEventListener('click', () => promoteUser(btn.dataset.uid, btn));
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
+async function promoteUser(uid, btn) {
+  const sel  = document.querySelector(`.pending-role-sel[data-uid="${uid}"]`);
+  const role = sel?.value;
+  if (!role) return;
+
+  const msgEl = document.getElementById('pendingUsersMsg');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await updateDoc(doc(db, 'users', uid), { role, updatedAt: serverTimestamp() });
+    msgEl.textContent = 'User approved.';
+    msgEl.style.color = 'var(--accent)';
+    msgEl.classList.remove('hidden');
+    await loadPendingUsers();
+  } catch (err) {
+    msgEl.textContent = 'Failed: ' + err.message;
+    msgEl.style.color = 'var(--danger)';
+    msgEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'Approve';
+  }
+}
+
+// ── Demo Mode Passcode ────────────────────────────────────────────────────────
+
+async function loadDemoPasscode() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'demo'));
+    if (snap.exists() && snap.data().passcode) {
+      document.getElementById('demoPasscodeField').value = snap.data().passcode;
+    }
+  } catch (_) {}
+}
+
+async function saveDemoPasscode() {
+  const btn    = document.getElementById('saveDemoPasscodeBtn');
+  const msgEl  = document.getElementById('demoPasscodeMsg');
+  const val    = document.getElementById('demoPasscodeField').value.trim();
+
+  msgEl.classList.add('hidden');
+
+  if (!val) {
+    showMsg(msgEl, 'Please enter a passcode.', false);
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await setDoc(doc(db, 'config', 'demo'), { passcode: val }, { merge: true });
+    showMsg(msgEl, 'Passcode saved.', true);
+  } catch (err) {
+    showMsg(msgEl, 'Failed: ' + err.message, false);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Passcode';
+  }
 }

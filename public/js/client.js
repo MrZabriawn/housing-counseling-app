@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
+import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
@@ -165,6 +166,7 @@ async function loadClient() {
   }
 
   populateClientForm(_client);
+  if (isDemoMode()) applyDemoRedactions();
   renderHeader(_client);
   renderConfidentialitySection();
 }
@@ -485,6 +487,42 @@ function populateClientForm(c) {
   loadFinancials(c);
 }
 
+function applyDemoRedactions() {
+  const redact = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = '';
+    el.placeholder = 'Redacted';
+    el.readOnly = true;
+  };
+
+  // Replace name with demo alias
+  const nameEl = document.getElementById('clientName');
+  if (nameEl) {
+    nameEl.value    = demoClientName(clientId);
+    nameEl.readOnly = true;
+  }
+
+  // Contact PII
+  ['streetAddress','city','dateOfBirth','email','homePhone','workPhone','cellPhone'].forEach(redact);
+
+  // SSN — replace the entire group with a placeholder
+  const ssnGroup = document.getElementById('ssn')?.closest('.form-group');
+  if (ssnGroup) ssnGroup.innerHTML = '<label>Social Security Number</label><p style="margin:0.25rem 0 0;color:var(--text-muted);font-style:italic;">Redacted</p>';
+  const coSsnGroup = document.getElementById('coApplicantSsn')?.closest('.form-group');
+  if (coSsnGroup) coSsnGroup.innerHTML = '<label>SSN</label><p style="margin:0.25rem 0 0;color:var(--text-muted);font-style:italic;">Redacted</p>';
+
+  // Co-applicant
+  ['coApplicantName','coApplicantDob','coApplicantEmail','coApplicantHomePhone','coApplicantWorkPhone','coApplicantCellPhone'].forEach(redact);
+
+  // Block the save button
+  const saveBtn = document.getElementById('saveClientBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.title = 'Editing is disabled in Demo Mode';
+  }
+}
+
 function updateIntakeSections(counselingType) {
   const mortgageEnabled = counselingType === 'OUTSTANDING' || counselingType === 'COURT';
   document.getElementById('mortgageSection').classList.toggle('intake-disabled', !mortgageEnabled);
@@ -505,7 +543,7 @@ function setValue(id, val) {
 // ── Header / banner ───────────────────────────────────────────────────────────
 
 function renderHeader(c) {
-  document.getElementById('pageTitle').textContent = c.clientName || 'Client Profile';
+  document.getElementById('pageTitle').textContent = isDemoMode() ? demoClientName(clientId) : (c.clientName || 'Client Profile');
 
   const coAppEl = document.getElementById('coApplicantSubtitle');
   if (coAppEl) {
@@ -694,8 +732,11 @@ function wireClientForm() {
   });
 
   // Reopen File button
-  document.getElementById('reopenFileBtn').addEventListener('click', async () => {
+  document.getElementById('reopenFileBtn').addEventListener('click', async (e) => {
     if (!confirm('Reopen this file?')) return;
+    const reopenBtn = e.currentTarget;
+    reopenBtn.disabled = true;
+    reopenBtn.textContent = 'Reopening…';
     try {
       await updateDoc(doc(db, 'clients', clientId), {
         status: 'active',
@@ -709,6 +750,9 @@ function wireClientForm() {
       renderHeader(_client);
     } catch (err) {
       alert('Failed to reopen: ' + err.message);
+    } finally {
+      reopenBtn.disabled = false;
+      reopenBtn.textContent = 'Reopen File';
     }
   });
 
@@ -1026,6 +1070,7 @@ async function deleteSession() {
     await loadSessions();
   } catch (err) {
     alert('Delete failed: ' + err.message);
+  } finally {
     delBtn.disabled = false;
     delBtn.textContent = 'Delete Session';
   }
@@ -1655,6 +1700,7 @@ function renderFolderUI() {
 // ── Print Intake Form ──────────────────────────────────────────────────────────
 
 function printIntakeForm() {
+  if (isDemoMode()) return;
   const c = _client;
   const logoUrl = new URL('img/logo.png', window.location.href).href;
 
@@ -2503,6 +2549,7 @@ function openSnapshotView(snap) {
 // ── Export PDF ────────────────────────────────────────────────────────────────
 
 function generateExportPdf() {
+  if (isDemoMode()) return;
   const include = {
     overview:   document.getElementById('exportOverview').checked,
     intake:     document.getElementById('exportIntake').checked,

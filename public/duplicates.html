@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Possible Duplicates — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Possible Duplicate Scanner</h2>
+        <p>Scan all clients for potential duplicates: shared Rx numbers, similar names, missing name parts, and same zip + counseling type.</p>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:960px;">
+      <button id="scanDuplicatesBtn" class="btn btn-secondary">Scan Clients</button>
+      <p id="duplicatesMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.75rem;"></p>
+      <div id="duplicatesResult" style="margin-top:1rem;font-size:0.875rem;color:var(--text-muted);">Click Scan to begin.</div>
+    </div>
+  </main>
+
+  <!-- Merge confirmation modal -->
+  <div id="mergeModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Confirm Merge</h3>
+      <p id="mergeModalDesc" style="font-size:0.875rem;margin:0.75rem 0 0.5rem;line-height:1.55;"></p>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">This action cannot be undone. All sessions will be transferred and the dropped record permanently deleted.</p>
+      <p id="mergeModalError" class="error-msg hidden" style="margin-bottom:0.75rem;"></p>
+      <div class="form-actions">
+        <button id="mergeConfirmBtn" class="btn btn-danger">Merge</button>
+        <button id="mergeCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/duplicates.js"></script>
+</body>
+</html>

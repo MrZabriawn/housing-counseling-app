@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { isDemoMode, demoClientName } from './demo-mode.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -67,8 +68,9 @@ function renderTable(records) {
   }
 
   tbody.innerHTML = records.map(r => {
+    const demo = isDemoMode();
     const linkedCell = r.linkedClientId
-      ? `<a href="client.html?id=${r.linkedClientId}" style="font-weight:600;">${escHtml(r.linkedClientName || 'View Client')}</a>`
+      ? `<a href="client.html?id=${r.linkedClientId}" style="font-weight:600;">${escHtml(demo ? demoClientName(r.linkedClientId) : (r.linkedClientName || 'View Client'))}</a>`
       : '<span style="color:var(--text-muted);">—</span>';
 
     const templateLabel = r.counselorTemplate === 'andrusa'
@@ -78,16 +80,18 @@ function renderTable(records) {
         : 'Dan — Beaver';
 
     // Combine both mailing address lines for display
-    const mailingDisplay = [r.mailingAddress, r.mailingAddress2].filter(Boolean).join(', ');
+    const mailingDisplay = demo ? '—' : [r.mailingAddress, r.mailingAddress2].filter(Boolean).join(', ');
+    const recipientDisplay = demo ? (r.linkedClientId ? demoClientName(r.linkedClientId) : '—') : (r.recipientName || '—');
+    const propertyDisplay  = demo ? '—' : (r.propertyAddress || '—');
 
     return `<tr>
       <td class="cb-col">
         <input type="checkbox" class="row-cb" data-id="${escAttr(r.id)}">
       </td>
       <td style="white-space:nowrap">${fmtDate(r.dateSent)}</td>
-      <td>${escHtml(r.recipientName || '—')}</td>
-      <td style="font-size:0.8rem;">${escHtml(mailingDisplay || '—')}</td>
-      <td style="font-size:0.8rem;">${escHtml(r.propertyAddress || '—')}</td>
+      <td>${escHtml(recipientDisplay)}</td>
+      <td style="font-size:0.8rem;">${escHtml(mailingDisplay)}</td>
+      <td style="font-size:0.8rem;">${escHtml(propertyDisplay)}</td>
       <td style="font-size:0.8rem;white-space:nowrap;">${escHtml(templateLabel)}</td>
       <td>${linkedCell}</td>
     </tr>`;
@@ -121,6 +125,7 @@ function updateGenerateBar() {
 // ── Letter generation ─────────────────────────────────────────────────────────
 
 function generateLetters() {
+  if (isDemoMode()) return;
   // Collect the record IDs for all checked rows, preserving display order
   const checkedIds = new Set(
     [...document.querySelectorAll('.row-cb:checked')].map(cb => cb.dataset.id)

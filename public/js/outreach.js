@@ -25,6 +25,7 @@
 
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { isDemoMode, demoClientName } from './demo-mode.js';
 import {
   collection, addDoc, getDocs, getDoc, doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -122,6 +123,11 @@ requireAuth(async (user, profile) => {
     if (e.target === document.getElementById('talModal')) closeTalModal();
   });
 
+  // Court tab
+  document.getElementById('courtClientSearch').addEventListener('input', renderCourtClientSearch);
+  document.getElementById('courtSubmitBtn').addEventListener('click', submitCourtBatch);
+  document.getElementById('courtLogAnotherBtn').addEventListener('click', resetCourtForm);
+
   addBatchRow();
   await Promise.all([loadRecords(), loadCalls()]);
 });
@@ -130,18 +136,22 @@ requireAuth(async (user, profile) => {
 
 async function loadCounselorOptions() {
   try {
-    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
-    const sel  = document.getElementById('callCounselor');
+    const snap   = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const sel    = document.getElementById('callCounselor');
+    const selCrt = document.getElementById('courtCounselorOut');
     snap.docs
       .filter(d => d.data().active !== false)
       .forEach(d => {
-        const o = document.createElement('option');
-        o.value = d.data().name;
-        o.textContent = d.data().name;
-        sel.appendChild(o);
+        const name = d.data().name;
+        [sel, selCrt].forEach(s => {
+          const o = document.createElement('option');
+          o.value = name; o.textContent = name;
+          s.appendChild(o);
+        });
       });
     // Pre-select current counselor
-    sel.value = window._currentCounselor;
+    sel.value    = window._currentCounselor;
+    selCrt.value = window._currentCounselor;
 
     // Capture staffNumber + doc ID for the logged-in counselor (used by TAL modal)
     const myDoc = snap.docs.find(
@@ -403,12 +413,17 @@ function renderCallLog(calls) {
     const typeBadge = c.type === 'prospect'
       ? '<span class="badge badge-yellow">Prospect</span>'
       : '<span class="badge badge-pre">Client</span>';
+    const demo = isDemoMode();
+    const displayContactName = demo
+      ? (c.linkedClientId ? demoClientName(c.linkedClientId) : '—')
+      : toTitleCase(c.contactName || '—');
     const nameCell = c.linkedClientId
-      ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;">${escHtml(toTitleCase(c.contactName || ''))}</a>`
-      : escHtml(toTitleCase(c.contactName || '—'));
-    const phoneStr = c.phone ? ` <span style="font-size:0.78rem;color:var(--text-muted);">${escHtml(c.phone)}</span>` : '';
+      ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;">${escHtml(displayContactName)}</a>`
+      : escHtml(displayContactName);
+    const phoneStr = (!demo && c.phone) ? ` <span style="font-size:0.78rem;color:var(--text-muted);">${escHtml(c.phone)}</span>` : '';
+    const linkedName = demo && c.linkedClientId ? demoClientName(c.linkedClientId) : (c.linkedClientName || 'View Client');
     const linkedCell = c.linkedClientId
-      ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;font-size:0.875rem;">${escHtml(c.linkedClientName || 'View Client')}</a>`
+      ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;font-size:0.875rem;">${escHtml(linkedName)}</a>`
       : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`;
 
     return `<tr>
@@ -589,6 +604,7 @@ function showCallError(msg) {
 // ── Print window ──────────────────────────────────────────────────────────────
 
 function openPrintWindow(pages) {
+  if (isDemoMode()) return;
   const win = window.open('', '_blank');
   if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site.'); return; }
   win.document.write(`<!DOCTYPE html>
@@ -955,6 +971,178 @@ async function saveTal() {
 
 function showTalErr(msg) {
   const el = document.getElementById('talError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// ── Court batch log ────────────────────────────────────────────────────────────
+
+let _courtSelected = []; // [{ id, clientName, counselor, rxNumbers }]
+
+async function renderCourtClientSearch() {
+  const raw     = document.getElementById('courtClientSearch').value;
+  const search  = raw.toLowerCase().trim();
+  const results = document.getElementById('courtClientResults');
+
+  if (!search) { results.style.display = 'none'; return; }
+
+  if (!_allClients.length) {
+    results.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">Loading…</div>';
+    results.style.display = 'block';
+    try {
+      const snap = await getDocs(query(collection(db, 'clients'), orderBy('clientName')));
+      _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) { _allClients = []; }
+  }
+
+  const selectedIds = new Set(_courtSelected.map(c => c.id));
+  const matches = _allClients.filter(c =>
+    (c.clientName || '').toLowerCase().includes(search) ||
+    (c.counselor  || '').toLowerCase().includes(search) ||
+    (c.rxNumbers  || []).some(rx => rx.toLowerCase().includes(search))
+  ).slice(0, 30);
+
+  if (!matches.length) {
+    results.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">No clients found.</div>';
+    results.style.display = 'block';
+    return;
+  }
+
+  results.innerHTML = matches.map(c => {
+    const added  = selectedIds.has(c.id);
+    const rxStr  = (c.rxNumbers || []).join(', ');
+    return `<div class="csr-item court-client-result${added ? ' selected' : ''}" data-id="${esc(c.id)}"
+              style="cursor:${added ? 'default' : 'pointer'};">
+      <div class="csr-name">${esc(toTitleCase(c.clientName))} ${added ? '<span style="color:var(--accent);font-size:0.72rem;">(added)</span>' : ''}</div>
+      <div class="csr-meta">${esc(c.counselor || '')}${rxStr ? ' · Rx: ' + esc(rxStr) : ''}</div>
+    </div>`;
+  }).join('');
+  results.style.display = 'block';
+
+  results.querySelectorAll('.court-client-result:not(.selected)').forEach(item => {
+    item.addEventListener('click', () => {
+      const client = _allClients.find(c => c.id === item.dataset.id);
+      if (client && !_courtSelected.find(c => c.id === client.id)) {
+        _courtSelected.push({ id: client.id, clientName: client.clientName || '', counselor: client.counselor || '', rxNumbers: client.rxNumbers || [] });
+        renderCourtSelected();
+        renderCourtClientSearch();
+      }
+    });
+  });
+}
+
+function renderCourtSelected() {
+  const listEl    = document.getElementById('courtSelectedList');
+  const countEl   = document.getElementById('courtSelectedCount');
+  countEl.textContent = _courtSelected.length;
+
+  if (!_courtSelected.length) {
+    listEl.innerHTML = '<span style="color:var(--text-muted);">No clients added yet. Search above to add clients.</span>';
+    return;
+  }
+
+  listEl.innerHTML = _courtSelected.map(c => `
+    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);">
+      <span style="flex:1;font-weight:600;">${esc(toTitleCase(c.clientName))}</span>
+      <span style="font-size:0.775rem;color:var(--text-muted);">${esc(c.counselor)}</span>
+      <button class="court-remove-btn" data-id="${esc(c.id)}"
+        style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.1rem;line-height:1;padding:0.1rem 0.3rem;border-radius:4px;"
+        title="Remove">×</button>
+    </div>`).join('');
+
+  listEl.querySelectorAll('.court-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _courtSelected = _courtSelected.filter(c => c.id !== btn.dataset.id);
+      renderCourtSelected();
+      renderCourtClientSearch();
+    });
+  });
+}
+
+async function submitCourtBatch() {
+  const btn      = document.getElementById('courtSubmitBtn');
+  const errorEl  = document.getElementById('courtSubmitError');
+  errorEl.classList.add('hidden');
+
+  const dateVal   = document.getElementById('courtDate').value;
+  const county    = document.getElementById('courtCounty').value;
+  const counselor = document.getElementById('courtCounselorOut').value;
+  const hours     = parseFloat(document.getElementById('courtHoursOut').value) || 2;
+  const notes     = document.getElementById('courtNotesOut').value.trim();
+
+  if (!dateVal)   { showCourtErr('Please enter the court date.'); return; }
+  if (!county)    { showCourtErr('Please select a county.'); return; }
+  if (!counselor) { showCourtErr('Please select a counselor.'); return; }
+  if (!_courtSelected.length) { showCourtErr('Add at least one client.'); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  const sessionDate = new Date(dateVal + 'T12:00:00');
+  const caseStatus  = `Court — ${county}`;
+
+  try {
+    await Promise.all(_courtSelected.map(c =>
+      addDoc(collection(db, 'clients', c.id, 'sessions'), {
+        date:       sessionDate,
+        counselor:  counselor,
+        rxNumber:   (c.rxNumbers[0] || ''),
+        hours,
+        dollarsFor: '',
+        caseStatus,
+        outcome:    '',
+        notes,
+        clientName: c.clientName || '',
+        createdAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+    ));
+
+    // Refresh denormalized fields
+    for (const c of _courtSelected) {
+      try {
+        const snap = await getDocs(query(collection(db, 'clients', c.id, 'sessions'), orderBy('date', 'asc')));
+        const sessions = snap.docs.map(d => d.data());
+        const dated    = sessions.filter(s => s.date);
+        await updateDoc(doc(db, 'clients', c.id), {
+          sessionCount:     sessions.length,
+          totalOutcomeValue: sessions.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0),
+          firstSessionDate: dated.length ? dated[0].date : null,
+          lastSessionDate:  dated.length ? dated[dated.length - 1].date : null,
+          updatedAt:        serverTimestamp(),
+        });
+      } catch (_) {}
+    }
+
+    const count = _courtSelected.length;
+    document.getElementById('courtSuccessMsg').textContent =
+      `Logged ${count} court appearance${count !== 1 ? 's' : ''} for ${county} on ${sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}.`;
+    document.getElementById('courtSuccessBanner').classList.remove('hidden');
+    document.getElementById('courtForm').classList.add('hidden');
+  } catch (err) {
+    showCourtErr('Save failed: ' + err.message);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Log Court Appearances';
+  }
+}
+
+function resetCourtForm() {
+  _courtSelected = [];
+  document.getElementById('courtDate').value        = '';
+  document.getElementById('courtCounty').value      = '';
+  document.getElementById('courtHoursOut').value    = '2';
+  document.getElementById('courtNotesOut').value    = '';
+  document.getElementById('courtClientSearch').value = '';
+  document.getElementById('courtClientResults').style.display = 'none';
+  document.getElementById('courtSubmitError').classList.add('hidden');
+  renderCourtSelected();
+  document.getElementById('courtSuccessBanner').classList.add('hidden');
+  document.getElementById('courtForm').classList.remove('hidden');
+}
+
+function showCourtErr(msg) {
+  const el = document.getElementById('courtSubmitError');
   el.textContent = msg;
   el.classList.remove('hidden');
 }

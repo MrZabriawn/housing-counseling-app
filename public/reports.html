@@ -258,17 +258,28 @@
           Court Appearance Summary
         </h3>
         <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
-          Foreclosure court sessions logged through the Court Appearance tool, grouped by date and county.
+          Court sessions logged through the Outreach or Court Appearance tool, grouped by date and county.
         </p>
         <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="courtReportMonth">Month</label>
+            <input type="month" id="courtReportMonth" style="max-width:160px;">
+          </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="courtReportYear">Year</label>
             <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
           </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="courtReportCounselor">Counselor</label>
+            <select id="courtReportCounselor" style="min-width:160px;">
+              <option value="">All Counselors</option>
+            </select>
+          </div>
           <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
         </div>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">Month overrides Year if both are set. Leave both blank to load all time.</p>
         <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
-          Select a year and click Load.
+          Select a filter and click Load.
         </div>
       </div>
 

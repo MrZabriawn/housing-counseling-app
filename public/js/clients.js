@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
+import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, amiCategory, amiDisplayLabel } from './data.js';
 import {
   collection, collectionGroup, getDocs, addDoc, query, orderBy, serverTimestamp,
@@ -298,8 +299,9 @@ function renderTable(clients) {
       ? `<span title="Confidential" style="font-size:0.7rem;font-weight:700;color:#b45309;margin-left:0.3rem;">&#128274;</span>`
       : '';
 
+    const displayName = isDemoMode() ? demoClientName(c.id) : (c.clientName || '—');
     return `<tr class="clickable-row" data-id="${c.id}" style="cursor:pointer;">
-      <td>${c.clientName || '—'}${tierBadge}</td>
+      <td>${displayName}${tierBadge}</td>
       <td>${typeBadge}</td>
       <td>${c.counselor || '—'}</td>
       <td>${amiDisplayLabel(c.amiPercent) || '—'}</td>
@@ -404,6 +406,7 @@ function renderCounselorSessionBreakdown(clients) {
 }
 
 function printReport() {
+  if (isDemoMode()) return;
   const rows    = _filteredClients;
   const active  = rows.filter(c => (c.status || 'active') === 'active').length;
   const sessions = rows.reduce((s, c) => s + (c.sessionCount || 0), 0);
@@ -645,13 +648,14 @@ function renderWsClientSearch() {
     return;
   }
 
-  results.innerHTML = matches.map(c =>
-    `<div class="csr-item" data-id="${escAttr(c.id)}" data-name="${escAttr(c.clientName || '')}"
+  results.innerHTML = matches.map(c => {
+    const dn = isDemoMode() ? demoClientName(c.id) : (c.clientName || '');
+    return `<div class="csr-item" data-id="${escAttr(c.id)}" data-name="${escAttr(isDemoMode() ? dn : (c.clientName || ''))}"
        style="padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.875rem;">
-       <div style="font-weight:600;">${escHtml(c.clientName || '')}</div>
+       <div style="font-weight:600;">${escHtml(dn)}</div>
        <div style="font-size:0.77rem;color:var(--text-muted);">${escHtml(c.counselingType || '')} · ${escHtml(c.counselor || '')}</div>
-     </div>`
-  ).join('');
+     </div>`;
+  }).join('');
   results.style.display = '';
 
   results.querySelectorAll('.csr-item').forEach(item => {
@@ -756,8 +760,9 @@ function showIncompleteBanner() {
     const chips = c.issues.map(i =>
       `<span style="background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.7rem;font-weight:700;">${escHtml(i)}</span>`
     ).join(' ');
+    const incName = isDemoMode() ? demoClientName(c.id) : (c.clientName || '—');
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.2rem 0;border-bottom:1px solid rgba(0,0,0,0.06);">
-      <a href="client.html?id=${escAttr(c.id)}" style="font-weight:600;font-size:0.8125rem;color:var(--primary);">${escHtml(c.clientName || '—')}</a>
+      <a href="client.html?id=${escAttr(c.id)}" style="font-weight:600;font-size:0.8125rem;color:var(--primary);">${escHtml(incName)}</a>
       <span style="display:flex;gap:0.25rem;">${chips}</span>
     </div>`;
   }).join('');

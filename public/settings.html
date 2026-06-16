@@ -17,8 +17,18 @@
       </div>
     </div>
 
-    <!-- Counselors -->
+    <!-- Pending Users -->
     <div class="card" style="max-width:860px;">
+      <div class="card-title">Pending User Approvals</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        New @housingopps.org accounts waiting for role assignment. Assign a role to grant access.
+      </p>
+      <div id="pendingUsersList"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
+      <p id="pendingUsersMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
+    <!-- Counselors -->
+    <div class="card" style="max-width:860px;margin-top:1.25rem;">
       <div class="card-title">Active Counselors</div>
 
       <div id="counselorsList" style="margin-bottom:1rem;">
@@ -270,6 +280,23 @@
       <p id="settingsMsg" class="hidden" style="font-size:0.8125rem;margin-top:1rem;"></p>
       <div class="form-actions" style="margin-top:1.25rem;">
         <button id="saveWeights" class="btn btn-primary">Save Weights</button>
+      </div>
+    </div>
+
+    <!-- Demo Mode Passcode -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Demo Mode Passcode</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1.25rem;">
+        The passcode that gives funders read-only Demo Mode access without a @housingopps.org account.
+        All client names and personal information are replaced with generic placeholders in Demo Mode.
+      </p>
+      <div class="form-group" style="max-width:320px;">
+        <label for="demoPasscodeField">Passcode</label>
+        <input type="text" id="demoPasscodeField" placeholder="e.g. housing2024" autocomplete="off">
+      </div>
+      <p id="demoPasscodeMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button id="saveDemoPasscodeBtn" class="btn btn-primary">Save Passcode</button>
       </div>
     </div>
 

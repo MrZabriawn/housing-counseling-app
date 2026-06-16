@@ -16,6 +16,17 @@
     <p id="loginError" class="error-msg hidden"></p>
     <button id="submitBtn" class="btn btn-primary btn-block mt-2">Sign in with Google</button>
     <p class="login-hint">Use your @housingopps.org account</p>
+
+    <div style="display:flex;align-items:center;gap:0.75rem;margin:1.25rem 0 0.75rem;">
+      <hr style="flex:1;border:none;border-top:1px solid var(--border);">
+      <span style="font-size:0.8rem;color:var(--text-muted);">or</span>
+      <hr style="flex:1;border:none;border-top:1px solid var(--border);">
+    </div>
+
+    <p style="font-size:0.8125rem;color:var(--text-muted);margin:0 0 0.4rem;">Funder / Demo Access</p>
+    <input type="password" id="demoPasscode" class="form-control" placeholder="Enter demo passcode" autocomplete="off">
+    <button id="demoBtn" class="btn btn-secondary btn-block mt-1">Enter Demo Mode</button>
+    <p id="demoError" class="error-msg hidden"></p>
   </div>
 
   <script type="module" src="js/login.js"></script>
