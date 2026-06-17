@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUD — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- CDN libraries for HUD report generation -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <style>
+    /* ── Top-level tab bar ───────────────────────────────────────────────────── */
+    .hud-page-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+    }
+    .hud-page-tab {
+      padding: 0.5rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+      border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color 0.15s;
+    }
+    .hud-page-tab:hover { color: var(--text); }
+    .hud-page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .hud-page-panel { display: none; }
+    .hud-page-panel.active { display: block; }
+
+    /* ── HUD Reports styles ──────────────────────────────────────────────────── */
+    .report-section { margin-bottom: 1.5rem; }
+    .report-section-title {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.6rem;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .status-table th {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 700; padding: 0.4rem 0.75rem;
+      border-bottom: 2px solid var(--border); text-align: left; white-space: nowrap;
+    }
+    .status-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .warn-badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      background: #fff3e0; color: #e65100; border: 1px solid #ffcc80;
+      border-radius: 3px; padding: 0.1rem 0.45rem; margin-left: 0.4rem;
+    }
+    #exportArea { max-width: 860px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+    #statusMsg { font-size: 0.8125rem; margin-top: 0.5rem; }
+
+    /* ── HUD Time styles ─────────────────────────────────────────────────────── */
+    .hud-tabs {
+      display: flex; gap: 0;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; width: fit-content; margin-bottom: 1.25rem;
+    }
+    .hud-tab {
+      padding: 0.45rem 1.25rem; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; background: #fff; border: none;
+      border-right: 1px solid var(--border); color: var(--text-muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .hud-tab:last-child { border-right: none; }
+    .hud-tab.active { background: var(--primary); color: #fff; }
+
+    .day-row {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 0.4rem; background: #fff; overflow: hidden;
+    }
+    .day-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.55rem 0.9rem; cursor: pointer;
+      user-select: none; transition: background 0.1s;
+    }
+    .day-header:hover { background: #f8f9fb; }
+    .day-header.weekend { background: #fafafa; }
+    .day-header.weekend .day-label { color: var(--text-muted); }
+    .day-label { font-weight: 600; font-size: 0.875rem; min-width: 130px; }
+    .day-hours { margin-left: auto; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+    .day-arrow { font-size: 0.75rem; color: var(--text-muted); transition: transform 0.15s; }
+    .day-row.open .day-arrow { transform: rotate(90deg); }
+    .day-body { display: none; border-top: 1px solid var(--border); padding: 0.65rem 0.9rem; }
+    .day-row.open .day-body { display: block; }
+
+    .entry-chip {
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      font-size: 0.8125rem; padding: 0.35rem 0; border-bottom: 1px solid #f0f1f3;
+    }
+    .entry-chip:last-of-type { border-bottom: none; }
+    .entry-chip-info { flex: 1; line-height: 1.45; }
+    .entry-chip-row { font-weight: 600; color: var(--text); }
+    .entry-chip-desc { color: var(--text-muted); }
+    .entry-chip-hrs { font-size: 0.8rem; font-weight: 700; color: var(--primary); white-space: nowrap; padding-top: 2px; }
+    .entry-chip-edit {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 1rem; padding: 0.1rem 0.3rem;
+      border-radius: 4px; line-height: 1; flex-shrink: 0;
+    }
+    .entry-chip-edit:hover { background: var(--primary-light); color: var(--primary); }
+    .entry-chip-del {
+      background: none; border: none; cursor: pointer;
+      color: var(--danger); font-size: 1rem; padding: 0.1rem 0.3rem;
+      border-radius: 4px; line-height: 1; flex-shrink: 0;
+    }
+    .entry-chip-del:hover { background: #fee2e2; }
+    .entry-chip.derived { opacity: 0.7; }
+    .derived-badge {
+      font-size: 0.7rem; background: #e8f0fe; color: var(--primary);
+      border-radius: 3px; padding: 0 4px; font-weight: 700;
+      display: inline-block; margin-left: 4px; vertical-align: middle;
+    }
+    .add-entry-form {
+      margin-top: 0.6rem; padding: 0.75rem; background: #f8f9fb;
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .section-radios { display: flex; gap: 1rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+    .section-radios label {
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.8125rem; cursor: pointer; font-weight: 500;
+    }
+    .add-form-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
+    .add-form-row .form-group { margin: 0; }
+    .add-form-row select, .add-form-row input[type="number"] { font-size: 0.8125rem; }
+    .add-form-row textarea { font-size: 0.8125rem; min-height: 50px; resize: vertical; }
+    .add-form-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+    .summary-table th {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 700; padding: 0.4rem 0.5rem;
+      border-bottom: 2px solid var(--border); text-align: left;
+    }
+    .summary-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #f0f1f3; }
+    .summary-table tr:last-child td { border-bottom: none; font-weight: 700; background: #f8f9fb; }
+    #myEntriesTable { font-size: 0.85rem; }
+    #myEntriesTable th { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>HUD</h2>
+        <p>PAR time log and monthly submission reports.</p>
+      </div>
+    </div>
+
+    <!-- Top-level tab bar -->
+    <div class="hud-page-tabs">
+      <button class="hud-page-tab active" data-panel="panel-time">My HUD Time</button>
+      <button class="hud-page-tab" data-panel="panel-reports">HUD Reports</button>
+    </div>
+
+    <!-- ══ My HUD Time panel ══════════════════════════════════════════════════ -->
+    <div id="panel-time" class="hud-page-panel active">
+      <div class="page-header" style="padding:0;margin-bottom:1.25rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <div class="form-group" style="margin:0;">
+            <label for="monthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
+            <input type="month" id="monthPicker" style="font-size:0.875rem;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-tab bar (PAR Log / My Entries / counselor tabs injected by JS) -->
+      <div class="hud-tabs" id="hudSubTabs">
+        <button class="hud-tab active" data-tab="par">PAR Log</button>
+        <button class="hud-tab" data-tab="entries">My Entries</button>
+      </div>
+
+      <div id="tabPar">
+        <div id="parDayList" style="max-width:860px;">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+        </div>
+        <div class="card" style="max-width:500px;margin-top:1.25rem;">
+          <div class="card-title">Monthly Summary</div>
+          <div id="parSummary">
+            <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="tabEntries" class="hidden">
+        <div class="card" style="padding:0;max-width:960px;">
+          <div style="overflow-x:auto;">
+            <table id="myEntriesTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Section</th>
+                  <th>PAR Row</th>
+                  <th>Description</th>
+                  <th>Hours</th>
+                  <th style="width:5rem;"></th>
+                </tr>
+              </thead>
+              <tbody id="myEntriesBody">
+                <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ HUD Reports panel ══════════════════════════════════════════════════ -->
+    <div id="panel-reports" class="hud-page-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Generate monthly HUD submission files. Executive Director only.</p>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <div class="form-group" style="margin:0;">
+            <label for="hudMonthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
+            <input type="month" id="hudMonthPicker" style="font-size:0.875rem;">
+          </div>
+          <button id="refreshBtn" class="btn btn-secondary btn-sm" style="margin-top:18px;">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Counselor Status</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Entry counts for selected month. ⚠ = missing Staff # or Title — blocks export for that counselor.
+        </p>
+        <div id="statusTableWrap">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Select a month and click Refresh.</p>
+        </div>
+      </div>
+
+      <div class="card" id="exportArea" style="margin-top:1.25rem;">
+        <div class="card-title">Generate Reports</div>
+        <p id="statusMsg" class="hidden"></p>
+
+        <div class="report-section">
+          <div class="report-section-title">Client Activity Log</div>
+          <div class="btn-group">
+            <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Personnel Activity Report (PAR) — per counselor</div>
+          <div class="btn-group" id="parButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllParsBtn" class="btn btn-secondary btn-sm">Generate All PARs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Case Management Log (CML) — per counselor</div>
+          <div class="btn-group" id="cmlButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllCmlsBtn" class="btn btn-secondary btn-sm">Generate All CMLs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Training Activity Log &amp; Invoice</div>
+          <div class="btn-group">
+            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Full Submission Package</div>
+          <div class="btn-group">
+            <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent);">Generate All → ZIP</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1.25rem;border:1px solid #fbbf24;max-width:860px;">
+        <div class="card-title">Session Import</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Scans all logged sessions from Jan 2026 onward and creates HUD entries for qualifying ones
+          (NOFA Rx + In-Person or Case Management billing). Safe to re-run — already-imported sessions are skipped.
+        </p>
+        <button id="importSessionsBtn" class="btn btn-secondary">Import from Sessions</button>
+        <p id="importMsg" class="hidden" style="margin-top:0.75rem;font-size:0.8125rem;"></p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Edit entry modal -->
+  <div id="editModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Edit Entry</h3>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="editSection">Section</label>
+          <select id="editSection">
+            <option value="PAR-S1">Section 1 – Direct Service</option>
+            <option value="PAR-S2">Section 2 – Training</option>
+            <option value="PAR-S3">Section 3 – Marketing</option>
+            <option value="CML">CML</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editParRow">PAR Row</label>
+          <select id="editParRow"></select>
+        </div>
+        <div class="form-group full-width">
+          <label for="editDesc">Description</label>
+          <textarea id="editDesc" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="editHours">Hours</label>
+          <input type="number" id="editHours" min="0.25" max="24" step="0.25">
+        </div>
+      </div>
+      <p id="editError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="editSaveBtn" class="btn btn-primary">Save</button>
+        <button id="editCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div id="deleteModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Delete Entry</h3>
+      <p style="font-size:0.875rem;margin:0.75rem 0;">Are you sure you want to delete this entry? This cannot be undone.</p>
+      <p id="deleteModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="deleteConfirmBtn" class="btn btn-danger">Delete</button>
+        <button id="deleteCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    import { initHudTime }    from './js/hud-time.js';
+    import { initHudReports } from './js/hud-reports.js';
+
+    const params     = new URLSearchParams(window.location.search);
+    const startPanel = params.get('tab') === 'reports' ? 'panel-reports' : 'panel-time';
+
+    let _hudReportsInited = false;
+
+    function switchHudPanel(panelId) {
+      document.querySelectorAll('.hud-page-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.panel === panelId)
+      );
+      document.querySelectorAll('.hud-page-panel').forEach(p =>
+        p.classList.toggle('active', p.id === panelId)
+      );
+    }
+
+    requireAuth(async (user, profile) => {
+      setupNav(profile, 'hud');
+
+      // Wire top-level tab switching
+      document.querySelectorAll('.hud-page-tab').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          switchHudPanel(btn.dataset.panel);
+          if (btn.dataset.panel === 'panel-reports' && !_hudReportsInited) {
+            if (profile.role === 'executive_director') {
+              await initHudReports(user, profile);
+              _hudReportsInited = true;
+            }
+          }
+        });
+      });
+
+      // Always init HUD Time (available to all roles)
+      await initHudTime(user, profile);
+
+      // If ED and starting on reports tab, init immediately
+      if (startPanel === 'panel-reports' && profile.role === 'executive_director') {
+        await initHudReports(user, profile);
+        _hudReportsInited = true;
+      }
+
+      // Switch to requested starting panel
+      if (startPanel !== 'panel-time') switchHudPanel(startPanel);
+    });
+  </script>
+</body>
+</html>

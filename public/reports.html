@@ -90,7 +90,6 @@
       <button class="reports-tab active" data-tab="tab-cdbg">CDBG</button>
       <button class="reports-tab" data-tab="tab-court">Court</button>
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
-      <button class="reports-tab" id="hudTabBtn" data-tab="tab-hud">HUD</button>
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
     </div>
 
@@ -334,87 +333,6 @@
       </div>
     </div>
 
-    <!-- ══ HUD Reports panel ══════════════════════════════════════════════════════ -->
-    <div class="reports-panel" id="tab-hud">
-
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
-        <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Generate monthly HUD submission files. Executive Director only.</p>
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-          <div class="form-group" style="margin:0;">
-            <label for="monthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
-            <input type="month" id="monthPicker" style="font-size:0.875rem;">
-          </div>
-          <button id="refreshBtn" class="btn btn-secondary btn-sm" style="margin-top:18px;">Refresh</button>
-        </div>
-      </div>
-
-      <div class="card" style="max-width:860px;">
-        <div class="card-title">Counselor Status</div>
-        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
-          Entry counts for selected month. ⚠ = missing Staff # or Title — blocks export for that counselor.
-        </p>
-        <div id="statusTableWrap">
-          <p style="color:var(--text-muted);font-size:0.875rem;">Select a month and click Refresh.</p>
-        </div>
-      </div>
-
-      <div class="card" id="exportArea" style="margin-top:1.25rem;">
-        <div class="card-title">Generate Reports</div>
-        <p id="statusMsg" class="hidden"></p>
-
-        <div class="report-section">
-          <div class="report-section-title">Client Activity Log</div>
-          <div class="btn-group">
-            <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
-          </div>
-        </div>
-
-        <hr class="divider">
-
-        <div class="report-section">
-          <div class="report-section-title">Personnel Activity Report (PAR) — per counselor</div>
-          <div class="btn-group" id="parButtons">
-            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
-          </div>
-          <div style="margin-top:0.5rem;">
-            <button id="genAllParsBtn" class="btn btn-secondary btn-sm">Generate All PARs</button>
-          </div>
-        </div>
-
-        <hr class="divider">
-
-        <div class="report-section">
-          <div class="report-section-title">Case Management Log (CML) — per counselor</div>
-          <div class="btn-group" id="cmlButtons">
-            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
-          </div>
-          <div style="margin-top:0.5rem;">
-            <button id="genAllCmlsBtn" class="btn btn-secondary btn-sm">Generate All CMLs</button>
-          </div>
-        </div>
-
-        <hr class="divider">
-
-        <div class="report-section">
-          <div class="report-section-title">Training Activity Log &amp; Invoice</div>
-          <div class="btn-group">
-            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
-            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
-          </div>
-        </div>
-
-        <hr class="divider">
-
-        <div class="report-section">
-          <div class="report-section-title">Full Submission Package</div>
-          <div class="btn-group">
-            <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent);">Generate All → ZIP</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
     <!-- ══ Incomplete Files panel ════════════════════════════════════════════════ -->
     <div class="reports-panel no-print" id="tab-incomplete">
       <div style="margin-bottom:1rem;" class="no-print">
@@ -443,7 +361,6 @@
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports } from './js/reports.js?v=9';
-    import { initHudReports } from './js/hud-reports.js';
     import { initChciReports } from './js/chci-reports.js';
     import { initIncompleteReport } from './js/incomplete-report.js';
 
@@ -464,9 +381,6 @@
       setupNav(profile, 'reports');
       await initCdbgReports(user, profile);
       initChciReports();
-      if (profile.role === 'executive_director') {
-        await initHudReports(user, profile);
-      }
       await initIncompleteReport(user, profile);
 
       // Auto-switch to incomplete tab if linked from the banner

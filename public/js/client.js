@@ -973,6 +973,7 @@ function openEditSession(sessionId) {
   document.getElementById('sDate').value         = toDateInputValue(session.date);
   document.getElementById('sCounselor').value    = session.counselor || '';
   document.getElementById('sRxNumber').value     = session.rxNumber  || '';
+  document.getElementById('sHudType').value      = session.hudType   || 'counseling';
   document.getElementById('sHours').value        = session.hours     || '';
   document.getElementById('sDollarsFor').value   = session.dollarsFor  || '';
   document.getElementById('sCaseStatus').value   = session.caseStatus  || '';
@@ -989,6 +990,7 @@ function clearSessionModal() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  document.getElementById('sHudType').value = 'counseling';
 }
 
 function closeSessionModal() {
@@ -1005,17 +1007,16 @@ function toDateInputValue(ts) {
 function readSessionForm() {
   const dateVal = document.getElementById('sDate').value;
   return {
-    date:          dateVal ? new Date(dateVal + 'T12:00:00') : null,
-    counselor:     document.getElementById('sCounselor').value,
-    rxNumber:      document.getElementById('sRxNumber').value.trim(),
-    hours:         parseFloat(document.getElementById('sHours').value) || 0,
-    dollarsFor:    document.getElementById('sDollarsFor').value.trim(),
-    caseStatus:    document.getElementById('sCaseStatus').value.trim(),
-    outcome:       document.getElementById('sOutcome').value.trim(),
-    notes:         document.getElementById('sNotes').value.trim(),
-    updatedAt:     serverTimestamp(),
-    // billingType: "In-Person" | "Case Management Activity" | "Court"
-    // Not yet collected by the UI; treat as null when absent on historical sessions.
+    date:       dateVal ? new Date(dateVal + 'T12:00:00') : null,
+    counselor:  document.getElementById('sCounselor').value,
+    rxNumber:   document.getElementById('sRxNumber').value.trim(),
+    hudType:    document.getElementById('sHudType').value,
+    hours:      parseFloat(document.getElementById('sHours').value) || 0,
+    dollarsFor: document.getElementById('sDollarsFor').value.trim(),
+    caseStatus: document.getElementById('sCaseStatus').value.trim(),
+    outcome:    document.getElementById('sOutcome').value.trim(),
+    notes:      document.getElementById('sNotes').value.trim(),
+    updatedAt:  serverTimestamp(),
   };
 }
 
@@ -1430,6 +1431,7 @@ function renderRxPanel() {
         <tr style="background:#f8f9fb;">
           <th ${TH}>Rx #</th>
           <th ${TH}>Guarantor</th>
+          <th ${TH}>NOFA Initiative</th>
           <th ${TH} style="text-align:center;">Active</th>
           <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);"></th>
         </tr>
@@ -1450,6 +1452,12 @@ function renderRxPanel() {
                 style="font-size:0.8125rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);">
                 ${guarantorOpts}
               </select>
+            </td>
+            <td ${TD}>
+              <input type="text" class="rx-nofa-init" data-rx-id="${escAttr(r.id)}"
+                value="${escAttr(r.nofaInitiative || '')}"
+                placeholder="${r.guarantor === 'NOFA' ? 'e.g. NOFA 2025-1 COMP' : '—'}"
+                style="font-size:0.8125rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);width:160px;${r.guarantor !== 'NOFA' ? 'color:var(--text-muted);' : ''}">
             </td>
             <td ${TD} style="text-align:center;">
               <input type="checkbox" class="rx-active" data-rx-id="${escAttr(r.id)}" ${r.active !== false ? 'checked' : ''}>
@@ -1478,6 +1486,10 @@ function renderRxPanel() {
           <option value="">— required —</option>
           ${RX_GUARANTORS.map(v => `<option value="${escAttr(v)}">${escHtml(v)}</option>`).join('')}
         </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+        <label style="font-size:0.75rem;">NOFA Initiative</label>
+        <input type="text" id="rxNewNofaInit" placeholder="e.g. NOFA 2025-1 COMP">
       </div>
       <div class="form-group" style="margin:0;">
         <label style="font-size:0.75rem;">Active</label>
@@ -1531,14 +1543,16 @@ function resetRxAddForm() {
   if (!form) return;
   form.classList.add('hidden');
   document.getElementById('rxShowAddBtn').classList.remove('hidden');
-  document.getElementById('rxNewNumber').value   = '';
-  document.getElementById('rxNewGuarantor').value = '';
-  document.getElementById('rxNewActive').checked = true;
+  document.getElementById('rxNewNumber').value    = '';
+  document.getElementById('rxNewGuarantor').value  = '';
+  document.getElementById('rxNewNofaInit').value   = '';
+  document.getElementById('rxNewActive').checked   = true;
 }
 
 async function saveRxRow(rxId) {
   const guarEl  = document.querySelector(`.rx-guarantor[data-rx-id="${rxId}"]`);
   const actEl   = document.querySelector(`.rx-active[data-rx-id="${rxId}"]`);
+  const initEl  = document.querySelector(`.rx-nofa-init[data-rx-id="${rxId}"]`);
   const saveBtn = document.querySelector(`.rx-save-btn[data-rx-id="${rxId}"]`);
   if (!guarEl || !actEl) return;
 
@@ -1546,12 +1560,14 @@ async function saveRxRow(rxId) {
   saveBtn.textContent = '…';
 
   try {
+    const nofaInitiative = initEl ? initEl.value.trim() : '';
     await updateDoc(doc(db, 'clients', clientId, 'rxNumbers', rxId), {
       guarantor: guarEl.value,
       active:    actEl.checked,
+      nofaInitiative,
     });
     const rxDoc = _rxDocs.find(r => r.id === rxId);
-    if (rxDoc) { rxDoc.guarantor = guarEl.value; rxDoc.active = actEl.checked; }
+    if (rxDoc) { rxDoc.guarantor = guarEl.value; rxDoc.active = actEl.checked; rxDoc.nofaInitiative = nofaInitiative; }
     renderRxPanel();
   } catch (err) {
     alert('Save failed: ' + err.message);
@@ -1577,8 +1593,9 @@ async function addRxNumber() {
   const actEl  = document.getElementById('rxNewActive');
   const addBtn = document.getElementById('rxAddConfirmBtn');
 
-  const rxNumber  = numEl.value.trim();
-  const guarantor = guarEl.value;
+  const rxNumber      = numEl.value.trim();
+  const guarantor     = guarEl.value;
+  const nofaInitiative = (document.getElementById('rxNewNofaInit')?.value || '').trim();
   if (!rxNumber)  { alert('Enter an Rx number.'); numEl.focus(); return; }
   if (!guarantor) { alert('Select a guarantor.'); guarEl.focus(); return; }
 
@@ -1589,10 +1606,11 @@ async function addRxNumber() {
     const ref = await addDoc(collection(db, 'clients', clientId, 'rxNumbers'), {
       rxNumber,
       guarantor,
+      nofaInitiative,
       active:    actEl.checked,
       createdAt: serverTimestamp(),
     });
-    _rxDocs.push({ id: ref.id, rxNumber, guarantor, active: actEl.checked });
+    _rxDocs.push({ id: ref.id, rxNumber, guarantor, nofaInitiative, active: actEl.checked });
     renderRxPanel();
   } catch (err) {
     alert('Add failed: ' + err.message);
