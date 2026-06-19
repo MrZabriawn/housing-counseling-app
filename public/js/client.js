@@ -348,6 +348,7 @@ function buildSelects() {
   appendOptions('billingType',      BILLING_TYPES);
   appendOptions('reCode',           RE_CODES);
   appendOptions('closureAwardType', AWARD_TYPES);
+  appendOptions('sCounselingType',  COUNSELING_TYPES);
   wireAmiLabel('amiPercent', 'amiLabel');
 }
 
@@ -592,6 +593,59 @@ function renderHeader(c) {
     closeFileBtn.classList.toggle('hidden', !canClose);
     reopenFileBtn.classList.add('hidden');
   }
+
+  renderDriveFolderBar(c);
+}
+
+// ── Drive Folder Bar ──────────────────────────────────────────────────────────
+
+function renderDriveFolderBar(c) {
+  const linkWrap = document.getElementById('driveFolderLinkWrap');
+  const setBtn   = document.getElementById('setDriveFolderBtn');
+  if (!linkWrap) return;
+
+  if (c.driveFolderUrl) {
+    linkWrap.innerHTML = `<a href="${escAttr(c.driveFolderUrl)}" target="_blank" rel="noopener"
+      style="color:#4285f4;font-weight:600;text-decoration:none;">Open Google Drive Folder →</a>`;
+  } else {
+    linkWrap.innerHTML = `<span style="color:var(--text-muted);">No Drive folder linked yet.</span>`;
+  }
+
+  if (setBtn && isAdmin(_profile)) {
+    setBtn.classList.remove('hidden');
+    setBtn.onclick = async () => {
+      const current = _client.driveFolderUrl || '';
+      const url = prompt('Paste the Google Drive folder URL:', current);
+      if (url === null) return;
+      const trimmed = url.trim();
+      try {
+        await updateDoc(doc(db, 'clients', clientId), { driveFolderUrl: trimmed || null });
+        _client.driveFolderUrl = trimmed || null;
+        renderDriveFolderBar(_client);
+      } catch (err) {
+        alert('Failed to save: ' + err.message);
+      }
+    };
+  }
+}
+
+function showDriveModal() {
+  const modal   = document.getElementById('driveModal');
+  const linkDiv = document.getElementById('driveModalLink');
+  if (!modal || !linkDiv) return;
+
+  if (_client.driveFolderUrl) {
+    linkDiv.innerHTML = `<a href="${escAttr(_client.driveFolderUrl)}" target="_blank" rel="noopener"
+      style="color:#4285f4;font-weight:600;font-size:0.95rem;">📁 Open Drive Folder →</a>`;
+  } else {
+    linkDiv.innerHTML = `<span style="color:var(--text-muted);font-size:0.875rem;">No Drive folder linked for this client. Ask the Operations Coordinator to add one.</span>`;
+  }
+
+  modal.classList.remove('hidden');
+  document.getElementById('driveModalCloseBtn').onclick = () => modal.classList.add('hidden');
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+  }, { once: true });
 }
 
 function escHtml(str) {
@@ -946,6 +1000,7 @@ function openAddSession() {
   clearSessionModal();
 
   // Defaults
+  document.getElementById('sCounselingType').value = _client.counselingType || '';
   document.getElementById('sDate').value      = new Date().toISOString().split('T')[0];
   document.getElementById('sCounselor').value = _client.counselor || '';
   // Pre-fill with the first HUD-billable Rx (NOFA + active), else first active, else first
@@ -970,6 +1025,7 @@ function openEditSession(sessionId) {
   document.getElementById('sessionSnapshotBtn').classList.toggle('hidden', !session.clientSnapshot);
 
   // Populate
+  document.getElementById('sCounselingType').value = session.counselingType || _client.counselingType || '';
   document.getElementById('sDate').value         = toDateInputValue(session.date);
   document.getElementById('sCounselor').value    = session.counselor || '';
   document.getElementById('sRxNumber').value     = session.rxNumber  || '';
@@ -985,7 +1041,7 @@ function openEditSession(sessionId) {
 }
 
 function clearSessionModal() {
-  ['sDate','sCounselor','sRxNumber','sHours',
+  ['sCounselingType','sDate','sCounselor','sRxNumber','sHours',
    'sDollarsFor','sCaseStatus','sOutcome','sNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -1007,6 +1063,7 @@ function toDateInputValue(ts) {
 function readSessionForm() {
   const dateVal = document.getElementById('sDate').value;
   return {
+    counselingType: document.getElementById('sCounselingType').value,
     date:       dateVal ? new Date(dateVal + 'T12:00:00') : null,
     counselor:  document.getElementById('sCounselor').value,
     rxNumber:   document.getElementById('sRxNumber').value.trim(),
@@ -1030,17 +1087,73 @@ async function saveSession() {
   try {
     const data = readSessionForm();
 
+    if (!data.counselingType) {
+      errorEl.textContent = 'Counseling Type is required.';
+      errorEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Session';
+      return;
+    }
+    if (!data.date) {
+      errorEl.textContent = 'Date is required.';
+      errorEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Session';
+      return;
+    }
+
     if (_editingSessionId) {
       // Update existing — snapshot stays frozen from original session creation
       await updateDoc(
         doc(db, 'clients', clientId, 'sessions', _editingSessionId),
         data
       );
+      // Keep linked HUD entry in sync
+      const existing = _sessions.find(s => s.id === _editingSessionId);
+      if (existing?.hudEventId) {
+        try {
+          await updateDoc(doc(db, 'hudEvents', existing.hudEventId), {
+            date:            data.date,
+            month:           data.date.substring(0, 7),
+            durationMinutes: Math.round((Number(data.hours) || 0) * 60),
+            counselorName:   data.counselor || '',
+          });
+        } catch (_) {}
+      }
     } else {
       // New session — embed point-in-time client snapshot (includes financials)
       data.createdAt      = serverTimestamp();
       data.clientSnapshot = buildClientSnapshot();
-      await addDoc(collection(db, 'clients', clientId, 'sessions'), data);
+      const sessionRef    = await addDoc(collection(db, 'clients', clientId, 'sessions'), data);
+
+      // Auto-create HUD entry if client has an active NOFA Rx
+      const nofaRx = _rxDocs.find(r => r.guarantor === 'NOFA' && r.active !== false);
+      if (nofaRx) {
+        try {
+          let counselorDocId = '';
+          const cSnap = await getDocs(query(collection(db, 'counselors'), where('name', '==', data.counselor)));
+          if (!cSnap.empty) counselorDocId = cSnap.docs[0].id;
+
+          const hudRef = await addDoc(collection(db, 'hudEvents'), {
+            source:          'session',
+            sessionId:       sessionRef.id,
+            clientId,
+            clientName:      _client.clientName || '',
+            rxCaseNo:        nofaRx.rxNumber    || '',
+            guarantor:       'NOFA',
+            counselorId:     counselorDocId,
+            counselorName:   data.counselor     || '',
+            date:            data.date,
+            month:           data.date.substring(0, 7),
+            durationMinutes: Math.round((Number(data.hours) || 0) * 60),
+            type:            'counseling_session',
+            parSection:      'S1',
+            parRow:          'Counseling',
+            createdAt:       serverTimestamp(),
+          });
+          await updateDoc(doc(db, 'clients', clientId, 'sessions', sessionRef.id), { hudEventId: hudRef.id });
+        } catch (_) {}
+      }
     }
 
     // Refresh denormalized fields on client doc
@@ -1048,6 +1161,7 @@ async function saveSession() {
 
     closeSessionModal();
     await loadSessions();
+    showDriveModal();
   } catch (err) {
     errorEl.textContent = 'Save failed: ' + err.message;
     errorEl.classList.remove('hidden');
@@ -1066,6 +1180,12 @@ async function deleteSession() {
   delBtn.textContent = 'Deleting…';
 
   try {
+    // Delete linked HUD entry first (best-effort)
+    const session = _sessions.find(s => s.id === _editingSessionId);
+    if (session?.hudEventId) {
+      try { await deleteDoc(doc(db, 'hudEvents', session.hudEventId)); } catch (_) {}
+    }
+
     await deleteDoc(doc(db, 'clients', clientId, 'sessions', _editingSessionId));
     await refreshClientDenormalized();
     closeSessionModal();

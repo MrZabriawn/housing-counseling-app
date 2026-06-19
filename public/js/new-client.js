@@ -276,18 +276,20 @@ async function handleSubmit(e) {
     const dollarsAwarded = parseFloat(document.getElementById('dollarsAwarded').value) || 0;
 
     const sessionData = {
-      date:          dateVal ? new Date(dateVal + 'T12:00:00') : null,
-      counselor:     document.getElementById('counselor').value,
-      rxNumber:      document.getElementById('rxNumber').value.trim(),
+      date:           dateVal ? new Date(dateVal + 'T12:00:00') : null,
+      counselor:      document.getElementById('counselor').value,
+      counselingType: document.getElementById('counselingType').value,
+      billingType:    document.getElementById('billingType').value,
+      rxNumber:       document.getElementById('rxNumber').value.trim(),
       hours,
       dollarsAwarded,
-      awardType:     document.getElementById('awardType').value,
-      caseStatus:    document.getElementById('caseStatus').value.trim(),
-      outcome:       document.getElementById('outcome').value.trim(),
-      notes:         document.getElementById('notes').value.trim(),
-      dollarsFor:    '',
-      createdAt:     now,
-      updatedAt:     now,
+      awardType:      document.getElementById('awardType').value,
+      caseStatus:     document.getElementById('caseStatus').value.trim(),
+      outcome:        document.getElementById('outcome').value.trim(),
+      notes:          document.getElementById('notes').value.trim(),
+      dollarsFor:     '',
+      createdAt:      now,
+      updatedAt:      now,
     };
 
     const rxRaw    = document.getElementById('rxNumber').value.trim();

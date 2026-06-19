@@ -135,6 +135,13 @@
     <div id="cmcBanner" class="hidden" style="background:#f0f4ff;border-left:4px solid var(--primary);padding:0.65rem 1.25rem;border-radius:var(--radius);margin-bottom:0.35rem;font-size:0.875rem;"></div>
     <div id="cmcLinkPanel" class="hidden" style="margin-bottom:1rem;"></div>
 
+    <!-- Drive Folder Bar -->
+    <div id="driveFolderBar" style="display:flex;align-items:center;gap:0.75rem;background:#f0f7ff;border-left:4px solid #4285f4;padding:0.55rem 1.25rem;border-radius:var(--radius);margin-bottom:0.75rem;font-size:0.875rem;">
+      <span style="font-size:1.1rem;">📁</span>
+      <span id="driveFolderLinkWrap" style="flex:1;"></span>
+      <button id="setDriveFolderBtn" class="btn btn-sm btn-secondary hidden" style="white-space:nowrap;">Set Folder</button>
+    </div>
+
     <!-- Outreach History panel (lazy, only shown when calls exist) -->
     <div id="outreachHistoryPanel" class="hidden" style="background:var(--surface,#f8f9fa);border:1px solid var(--border,#dee2e6);border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
@@ -794,6 +801,12 @@
       <h3 id="sessionModalTitle">Add Session</h3>
       <div class="form-grid" style="margin-top:0;">
         <div class="form-group">
+          <label for="sCounselingType">Counseling Type *</label>
+          <select id="sCounselingType" required>
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label for="sDate">Date *</label>
           <input type="date" id="sDate" required>
         </div>
@@ -940,6 +953,18 @@
   </div>
 
   <!-- ── Log Call from Client Modal ──────────────────────────── -->
+  <!-- Drive Upload Reminder Modal -->
+  <div id="driveModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:440px;">
+      <h3 style="margin-bottom:0.75rem;">✅ Session Saved</h3>
+      <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:1rem;">Remember to upload any documents to this client's Google Drive folder.</p>
+      <div id="driveModalLink" style="margin-bottom:1.25rem;font-size:0.9rem;"></div>
+      <div class="form-actions">
+        <button id="driveModalCloseBtn" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
   <div id="logCallFromClientModal" class="modal-overlay hidden">
     <div class="modal-box">
       <h3>Log Outreach Call</h3>
@@ -971,6 +996,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/client.js?v=2"></script>
+  <script type="module" src="js/client.js?v=3"></script>
 </body>
 </html>

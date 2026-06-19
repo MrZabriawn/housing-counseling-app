@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
 import { isDemoMode, demoClientName } from './demo-mode.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, amiCategory, amiDisplayLabel } from './data.js';
+import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, BILLING_TYPES, RX_GUARANTORS, amiCategory, amiDisplayLabel } from './data.js';
 import {
   collection, collectionGroup, getDocs, addDoc, query, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -17,11 +17,10 @@ let _user            = null;  // Firebase Auth user
 let _profile         = null;  // Firestore users/{uid} profile
 let _counselorDocs   = [];    // { id, name, staffNumber } from counselors collection
 
-// Workshop modal transient state
-let _wsClientId   = null;
-let _wsClientName = null;
 
-let _metricsRendered = false; // true after first visit to Metrics tab
+let _metricsRendered   = false; // true after first visit to Metrics tab
+let _rxGuarantorMap    = new Map(); // rxNumber string → guarantor string
+let _matchingSessions  = null;  // null = client view; array = session view (date filter active)
 
 requireAuth(async (user, profile) => {
   _user    = user;
@@ -66,8 +65,6 @@ requireAuth(async (user, profile) => {
   // ── Modal buttons ──────────────────────────────────────────────────────────
   document.getElementById('openCmBtn').addEventListener('click', openCmModal);
   document.getElementById('openEmBtn').addEventListener('click', openEmModal);
-  document.getElementById('openWsBtn').addEventListener('click', () => openWsModal());
-
   // Case Management modal
   document.getElementById('cmCancelBtn').addEventListener('click', () => document.getElementById('cmModal').classList.add('hidden'));
   document.getElementById('cmModal').addEventListener('click', e => { if (e.target === document.getElementById('cmModal')) document.getElementById('cmModal').classList.add('hidden'); });
@@ -78,27 +75,15 @@ requireAuth(async (user, profile) => {
   document.getElementById('emModal').addEventListener('click', e => { if (e.target === document.getElementById('emModal')) document.getElementById('emModal').classList.add('hidden'); });
   document.getElementById('emSaveBtn').addEventListener('click', saveEm);
 
-  // Workshop modal
-  document.getElementById('wsCancelBtn').addEventListener('click', () => document.getElementById('wsModal').classList.add('hidden'));
-  document.getElementById('wsDoneBtn').addEventListener('click', () => document.getElementById('wsModal').classList.add('hidden'));
-  document.getElementById('wsModal').addEventListener('click', e => { if (e.target === document.getElementById('wsModal')) document.getElementById('wsModal').classList.add('hidden'); });
-  document.getElementById('wsSaveBtn').addEventListener('click', saveWs);
-  document.getElementById('wsAddAnotherBtn').addEventListener('click', wsAddAnother);
-  document.getElementById('wsClientClear').addEventListener('click', clearWsClient);
-  document.getElementById('wsClientSearch').addEventListener('input', renderWsClientSearch);
-  document.querySelectorAll('input[name="wsContact"]').forEach(r => {
-    r.addEventListener('change', () => {
-      const isEmail = document.querySelector('input[name="wsContact"]:checked').value === 'email';
-      document.getElementById('wsContactVal').placeholder = isEmail ? 'email@example.com' : '555-555-5555';
-    });
-  });
 });
 
 function populateFilters() {
-  appendOptions('fType',  COUNSELING_TYPES);
-  appendOptions('fAmi',   AMI_LEVELS);
-  appendOptions('fRe',    RE_CODES);
-  appendOptions('fMonth', MONTHS);
+  appendOptions('fType',     COUNSELING_TYPES);
+  appendOptions('fAmi',      AMI_LEVELS);
+  appendOptions('fRe',       RE_CODES);
+  appendOptions('fMonth',    MONTHS);
+  appendOptions('fHudType',  BILLING_TYPES);
+  appendOptions('fGuarantor', RX_GUARANTORS);
 
   const yearSel  = document.getElementById('fYear');
   const thisYear = new Date().getFullYear();
@@ -140,10 +125,13 @@ function saveFilters() {
     ami:       document.getElementById('fAmi').value,
     re:        document.getElementById('fRe').value,
     status:    document.getElementById('fStatus').value,
+    hudType:   document.getElementById('fHudType').value,
+    guarantor: document.getElementById('fGuarantor').value,
     month:     document.getElementById('fMonth').value,
     year:      document.getElementById('fYear').value,
     dateStart: document.getElementById('fDateStart').value,
     dateEnd:   document.getElementById('fDateEnd').value,
+    rx:        document.getElementById('fRx')?.value || '',
   }));
 }
 
@@ -156,10 +144,13 @@ function restoreFilters() {
     document.getElementById('fAmi').value       = saved.ami       || '';
     document.getElementById('fRe').value        = saved.re        || '';
     document.getElementById('fStatus').value    = saved.status    || '';
+    document.getElementById('fHudType').value   = saved.hudType   || '';
+    document.getElementById('fGuarantor').value = saved.guarantor || '';
     document.getElementById('fMonth').value     = saved.month     || '';
     document.getElementById('fYear').value      = saved.year      || '';
     document.getElementById('fDateStart').value = saved.dateStart || '';
     document.getElementById('fDateEnd').value   = saved.dateEnd   || '';
+    if (document.getElementById('fRx')) document.getElementById('fRx').value = saved.rx || '';
     // Counselor restored after populateCounselorFilter runs
     document.getElementById('fCounselor')._restoreValue = saved.counselor || '';
   } catch (_) {}
@@ -176,13 +167,17 @@ async function loadClients() {
   document.getElementById('tableBody').innerHTML =
     '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>';
 
-  const [clientSnap, sessSnap] = await Promise.all([
+  const [clientSnap, sessSnap, rxSnap] = await Promise.all([
     getDocs(collection(db, 'clients')),
     getDocs(collectionGroup(db, 'sessions')),
+    getDocs(collectionGroup(db, 'rxNumbers')),
   ]);
 
   allClients   = clientSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(canViewClient);
   _allSessions = sessSnap.docs.map(d => ({ clientId: d.ref.parent.parent.id, ...d.data() }));
+  _rxGuarantorMap = new Map(
+    rxSnap.docs.map(d => [d.data().rxNumber, d.data().guarantor]).filter(([rx]) => rx)
+  );
 
   allClients.sort((a, b) => {
     const da = toDate(a.lastSessionDate).getTime();
@@ -219,6 +214,7 @@ async function applyFilters() {
   const yearVal   = parseInt(document.getElementById('fYear').value, 10) || 0;
   const startVal  = document.getElementById('fDateStart').value;
   const endVal    = document.getElementById('fDateEnd').value;
+  const rxFilter  = document.getElementById('fRx')?.value.trim().toLowerCase() || '';
 
   // Compute effective date range from explicit dates OR from month+year selection
   let start = startVal ? new Date(startVal + 'T00:00:00') : null;
@@ -239,26 +235,53 @@ async function applyFilters() {
   // Standard client-level filters
   let rows = allClients;
   if (name)      rows = rows.filter(c => (c.clientName || '').toLowerCase().includes(name));
-  if (type)      rows = rows.filter(c => c.counselingType === type);
   if (counselor) rows = rows.filter(c => c.counselor === counselor);
   if (ami)       rows = rows.filter(c => amiCategory(c.amiPercent) === ami);
   if (re)        rows = rows.filter(c => c.reCode === re);
   if (status)    rows = rows.filter(c => (c.status || 'active') === status);
+  if (rxFilter) {
+    const rxSessionIds = new Set(_allSessions.filter(s => (s.rxNumber || '').toLowerCase().includes(rxFilter)).map(s => s.clientId));
+    rows = rows.filter(c => rxSessionIds.has(c.id) || (c.rxNumbers || []).some(r => (r || '').toLowerCase().includes(rxFilter)));
+  }
 
-  // Compute hours from preloaded sessions; when date filter active also restrict client table
+  const hudType   = document.getElementById('fHudType').value;
+  const guarantor = document.getElementById('fGuarantor').value;
+  const hasSessionFilter = hasDateFilter || !!type || !!hudType || !!guarantor;
+
+  // Compute hours from preloaded sessions; session filters also restrict the client table
   let hours = 0;
-  if (hasDateFilter) {
+  if (hasSessionFilter) {
     const matchingIds = new Set();
+    const sessionRows = [];
     _allSessions.forEach(s => {
-      const sDate = toDate(s.date);
-      if (start && sDate < start) return;
-      if (end   && sDate > end)   return;
-      if (counselor && (s.counselor || '') !== counselor) return;
+      if (hasDateFilter) {
+        const sDate = toDate(s.date);
+        if (start && sDate < start) return;
+        if (end   && sDate > end)   return;
+      }
+      if (counselor  && (s.counselor      || '') !== counselor)                    return;
+      if (type       && (s.counselingType || '') !== type)                         return;
+      if (hudType    && (s.hudType        || '') !== hudType)                      return;
+      if (guarantor  && _rxGuarantorMap.get(s.rxNumber || '') !== guarantor)       return;
       matchingIds.add(s.clientId);
-      hours += Number(s.hours) || 0;
+      if (hasDateFilter) {
+        hours += Number(s.hours) || 0;
+        sessionRows.push(s);
+      }
     });
     rows = rows.filter(c => matchingIds.has(c.id));
+    _matchingSessions = hasDateFilter
+      ? sessionRows.slice().sort((a, b) => {
+          const da = toDate(a.date), db2 = toDate(b.date);
+          return da - db2;
+        })
+      : null;
+    if (!hasDateFilter) {
+      const visibleIds = new Set(rows.map(c => c.id));
+      _allSessions.forEach(s => { if (visibleIds.has(s.clientId)) hours += Number(s.hours) || 0; });
+    }
   } else {
+    _matchingSessions = null;
     const visibleIds = new Set(rows.map(c => c.id));
     _allSessions.forEach(s => {
       if (visibleIds.has(s.clientId)) hours += Number(s.hours) || 0;
@@ -272,20 +295,122 @@ async function applyFilters() {
   renderStats(rows);
   if (_metricsRendered) renderMetrics();
 
-  const label = hasDateFilter
-    ? `${rows.length} client${rows.length !== 1 ? 's' : ''} with sessions in selected period`
-    : rows.length === allClients.length
-      ? `${rows.length} clients`
-      : `${rows.length} of ${allClients.length} clients`;
+  let label;
+  if (_matchingSessions !== null) {
+    const sc = _matchingSessions.length;
+    const cc = rows.length;
+    label = `${sc} session${sc !== 1 ? 's' : ''} across ${cc} client${cc !== 1 ? 's' : ''} in selected period`;
+  } else if (rows.length === allClients.length) {
+    label = `${rows.length} clients`;
+  } else {
+    label = `${rows.length} of ${allClients.length} clients`;
+  }
   document.getElementById('rowCount').textContent = label;
 }
 
 function renderTable(clients) {
   const tbody   = document.getElementById('tableBody');
   const footer  = document.getElementById('tableFooter');
+  const headRow = document.getElementById('tableHeadRow');
+
+  // ── Session view (date filter active) ──────────────────────────────────────
+  if (_matchingSessions !== null) {
+    headRow.innerHTML = `
+      <th>Client Name</th>
+      <th>Date</th>
+      <th>Type</th>
+      <th>Billing Type</th>
+      <th>Counselor</th>
+      <th style="text-align:center">Hours</th>
+      <th style="text-align:center">Drive</th>
+      <th></th>`;
+
+    if (!_matchingSessions.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No sessions found in selected period.</td></tr>';
+      if (footer) footer.innerHTML = '';
+      return;
+    }
+
+    const clientMap = new Map(allClients.map(c => [c.id, c]));
+    const visible   = _matchingSessions.slice(0, _displayLimit);
+
+    tbody.innerHTML = visible.map(s => {
+      const c    = clientMap.get(s.clientId) || {};
+      const displayName = isDemoMode() ? demoClientName(s.clientId) : (c.clientName || '—');
+      const tier = c.confidentialityTier || 'standard';
+      const tierBadge = tier === 'sealed'
+        ? `<span title="Protected" style="font-size:0.7rem;font-weight:700;color:#7c3aed;margin-left:0.3rem;">&#128274;</span>`
+        : tier === 'restricted'
+        ? `<span title="Confidential" style="font-size:0.7rem;font-weight:700;color:#b45309;margin-left:0.3rem;">&#128274;</span>`
+        : '';
+      const typeBadge = s.counselingType
+        ? `<span class="badge badge-${(s.counselingType || '').toLowerCase()}">${s.counselingType}</span>`
+        : '—';
+      const sDriveCell = c.driveFolderUrl
+        ? `<a href="${c.driveFolderUrl}" target="_blank" rel="noopener" title="Open Drive Folder" style="color:#4285f4;font-size:1.1rem;text-decoration:none;">📁</a>`
+        : `<span style="color:var(--border,#dee2e6);" title="No Drive folder linked">—</span>`;
+      return `<tr class="clickable-row" data-id="${s.clientId}" style="cursor:pointer;">
+        <td>${displayName}${tierBadge}</td>
+        <td>${fmtDate(s.date)}</td>
+        <td>${typeBadge}</td>
+        <td>${s.hudType || '—'}</td>
+        <td>${s.counselor || '—'}</td>
+        <td style="text-align:center">${s.hours ?? '—'}</td>
+        <td style="text-align:center">${sDriveCell}</td>
+        <td><a class="btn btn-sm btn-secondary" href="client.html?id=${s.clientId}">View</a></td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('a, button')) return;
+        window.location.href = `client.html?id=${tr.dataset.id}`;
+      });
+    });
+
+    if (footer) {
+      const remaining = _matchingSessions.length - visible.length;
+      if (remaining <= 0) {
+        footer.innerHTML = '';
+      } else {
+        footer.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align:center;padding:0.75rem;background:#f8f9fb;border-top:2px solid var(--border);">
+              <span style="font-size:0.8125rem;color:var(--text-muted);margin-right:1rem;">
+                Showing ${visible.length} of ${_matchingSessions.length}
+              </span>
+              <button id="showMoreBtn" class="btn btn-secondary btn-sm" style="margin-right:0.5rem;">
+                Show ${Math.min(25, remaining)} more
+              </button>
+              <button id="showAllBtn" class="btn btn-secondary btn-sm">Show all ${_matchingSessions.length}</button>
+            </td>
+          </tr>`;
+        document.getElementById('showMoreBtn').addEventListener('click', () => {
+          _displayLimit += 25;
+          renderTable(_filteredClients);
+        });
+        document.getElementById('showAllBtn').addEventListener('click', () => {
+          _displayLimit = _matchingSessions.length;
+          renderTable(_filteredClients);
+        });
+      }
+    }
+    return;
+  }
+
+  // ── Client view (no date filter) ───────────────────────────────────────────
+  headRow.innerHTML = `
+    <th>Client Name</th>
+    <th>Type</th>
+    <th>Counselor</th>
+    <th>AMI</th>
+    <th style="text-align:center">Sessions</th>
+    <th>Last Visit</th>
+    <th>Status</th>
+    <th></th>`;
 
   if (!clients.length) {
-    tbody.innerHTML  = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No clients found.</td></tr>';
+    tbody.innerHTML  = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-muted)">No clients found.</td></tr>';
     if (footer) footer.innerHTML = '';
     return;
   }
@@ -308,6 +433,9 @@ function renderTable(clients) {
       : '';
 
     const displayName = isDemoMode() ? demoClientName(c.id) : (c.clientName || '—');
+    const driveCell = c.driveFolderUrl
+      ? `<a href="${c.driveFolderUrl}" target="_blank" rel="noopener" title="Open Drive Folder" style="color:#4285f4;font-size:1.1rem;text-decoration:none;">📁</a>`
+      : `<span style="color:var(--border,#dee2e6);" title="No Drive folder linked">—</span>`;
     return `<tr class="clickable-row" data-id="${c.id}" style="cursor:pointer;">
       <td>${displayName}${tierBadge}</td>
       <td>${typeBadge}</td>
@@ -316,6 +444,7 @@ function renderTable(clients) {
       <td style="text-align:center">${c.sessionCount || 0}</td>
       <td>${fmtDate(c.lastSessionDate)}</td>
       <td>${statusBadge}</td>
+      <td style="text-align:center">${driveCell}</td>
       <td><a class="btn btn-sm btn-secondary" href="client.html?id=${c.id}">View</a></td>
     </tr>`;
   }).join('');
@@ -327,7 +456,6 @@ function renderTable(clients) {
     });
   });
 
-  // Pagination footer
   if (footer) {
     const remaining = clients.length - visible.length;
     if (remaining <= 0) {
@@ -335,7 +463,7 @@ function renderTable(clients) {
     } else {
       footer.innerHTML = `
         <tr>
-          <td colspan="8" style="text-align:center;padding:0.75rem;background:#f8f9fb;border-top:2px solid var(--border);">
+          <td colspan="9" style="text-align:center;padding:0.75rem;background:#f8f9fb;border-top:2px solid var(--border);">
             <span style="font-size:0.8125rem;color:var(--text-muted);margin-right:1rem;">
               Showing ${visible.length} of ${clients.length}
             </span>
@@ -505,8 +633,13 @@ function showErr(el, msg) {
 function openCmModal() {
   document.getElementById('cmDate').value = new Date().toISOString().split('T')[0];
   document.querySelectorAll('input[name="cmParRow"]').forEach(r => { r.checked = false; });
-  document.getElementById('cmDesc').value     = '';
-  document.getElementById('cmDuration').value = '';
+  document.getElementById('cmDesc').value         = '';
+  document.getElementById('cmDuration').value     = '';
+  document.getElementById('cmRxNumber').value     = '';
+  document.getElementById('cmClientSearch').value = '';
+  document.getElementById('cmClientId').value     = '';
+  document.getElementById('cmClientDropdown').style.display = 'none';
+  document.getElementById('cmClientChip').style.display     = 'none';
   document.getElementById('cmError').classList.add('hidden');
 
   const sel = document.getElementById('cmCounselor');
@@ -519,26 +652,40 @@ function openCmModal() {
   const mine = _counselorDocs.find(c => c.name === _profile.name);
   if (mine) sel.value = mine.id;
 
+  const gSel = document.getElementById('cmGuarantor');
+  gSel.innerHTML = '<option value="">— None —</option>';
+  RX_GUARANTORS.forEach(g => {
+    const o = document.createElement('option');
+    o.value = g; o.textContent = g;
+    gSel.appendChild(o);
+  });
+
   document.getElementById('cmModal').classList.remove('hidden');
+  wireCmClientSearch();
 }
 
 async function saveCm() {
-  const date     = document.getElementById('cmDate').value;
-  const counsId  = document.getElementById('cmCounselor').value;
-  const parRow   = document.querySelector('input[name="cmParRow"]:checked')?.value || '';
-  const desc     = document.getElementById('cmDesc').value.trim();
-  const duration = parseFloat(document.getElementById('cmDuration').value) || 0;
-  const errEl    = document.getElementById('cmError');
-  const saveBtn  = document.getElementById('cmSaveBtn');
+  const date      = document.getElementById('cmDate').value;
+  const counsId   = document.getElementById('cmCounselor').value;
+  const parRow    = document.querySelector('input[name="cmParRow"]:checked')?.value || '';
+  const desc      = document.getElementById('cmDesc').value.trim();
+  const duration  = parseFloat(document.getElementById('cmDuration').value) || 0;
+  const clientId  = document.getElementById('cmClientId').value || '';
+  const rxNumber  = document.getElementById('cmRxNumber').value.trim();
+  const guarantor = document.getElementById('cmGuarantor').value;
+  const errEl     = document.getElementById('cmError');
+  const saveBtn   = document.getElementById('cmSaveBtn');
 
   errEl.classList.add('hidden');
-  if (!date)        { showErr(errEl, 'Date is required.');               return; }
-  if (!counsId)     { showErr(errEl, 'Select a counselor.');             return; }
-  if (!parRow)      { showErr(errEl, 'Select a PAR row.');               return; }
-  if (!desc)        { showErr(errEl, 'Description is required.');        return; }
+  if (!date)        { showErr(errEl, 'Date is required.');                return; }
+  if (!counsId)     { showErr(errEl, 'Select a counselor.');              return; }
+  if (!parRow)      { showErr(errEl, 'Select a PAR row.');                return; }
+  if (!desc)        { showErr(errEl, 'Description is required.');         return; }
   if (duration <= 0){ showErr(errEl, 'Duration must be greater than 0.'); return; }
 
-  const counsDoc = _counselorDocs.find(c => c.id === counsId);
+  const counsDoc   = _counselorDocs.find(c => c.id === counsId);
+  const clientDoc  = clientId ? allClients.find(c => c.id === clientId) : null;
+  const clientName = clientDoc?.clientName || '';
   saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
 
   try {
@@ -551,6 +698,9 @@ async function saveCm() {
       parRow,
       activityDescription: desc,
       hours:               duration,
+      ...(clientId   ? { clientId, clientName }       : {}),
+      ...(rxNumber   ? { rxNumber }                   : {}),
+      ...(guarantor  ? { guarantor }                  : {}),
       enteredBy:           _user.uid,
       createdAt:           serverTimestamp(),
     });
@@ -560,6 +710,50 @@ async function saveCm() {
   } finally {
     saveBtn.disabled = false; saveBtn.textContent = 'Save';
   }
+}
+
+function wireCmClientSearch() {
+  const input    = document.getElementById('cmClientSearch');
+  const dropdown = document.getElementById('cmClientDropdown');
+  const hiddenId = document.getElementById('cmClientId');
+  const chip     = document.getElementById('cmClientChip');
+  const chipName = document.getElementById('cmClientChipName');
+
+  input.oninput = () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; return; }
+    const matches = allClients.filter(c => (c.clientName || '').toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+    matches.forEach(c => {
+      const li = document.createElement('li');
+      li.textContent = c.clientName;
+      li.style.cssText = 'padding:0.4rem 0.75rem;cursor:pointer;font-size:0.875rem;';
+      li.onmouseenter = () => li.style.background = '#f0f4ff';
+      li.onmouseleave = () => li.style.background = '';
+      li.onclick = () => {
+        hiddenId.value    = c.id;
+        chipName.textContent = c.clientName;
+        chip.style.display = 'flex';
+        input.value       = '';
+        dropdown.style.display = 'none';
+      };
+      dropdown.appendChild(li);
+    });
+    dropdown.style.display = 'block';
+  };
+
+  document.getElementById('cmClearClient').onclick = () => {
+    hiddenId.value = '';
+    chip.style.display = 'none';
+    input.value = '';
+  };
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#cmClientSearch') && !e.target.closest('#cmClientDropdown')) {
+      dropdown.style.display = 'none';
+    }
+  }, { once: false });
 }
 
 // ── Executive Management modal (ED only) ──────────────────────────────────────
@@ -612,133 +806,6 @@ async function saveEm() {
   }
 }
 
-// ── Workshop Entry modal ──────────────────────────────────────────────────────
-
-function openWsModal(prefillName = '', prefillDate = '') {
-  document.getElementById('wsFormSection').classList.remove('hidden');
-  document.getElementById('wsSuccessSection').classList.add('hidden');
-
-  document.getElementById('wsName').value         = prefillName;
-  document.getElementById('wsDate').value         = prefillDate || new Date().toISOString().split('T')[0];
-  document.getElementById('wsAttendeeName').value = '';
-  document.getElementById('wsAddress').value      = '';
-  document.getElementById('wsContactVal').value   = '';
-  document.querySelector('input[name="wsContact"][value="email"]').checked = true;
-  document.getElementById('wsContactVal').placeholder = 'email@example.com';
-  clearWsClient();
-  document.getElementById('wsError').classList.add('hidden');
-  document.getElementById('wsModal').classList.remove('hidden');
-  setTimeout(() => document.getElementById(prefillName ? 'wsAttendeeName' : 'wsName').focus(), 50);
-}
-
-function clearWsClient() {
-  _wsClientId   = null;
-  _wsClientName = null;
-  document.getElementById('wsClientId').value = '';
-  document.getElementById('wsClientSearch').value = '';
-  document.getElementById('wsClientResults').style.display = 'none';
-  document.getElementById('wsClientSelected').classList.add('hidden');
-}
-
-function renderWsClientSearch() {
-  const q       = document.getElementById('wsClientSearch').value.trim().toLowerCase();
-  const results = document.getElementById('wsClientResults');
-
-  if (!q || q.length < 2) { results.style.display = 'none'; return; }
-
-  const matches = allClients
-    .filter(c => (c.clientName || '').toLowerCase().includes(q))
-    .slice(0, 8);
-
-  if (!matches.length) {
-    results.innerHTML = '<div style="padding:0.6rem 0.75rem;font-size:0.8125rem;color:var(--text-muted);">No clients found</div>';
-    results.style.display = '';
-    return;
-  }
-
-  results.innerHTML = matches.map(c => {
-    const dn = isDemoMode() ? demoClientName(c.id) : (c.clientName || '');
-    return `<div class="csr-item" data-id="${escAttr(c.id)}" data-name="${escAttr(isDemoMode() ? dn : (c.clientName || ''))}"
-       style="padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.875rem;">
-       <div style="font-weight:600;">${escHtml(dn)}</div>
-       <div style="font-size:0.77rem;color:var(--text-muted);">${escHtml(c.counselingType || '')} · ${escHtml(c.counselor || '')}</div>
-     </div>`;
-  }).join('');
-  results.style.display = '';
-
-  results.querySelectorAll('.csr-item').forEach(item => {
-    item.addEventListener('mouseenter', () => { item.style.background = 'var(--primary-light,#e8f0fe)'; });
-    item.addEventListener('mouseleave', () => { item.style.background = ''; });
-    item.addEventListener('click', () => {
-      _wsClientId   = item.dataset.id;
-      _wsClientName = item.dataset.name;
-      document.getElementById('wsClientId').value = _wsClientId;
-      document.getElementById('wsClientSelectedName').textContent = _wsClientName;
-      document.getElementById('wsClientSelected').classList.remove('hidden');
-      document.getElementById('wsClientSearch').value = '';
-      results.style.display = 'none';
-    });
-  });
-}
-
-async function saveWs() {
-  const name     = document.getElementById('wsName').value.trim();
-  const date     = document.getElementById('wsDate').value;
-  const attendee = document.getElementById('wsAttendeeName').value.trim();
-  const address  = document.getElementById('wsAddress').value.trim();
-  const ctType   = document.querySelector('input[name="wsContact"]:checked')?.value || '';
-  const ctVal    = document.getElementById('wsContactVal').value.trim();
-  const errEl    = document.getElementById('wsError');
-  const saveBtn  = document.getElementById('wsSaveBtn');
-
-  errEl.classList.add('hidden');
-  if (!name)     { showErr(errEl, 'Workshop name is required.');  return; }
-  if (!date)     { showErr(errEl, 'Date is required.');           return; }
-  if (!attendee) { showErr(errEl, 'Attendee name is required.');  return; }
-  if (!ctVal)    { showErr(errEl, 'Contact value is required.');  return; }
-
-  if (ctType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ctVal)) {
-    showErr(errEl, 'Enter a valid email address.'); return;
-  }
-  if (ctType === 'phone' && ctVal.replace(/\D/g, '').length < 10) {
-    showErr(errEl, 'Enter a valid phone number (at least 10 digits).'); return;
-  }
-
-  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
-
-  try {
-    await addDoc(collection(db, 'workshopEntries'), {
-      workshopName:   name,
-      date,
-      attendeeName:   attendee,
-      address:        address || '',
-      contactType:    ctType,
-      contactValue:   ctVal,
-      linkedClientId: _wsClientId || null,
-      createdAt:      serverTimestamp(),
-    });
-
-    // Store workshop name/date on the "Add Another" button for re-open
-    const addAnotherBtn = document.getElementById('wsAddAnotherBtn');
-    addAnotherBtn.dataset.name = name;
-    addAnotherBtn.dataset.date = date;
-
-    document.getElementById('wsSuccessMsg').textContent =
-      `${attendee} recorded for "${name}" on ${fmtDateStr(date)}.`;
-    document.getElementById('wsFormSection').classList.add('hidden');
-    document.getElementById('wsSuccessSection').classList.remove('hidden');
-  } catch (err) {
-    showErr(errEl, 'Save failed: ' + err.message);
-  } finally {
-    saveBtn.disabled = false; saveBtn.textContent = 'Save Attendee';
-  }
-}
-
-function wsAddAnother() {
-  const btn = document.getElementById('wsAddAnotherBtn');
-  openWsModal(btn.dataset.name || '', btn.dataset.date || '');
-}
-
 // ── Incomplete files banner ────────────────────────────────────────────────────
 function showIncompleteBanner() {
   const banner = document.getElementById('incompleteBanner');
@@ -748,8 +815,14 @@ function showIncompleteBanner() {
   if (sessionStorage.getItem(storageKey)) return;
 
   const myName    = _profile.name || '';
+  const CUTOFF    = new Date('2026-01-01');
+  const toDateTs  = ts => ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
   const incomplete = allClients
-    .filter(c => c.counselor === myName && c.status !== 'closed')
+    .filter(c => {
+      if (c.counselor !== myName || c.status === 'closed') return false;
+      const last = toDateTs(c.lastSessionDate) || toDateTs(c.firstSessionDate);
+      return last && last >= CUTOFF;
+    })
     .reduce((acc, c) => {
       const issues = [];
       if (!c.amiPercent)               issues.push('AMI');

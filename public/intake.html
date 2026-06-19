@@ -41,15 +41,18 @@
         <div class="form-group" style="margin:0;">
           <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counseling Type</label>
           <select id="intakeCounselingType" style="font-size:0.875rem;">
-            <option value="first time homebuyers' evaluation">First Time Homebuyer</option>
-            <option value="default and delinquency counseling">Default &amp; Delinquency</option>
-            <option value="post-purchase counseling">Post-Purchase</option>
-            <option value="BC Conciliation Program appointment">BC Conciliation</option>
+            <option value="Pre-Purchase counseling">Pre-Purchase</option>
+            <option value="Outstanding (Default &amp; Delinquency) counseling">Outstanding</option>
+            <option value="Post-Purchase counseling">Post-Purchase</option>
+            <option value="Court counseling">Court</option>
+            <option value="Group Education workshop">Workshop</option>
           </select>
         </div>
         <div class="form-group" style="margin:0;">
-          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor Name</label>
-          <input type="text" id="intakeCounselorName" style="font-size:0.875rem;" placeholder="Counselor name">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor</label>
+          <select id="intakeCounselorName" style="font-size:0.875rem;">
+            <option value="">— Select —</option>
+          </select>
         </div>
       </div>
 
@@ -77,11 +80,32 @@
   </main>
 
   <script type="module">
+    import { db } from './js/firebase-config.js';
     import { requireAuth, setupNav } from './js/auth.js';
-    requireAuth((user, profile) => {
+    import { collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    requireAuth(async (user, profile) => {
       setupNav(profile, 'intake');
-      const nameEl = document.getElementById('intakeCounselorName');
-      if (nameEl && profile.name) nameEl.value = profile.name;
+
+      const sel = document.getElementById('intakeCounselorName');
+      try {
+        const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+        snap.docs
+          .filter(d => d.data().active !== false)
+          .forEach(d => {
+            const o = document.createElement('option');
+            o.value = d.data().name;
+            o.textContent = d.data().name;
+            sel.appendChild(o);
+          });
+        if (profile.name) {
+          for (const opt of sel.options) {
+            if (opt.value.toLowerCase() === profile.name.toLowerCase()) {
+              sel.value = opt.value; break;
+            }
+          }
+        }
+      } catch (_) {}
     });
 
     document.getElementById('printConfirmBtn').addEventListener('click', () => {

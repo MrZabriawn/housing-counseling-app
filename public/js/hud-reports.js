@@ -88,7 +88,7 @@ async function refreshStatus() {
         <thead>
           <tr>
             <th ${TH}>Counselor</th>
-            <th ${TH} style="text-align:center;">PAR Days</th>
+            <th ${TH} style="text-align:center;">PAR Entries</th>
             <th ${TH} style="text-align:center;">CML Entries</th>
             <th ${TH} style="text-align:center;">TAL Entries</th>
             <th ${TH}>Issues</th>
@@ -98,11 +98,7 @@ async function refreshStatus() {
           ${data.counselors.filter(c => c.active !== false).map(c => {
             const mySessions = data.sessions.filter(s => s.counselor === c.name && data.nofaRxSet.has((s.rxNumber||'').trim()));
             const myTM       = data.hudEvents.filter(e => e.counselorId === c.id);
-            const parDaySet  = new Set([
-              ...mySessions.map(s => s.dateObj.toISOString().split('T')[0]),
-              ...myTM.map(e => e.date),
-            ]);
-            const parDays = parDaySet.size;
+            const parEntries = mySessions.length + myTM.length;
             const cmlCnt  = mySessions.filter(s => s.hudType === 'case_management').length;
             const talCnt  = myTM.length;
             const issues  = [];
@@ -111,7 +107,7 @@ async function refreshStatus() {
             if (!c.baseSalary)  issues.push('missing Base Salary');
             return `<tr>
               <td ${TD}>${escHtml(c.name)}</td>
-              <td ${TD} style="text-align:center;">${parDays}</td>
+              <td ${TD} style="text-align:center;">${parEntries}</td>
               <td ${TD} style="text-align:center;">${cmlCnt}</td>
               <td ${TD} style="text-align:center;">${talCnt}</td>
               <td ${TD}>${issues.length ? issues.map(i => `<span class="warn-badge">⚠ ${i}</span>`).join(' ') : '<span style="color:var(--accent);font-size:0.8rem;">✓ OK</span>'}</td>

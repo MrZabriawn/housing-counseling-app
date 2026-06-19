@@ -650,14 +650,20 @@ async function loadCourtReport() {
   document.getElementById('loadCourtReportBtn').disabled = true;
 
   try {
-    let q = query(collectionGroup(db, 'sessions'), orderBy('date', 'asc'));
-    if (startDate) q = query(collectionGroup(db, 'sessions'), where('date', '>=', startDate), where('date', '<=', endDate), orderBy('date', 'asc'));
-
-    const snap = await getDocs(q);
+    const snap = await getDocs(collectionGroup(db, 'sessions'));
 
     let sessions = snap.docs
       .map(d => ({ id: d.id, clientId: d.ref.parent.parent.id, ...d.data() }))
-      .filter(s => (s.caseStatus || '').startsWith('Court'));
+      .filter(s => {
+        if (!(s.caseStatus || '').startsWith('Court')) return false;
+        if (startDate || endDate) {
+          const d = s.date?.toDate ? s.date.toDate() : (s.date ? new Date(s.date) : null);
+          if (!d) return false;
+          if (startDate && d < startDate) return false;
+          if (endDate   && d > endDate)   return false;
+        }
+        return true;
+      });
 
     if (counselor) sessions = sessions.filter(s => s.counselor === counselor);
 

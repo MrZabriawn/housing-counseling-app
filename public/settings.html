@@ -184,6 +184,55 @@
       <p id="titleCaseMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
     </div>
 
+    <!-- Backfill NOFA Sessions to HUD Time -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Link NOFA Sessions to HUD Time</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        One-time backfill: scans all existing sessions for clients with a NOFA guarantor Rx and creates the corresponding HUD Time entries for any that are missing. Safe to re-run — already-linked sessions are skipped.
+      </p>
+      <div class="form-actions">
+        <button id="backfillNofaHudBtn" class="btn btn-primary">Run Backfill</button>
+      </div>
+      <p id="backfillNofaHudMsg" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
+    <!-- Repair HUD Time Counselor IDs -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Repair HUD Time Counselor IDs</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        One-time repair: finds HUD time entries whose counselor ID doesn't match the counselors list (can happen when a counselor's login email didn't match their record) and corrects them using the counselor name. Safe to re-run.
+      </p>
+      <div class="form-actions">
+        <button id="repairHudCounselorIdsBtn" class="btn btn-primary">Run Repair</button>
+      </div>
+      <p id="repairHudCounselorIdsMsg" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
+    <!-- Legacy Counseling Log -->
+    <div class="card" style="max-width:860px;margin-top:1.25rem;">
+      <div class="card-title">Legacy Counseling Log</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        Pre-app counseling records imported from the old system. These do not appear in the main Counseling Log. Use this view for historical reference or auditing.
+      </p>
+      <div class="form-actions" style="margin-bottom:1rem;">
+        <button id="loadLegacyLogBtn" class="btn btn-secondary">Load Legacy Log</button>
+        <input type="text" id="legacyLogSearch" placeholder="Search name or Rx…" style="font-size:0.875rem;padding:0.35rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);width:220px;">
+      </div>
+      <div id="legacyLogResult" style="font-size:0.875rem;color:var(--text-muted);">Click Load to view records.</div>
+    </div>
+
+    <!-- Migrate Counseling Type to Sessions -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Migrate Counseling Types to Sessions</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        One-time migration: copies each client's Counseling Type to their individual session records. Run once after deploying the session-level counseling type update. Safe to re-run — already-migrated sessions are skipped.
+      </p>
+      <div class="form-actions">
+        <button id="migrateCounselingTypeBtn" class="btn btn-primary">Run Migration</button>
+      </div>
+      <p id="migrateCounselingTypeMsg" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
     <!-- AMI Normalization -->
     <div class="card" style="max-width:640px;margin-top:1.25rem;">
       <div class="card-title">Normalize AMI Values</div>

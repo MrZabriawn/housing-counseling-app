@@ -46,6 +46,10 @@ let _talStaffName   = '';    // display name of logged-in user
 let _talCounselorId = '';    // counselors doc ID for logged-in user (for hudTrainingEntries)
 let _talUserId      = '';    // firebase uid for hudTrainingEntries.counselorId fallback
 
+// Workshop state
+let _wsAttendees       = [];   // array of { type, id?, clientName, phone, email, address }
+let _wsSelectedClient  = null; // { id, clientName } chosen from search
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 requireAuth(async (user, profile) => {
@@ -143,6 +147,24 @@ requireAuth(async (user, profile) => {
     document.getElementById('convertType').appendChild(o);
   });
 
+  // Workshop tab
+  document.getElementById('wsClientSearch').addEventListener('input', renderWsClientSearch);
+  document.getElementById('wsAddExistingBtn').addEventListener('click', addExistingToWorkshop);
+  document.getElementById('wsShowNewFormBtn').addEventListener('click', () => {
+    document.getElementById('wsNewAttendeeForm').classList.remove('hidden');
+    document.getElementById('wsShowNewFormBtn').classList.add('hidden');
+  });
+  document.getElementById('wsCancelNewBtn').addEventListener('click', () => {
+    document.getElementById('wsNewAttendeeForm').classList.add('hidden');
+    document.getElementById('wsShowNewFormBtn').classList.remove('hidden');
+    document.getElementById('wsNewName').value    = '';
+    document.getElementById('wsNewPhone').value   = '';
+    document.getElementById('wsNewEmail').value   = '';
+    document.getElementById('wsNewAddress').value = '';
+  });
+  document.getElementById('wsAddNewBtn').addEventListener('click', addNewToWorkshop);
+  document.getElementById('wsSaveWorkshopBtn').addEventListener('click', saveWorkshop);
+
   addBatchRow();
   await Promise.all([loadRecords(), loadCalls()]);
 });
@@ -155,11 +177,12 @@ async function loadCounselorOptions() {
     const sel    = document.getElementById('callCounselor');
     const selCrt = document.getElementById('courtCounselorOut');
     const selCnv = document.getElementById('convertCounselor');
+    const selWs  = document.getElementById('wsWorkshopCounselor');
     snap.docs
       .filter(d => d.data().active !== false)
       .forEach(d => {
         const name = d.data().name;
-        [sel, selCrt, selCnv].forEach(s => {
+        [sel, selCrt, selCnv, selWs].forEach(s => {
           const o = document.createElement('option');
           o.value = name; o.textContent = name;
           s.appendChild(o);
@@ -169,6 +192,7 @@ async function loadCounselorOptions() {
     sel.value    = window._currentCounselor;
     selCrt.value = window._currentCounselor;
     selCnv.value = window._currentCounselor;
+    selWs.value  = window._currentCounselor;
 
     // Capture staffNumber + doc ID for the logged-in counselor (used by TAL modal)
     const myDoc = snap.docs.find(
@@ -1248,3 +1272,189 @@ function showCourtErr(msg) {
   el.textContent = msg;
   el.classList.remove('hidden');
 }
+
+// ── Workshop ──────────────────────────────────────────────────────────────────
+
+async function renderWsClientSearch() {
+  const q    = document.getElementById('wsClientSearch').value.trim().toLowerCase();
+  const box  = document.getElementById('wsClientResults');
+  _wsSelectedClient = null;
+  document.getElementById('wsAddExistingBtn').disabled = true;
+
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+
+  if (!_allClients.length) {
+    box.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">Loading…</div>';
+    box.style.display = 'block';
+    try {
+      const snap = await getDocs(query(collection(db, 'clients'), orderBy('clientName')));
+      _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) { _allClients = []; }
+  }
+
+  const matches = _allClients
+    .filter(c => (c.clientName || '').toLowerCase().includes(q))
+    .slice(0, 8);
+
+  if (!matches.length) { box.style.display = 'none'; return; }
+
+  box.innerHTML = '';
+  matches.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'client-result-item';
+    item.textContent = c.clientName;
+    item.addEventListener('click', () => {
+      _wsSelectedClient = { id: c.id, clientName: c.clientName };
+      document.getElementById('wsClientSearch').value = c.clientName;
+      box.style.display = 'none';
+      document.getElementById('wsAddExistingBtn').disabled = false;
+    });
+    box.appendChild(item);
+  });
+  box.style.display = 'block';
+}
+
+function addExistingToWorkshop() {
+  if (!_wsSelectedClient) return;
+  if (_wsAttendees.find(a => a.id === _wsSelectedClient.id)) {
+    document.getElementById('wsClientSearch').value = '';
+    _wsSelectedClient = null;
+    document.getElementById('wsAddExistingBtn').disabled = true;
+    return;
+  }
+  _wsAttendees.push({ type: 'existing', id: _wsSelectedClient.id, clientName: _wsSelectedClient.clientName });
+  document.getElementById('wsClientSearch').value = '';
+  document.getElementById('wsClientResults').style.display = 'none';
+  _wsSelectedClient = null;
+  document.getElementById('wsAddExistingBtn').disabled = true;
+  renderAttendeeList();
+}
+
+function addNewToWorkshop() {
+  const name = document.getElementById('wsNewName').value.trim();
+  if (!name) {
+    document.getElementById('wsNewName').focus();
+    return;
+  }
+  _wsAttendees.push({
+    type:       'new',
+    clientName: name,
+    phone:      document.getElementById('wsNewPhone').value.trim(),
+    email:      document.getElementById('wsNewEmail').value.trim(),
+    address:    document.getElementById('wsNewAddress').value.trim(),
+  });
+  document.getElementById('wsNewName').value    = '';
+  document.getElementById('wsNewPhone').value   = '';
+  document.getElementById('wsNewEmail').value   = '';
+  document.getElementById('wsNewAddress').value = '';
+  document.getElementById('wsNewAttendeeForm').classList.add('hidden');
+  document.getElementById('wsShowNewFormBtn').classList.remove('hidden');
+  renderAttendeeList();
+}
+
+function renderAttendeeList() {
+  const list  = document.getElementById('wsAttendeeList');
+  const empty = document.getElementById('wsAttendeeEmpty');
+  const count = document.getElementById('wsAttendeeCount');
+
+  count.textContent = _wsAttendees.length
+    ? `${_wsAttendees.length} attendee${_wsAttendees.length !== 1 ? 's' : ''}`
+    : '';
+
+  if (!_wsAttendees.length) {
+    empty.classList.remove('hidden');
+    list.querySelectorAll('.ws-attendee-row').forEach(r => r.remove());
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.querySelectorAll('.ws-attendee-row').forEach(r => r.remove());
+  _wsAttendees.forEach((a, i) => {
+    const row = document.createElement('div');
+    row.className = 'ws-attendee-row';
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid var(--border-color);';
+    const badge = a.type === 'new' ? '<span style="font-size:0.7rem;color:var(--text-muted);margin-left:0.35rem;">new</span>' : '';
+    row.innerHTML = `<span>${escHtml(a.clientName)}${badge}</span><button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 0.25rem;" data-i="${i}" aria-label="Remove">×</button>`;
+    row.querySelector('button').addEventListener('click', () => {
+      _wsAttendees.splice(i, 1);
+      renderAttendeeList();
+    });
+    list.appendChild(row);
+  });
+}
+
+async function saveWorkshop() {
+  const btn     = document.getElementById('wsSaveWorkshopBtn');
+  const msgEl   = document.getElementById('wsWorkshopMsg');
+  msgEl.textContent = '';
+  msgEl.style.color = '';
+
+  const workshopName = document.getElementById('wsWorkshopName').value.trim();
+  const date         = document.getElementById('wsWorkshopDate').value;
+  const counselor    = document.getElementById('wsWorkshopCounselor').value;
+  const hours        = document.getElementById('wsWorkshopHours').value;
+
+  if (!workshopName) { msgEl.textContent = 'Workshop name is required.'; msgEl.style.color = 'var(--danger)'; return; }
+  if (!date)         { msgEl.textContent = 'Date is required.';           msgEl.style.color = 'var(--danger)'; return; }
+  if (!counselor)    { msgEl.textContent = 'Counselor is required.';      msgEl.style.color = 'var(--danger)'; return; }
+  if (!_wsAttendees.length) { msgEl.textContent = 'Add at least one attendee.'; msgEl.style.color = 'var(--danger)'; return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  const sessionData = {
+    counselingType: 'Workshop',
+    hudType:        'Group Education',
+    date,
+    hours:          Number(hours) || 0,
+    counselor,
+    workshopName,
+    source:         'workshop',
+    createdAt:      serverTimestamp(),
+  };
+
+  try {
+    let saved = 0;
+    for (const a of _wsAttendees) {
+      let clientId = a.id;
+
+      if (a.type === 'new') {
+        const clientRef = await addDoc(collection(db, 'clients'), {
+          clientName:  a.clientName,
+          phone:       a.phone  || '',
+          email:       a.email  || '',
+          address:     a.address || '',
+          counselor,
+          intakeDate:  date,
+          status:      'Active',
+          createdAt:   serverTimestamp(),
+          updatedAt:   serverTimestamp(),
+          sessionCount: 0,
+          totalOutcomeValue: 0,
+        });
+        clientId = clientRef.id;
+      }
+
+      await addDoc(collection(db, 'clients', clientId, 'sessions'), { ...sessionData });
+      saved++;
+    }
+
+    msgEl.textContent = `Saved ${saved} session${saved !== 1 ? 's' : ''} for "${workshopName}".`;
+    msgEl.style.color = 'var(--success, green)';
+
+    // Reset form
+    _wsAttendees = [];
+    renderAttendeeList();
+    document.getElementById('wsWorkshopName').value  = '';
+    document.getElementById('wsWorkshopDate').value  = '';
+    document.getElementById('wsWorkshopHours').value = '1';
+    document.getElementById('wsWorkshopCounselor').value = window._currentCounselor || '';
+  } catch (err) {
+    msgEl.textContent = 'Save failed: ' + err.message;
+    msgEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Workshop';
+  }
+}
+

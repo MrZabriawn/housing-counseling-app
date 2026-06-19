@@ -73,6 +73,13 @@ requireED(async (user, profile) => {
 
   // Demo passcode
   document.getElementById('saveDemoPasscodeBtn').addEventListener('click', saveDemoPasscode);
+  document.getElementById('migrateCounselingTypeBtn').addEventListener('click', migrateCounselingTypes);
+  document.getElementById('repairHudCounselorIdsBtn').addEventListener('click', repairHudCounselorIds);
+  document.getElementById('backfillNofaHudBtn').addEventListener('click', backfillNofaHudEvents);
+
+  // Legacy counseling log
+  document.getElementById('loadLegacyLogBtn').addEventListener('click', loadLegacyCounselingLog);
+  document.getElementById('legacyLogSearch').addEventListener('input', filterLegacyLog);
 });
 
 // ── Counselors ────────────────────────────────────────────────────────────────
@@ -1769,4 +1776,275 @@ async function saveDemoPasscode() {
     btn.disabled    = false;
     btn.textContent = 'Save Passcode';
   }
+}
+
+// ── Migrate counselingType from client docs to sessions ───────────────────────
+
+async function backfillNofaHudEvents() {
+  const btn   = document.getElementById('backfillNofaHudBtn');
+  const msgEl = document.getElementById('backfillNofaHudMsg');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  msgEl.textContent = '';
+
+  try {
+    // Build counselor name → doc ID map
+    const counselorSnap = await getDocs(collection(db, 'counselors'));
+    const nameToId = new Map(
+      counselorSnap.docs.map(d => [(d.data().name || '').trim().toLowerCase(), d.id])
+    );
+
+    // Find all NOFA rxNumbers across all clients (filter in JS to avoid index requirement)
+    const rxSnap = await getDocs(collectionGroup(db, 'rxNumbers'));
+
+    // Group active NOFA rx by clientId (keep first active one per client)
+    const nofaByClient = new Map();
+    rxSnap.docs.forEach(d => {
+      const data = d.data();
+      if (data.guarantor !== 'NOFA') return;
+      if (data.active === false) return;
+      const clientId = d.ref.parent.parent.id;
+      if (!nofaByClient.has(clientId)) nofaByClient.set(clientId, data);
+    });
+
+    let created = 0, skipped = 0;
+    let batch = writeBatch(db);
+    let batchCount = 0;
+
+    const commit = async () => {
+      if (batchCount > 0) { await batch.commit(); batch = writeBatch(db); batchCount = 0; }
+    };
+
+    for (const [clientId, rxData] of nofaByClient) {
+      const sessSnap = await getDocs(
+        query(collection(db, 'clients', clientId, 'sessions'), orderBy('date', 'asc'))
+      );
+
+      // Also load client name
+      const clientDoc  = await getDoc(doc(db, 'clients', clientId));
+      const clientName = clientDoc.exists() ? (clientDoc.data().clientName || '') : '';
+
+      for (const sessDoc of sessSnap.docs) {
+        const s = sessDoc.data();
+        // Skip if already linked
+        if (s.hudEventId) { skipped++; continue; }
+        // Skip if no date (can't determine month)
+        if (!s.date) { skipped++; continue; }
+
+        // date may be a Firestore Timestamp or a 'YYYY-MM-DD' string
+        const dateStr = s.date.toDate
+          ? s.date.toDate().toISOString().split('T')[0]
+          : String(s.date);
+
+        const counselorDocId = nameToId.get((s.counselor || '').trim().toLowerCase()) || '';
+        const month          = dateStr.substring(0, 7);
+
+        // Create hudEvent doc ref manually so we can cross-reference
+        const hudRef = doc(collection(db, 'hudEvents'));
+        batch.set(hudRef, {
+          source:          'session',
+          sessionId:       sessDoc.id,
+          clientId,
+          clientName,
+          rxCaseNo:        rxData.rxNumber   || '',
+          guarantor:       'NOFA',
+          counselorId:     counselorDocId,
+          counselorName:   s.counselor       || '',
+          date:            dateStr,
+          month,
+          durationMinutes: Math.round((Number(s.hours) || 0) * 60),
+          type:            'counseling_session',
+          parSection:      'S1',
+          parRow:          'Counseling',
+          createdAt:       serverTimestamp(),
+        });
+        // Store back-reference on session
+        batch.update(sessDoc.ref, { hudEventId: hudRef.id });
+        created++;
+        batchCount += 2;
+        if (batchCount >= 400) await commit();
+      }
+    }
+    await commit();
+
+    showMsg(msgEl, `Done — ${created} HUD entr${created !== 1 ? 'ies' : 'y'} created, ${skipped} skipped.`, true);
+  } catch (err) {
+    showMsg(msgEl, 'Failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Backfill';
+  }
+}
+
+async function repairHudCounselorIds() {
+  const btn   = document.getElementById('repairHudCounselorIdsBtn');
+  const msgEl = document.getElementById('repairHudCounselorIdsMsg');
+  btn.disabled = true;
+  btn.textContent = 'Repairing…';
+  msgEl.textContent = '';
+
+  try {
+    // Build name → counselor doc ID map
+    const counselorSnap = await getDocs(collection(db, 'counselors'));
+    const nameToId = new Map(
+      counselorSnap.docs
+        .filter(d => d.data().active !== false)
+        .map(d => [( d.data().name || '').trim().toLowerCase(), d.id])
+    );
+
+    if (!nameToId.size) {
+      showMsg(msgEl, 'No active counselors found.', false);
+      return;
+    }
+
+    let fixed = 0, skipped = 0;
+    let batch = writeBatch(db);
+    let batchCount = 0;
+
+    const commit = async () => {
+      if (batchCount > 0) { await batch.commit(); batch = writeBatch(db); batchCount = 0; }
+    };
+
+    for (const colName of ['hudTimeEntries', 'hudEvents']) {
+      const snap = await getDocs(collection(db, colName));
+      for (const d of snap.docs) {
+        const data         = d.data();
+        const name         = (data.counselorName || '').trim().toLowerCase();
+        const correctId    = nameToId.get(name);
+        if (!correctId || data.counselorId === correctId) { skipped++; continue; }
+        batch.update(d.ref, { counselorId: correctId });
+        fixed++;
+        batchCount++;
+        if (batchCount >= 400) await commit();
+      }
+    }
+    await commit();
+
+    showMsg(msgEl, `Done — ${fixed} entr${fixed !== 1 ? 'ies' : 'y'} repaired, ${skipped} already correct or unmatched.`, true);
+  } catch (err) {
+    showMsg(msgEl, 'Failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Repair';
+  }
+}
+
+async function migrateCounselingTypes() {
+  const btn   = document.getElementById('migrateCounselingTypeBtn');
+  const msgEl = document.getElementById('migrateCounselingTypeMsg');
+  btn.disabled = true;
+  btn.textContent = 'Migrating…';
+
+  try {
+    const clientSnap = await getDocs(collection(db, 'clients'));
+    const clients = clientSnap.docs.filter(d => d.data().counselingType);
+
+    let updated = 0;
+    let skipped = 0;
+    let batch = writeBatch(db);
+    let batchCount = 0;
+
+    for (const clientDoc of clients) {
+      const type = clientDoc.data().counselingType;
+      const sessSnap = await getDocs(collection(db, 'clients', clientDoc.id, 'sessions'));
+      for (const sessDoc of sessSnap.docs) {
+        if (!sessDoc.data().counselingType) {
+          batch.update(sessDoc.ref, { counselingType: type });
+          updated++;
+          batchCount++;
+          if (batchCount >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            batchCount = 0;
+          }
+        } else {
+          skipped++;
+        }
+      }
+    }
+    if (batchCount > 0) await batch.commit();
+
+    showMsg(msgEl, `Done — ${updated} session${updated !== 1 ? 's' : ''} updated, ${skipped} already had a type.`, true);
+  } catch (err) {
+    showMsg(msgEl, 'Failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Migration';
+  }
+}
+
+// ── Legacy Counseling Log ──────────────────────────────────────────────────────
+
+let _legacyLogRows = [];
+
+async function loadLegacyCounselingLog() {
+  const resultEl = document.getElementById('legacyLogResult');
+  const btn = document.getElementById('loadLegacyLogBtn');
+  btn.disabled = true;
+  resultEl.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
+  try {
+    const snap = await getDocs(query(collection(db, 'counselingLog'), orderBy('date', 'desc')));
+    if (snap.empty) {
+      resultEl.innerHTML = '<p style="color:var(--text-muted);">No legacy records found.</p>';
+      _legacyLogRows = [];
+      return;
+    }
+    _legacyLogRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderLegacyLog(_legacyLogRows);
+  } catch (err) {
+    resultEl.innerHTML = `<p style="color:#c62828;">Failed to load: ${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function filterLegacyLog() {
+  if (!_legacyLogRows.length) return;
+  const q = (document.getElementById('legacyLogSearch').value || '').toLowerCase().trim();
+  const filtered = q
+    ? _legacyLogRows.filter(r =>
+        (r.clientName || '').toLowerCase().includes(q) ||
+        (r.rxCaseNo || r.rxNumber || '').toLowerCase().includes(q) ||
+        (r.counselor || '').toLowerCase().includes(q)
+      )
+    : _legacyLogRows;
+  renderLegacyLog(filtered);
+}
+
+function renderLegacyLog(rows) {
+  const resultEl = document.getElementById('legacyLogResult');
+  const fmtDate = ts => {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  resultEl.innerHTML = `
+    <p style="color:var(--text-muted);margin-bottom:0.5rem;">${rows.length} record${rows.length !== 1 ? 's' : ''}</p>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
+        <thead>
+          <tr style="background:#f8f9fb;">
+            <th ${TH}>Date</th>
+            <th ${TH}>Client Name</th>
+            <th ${TH}>Rx / Case No.</th>
+            <th ${TH}>Counselor</th>
+            <th ${TH}>Type</th>
+            <th ${TH}>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td ${TD}>${fmtDate(r.date)}</td>
+              <td ${TD}>${escHtml(r.clientName || '—')}</td>
+              <td ${TD}>${escHtml(r.rxCaseNo || r.rxNumber || '—')}</td>
+              <td ${TD}>${escHtml(r.counselor || '—')}</td>
+              <td ${TD}>${escHtml(r.counselingType || r.type || '—')}</td>
+              <td ${TD} style="max-width:260px;white-space:pre-wrap;">${escHtml(r.notes || r.description || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }

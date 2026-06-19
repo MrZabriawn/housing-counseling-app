@@ -70,6 +70,7 @@
       <button class="outreach-tab active" data-panel="phone-panel">Phone Log</button>
       <button class="outreach-tab" data-panel="cmc-panel">CMC</button>
       <button class="outreach-tab" data-panel="court-panel">Court</button>
+      <button class="outreach-tab" data-panel="workshop-panel">Workshop</button>
     </div>
 
     <!-- ══ CMC Letters panel ═══════════════════════════════════════════════════ -->
@@ -258,6 +259,92 @@
       </div>
 
     </div><!-- /court-panel -->
+
+    <!-- ══ Workshop panel ════════════════════════════════════════════════════ -->
+    <div id="workshop-panel" class="outreach-panel">
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Log Workshop</div>
+
+        <!-- Event header -->
+        <div class="form-grid" style="margin-bottom:1.25rem;">
+          <div class="form-group">
+            <label for="wsWorkshopName">Workshop Name *</label>
+            <input type="text" id="wsWorkshopName" placeholder="e.g. Homebuyer Education">
+          </div>
+          <div class="form-group">
+            <label for="wsWorkshopDate">Date *</label>
+            <input type="date" id="wsWorkshopDate">
+          </div>
+          <div class="form-group">
+            <label for="wsWorkshopCounselor">Counselor *</label>
+            <select id="wsWorkshopCounselor">
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="wsWorkshopHours">Duration (hours) *</label>
+            <input type="number" id="wsWorkshopHours" min="0.25" step="0.25" placeholder="e.g. 2.00">
+          </div>
+        </div>
+
+        <!-- Attendee builder -->
+        <div style="border-top:1px solid var(--border);padding-top:1rem;margin-bottom:1rem;">
+          <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.75rem;">Attendees</p>
+
+          <!-- Search existing client -->
+          <div style="display:flex;gap:0.5rem;align-items:flex-start;margin-bottom:0.75rem;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;position:relative;">
+              <input type="text" id="wsClientSearch" placeholder="Search existing client…" autocomplete="off"
+                style="width:100%;font-size:0.875rem;">
+              <div id="wsClientResults" class="client-search-results" style="display:none;position:absolute;z-index:50;width:100%;"></div>
+            </div>
+            <button type="button" id="wsAddExistingBtn" class="btn btn-secondary btn-sm" disabled>Add Client</button>
+            <button type="button" id="wsShowNewFormBtn" class="btn btn-secondary btn-sm">+ Add New Person</button>
+          </div>
+
+          <!-- New attendee inline form -->
+          <div id="wsNewAttendeeForm" style="display:none;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);padding:0.85rem;margin-bottom:0.75rem;">
+            <p style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.6rem;text-transform:uppercase;letter-spacing:0.04em;">New Attendee</p>
+            <div class="form-grid" style="margin-bottom:0.5rem;">
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:0.72rem;">Name *</label>
+                <input type="text" id="wsNewName" placeholder="Full name">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:0.72rem;">Phone</label>
+                <input type="text" id="wsNewPhone" placeholder="(555) 555-5555">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:0.72rem;">Email</label>
+                <input type="email" id="wsNewEmail" placeholder="email@example.com">
+              </div>
+              <div class="form-group full-width" style="margin:0;">
+                <label style="font-size:0.72rem;">Address</label>
+                <input type="text" id="wsNewAddress" placeholder="Street, City, ST ZIP">
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;">
+              <button type="button" id="wsAddNewBtn" class="btn btn-primary btn-sm">Add to List</button>
+              <button type="button" id="wsCancelNewBtn" class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Attendee list -->
+          <div id="wsAttendeeList" style="display:flex;flex-direction:column;gap:0.4rem;min-height:2rem;">
+            <p id="wsAttendeeEmpty" style="font-size:0.8125rem;color:var(--text-muted);">No attendees added yet.</p>
+          </div>
+          <p id="wsAttendeeCount" style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;"></p>
+        </div>
+
+        <p id="wsWorkshopError" class="error-msg hidden"></p>
+        <div class="form-actions">
+          <button id="wsSaveWorkshopBtn" class="btn btn-primary">Save Workshop</button>
+        </div>
+        <p id="wsWorkshopMsg" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+      </div>
+
+    </div><!-- /workshop-panel -->
 
   </main>
 

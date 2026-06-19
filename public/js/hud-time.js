@@ -47,6 +47,14 @@ export async function initHudTime(user, profile) {
   _user   = user;
   _myName = profile.name || profile.email || '';
 
+  // Hide personal tabs immediately for ED so the PAR Log never flashes visible
+  if (profile.role === 'executive_director') {
+    _isED = true;
+    document.getElementById('tabPar').classList.add('hidden');
+    document.getElementById('tabEntries').classList.add('hidden');
+    document.querySelectorAll('.hud-tab[data-tab="par"], .hud-tab[data-tab="entries"]').forEach(b => b.classList.add('hidden'));
+  }
+
   try {
     const snap = await getDocs(query(collection(db, 'counselors'), where('email', '==', user.email)));
     if (!snap.empty) _myId = snap.docs[0].id;
@@ -63,7 +71,7 @@ export async function initHudTime(user, profile) {
     _openAddDay = null;
     _counselorDataCache = {};
     await loadData();
-    renderAll();
+    if (!_isED) renderAll();
     if (_activeTab.startsWith('counselor-')) {
       loadCounselorTab(_activeTab.replace('counselor-', ''));
     }
@@ -84,15 +92,13 @@ export async function initHudTime(user, profile) {
   document.getElementById('editSection').addEventListener('change', updateEditRowOptions);
 
   await loadData();
-  renderAll();
 
-  if (profile.role === 'executive_director') {
-    _isED = true;
+  if (_isED) {
     await loadEdCounselors();
     renderCounselorTabs();
-    // Hide personal PAR/Entries tabs — ED uses per-counselor tabs for everyone including themselves
-    document.querySelectorAll('.hud-tab[data-tab="par"], .hud-tab[data-tab="entries"]').forEach(b => b.classList.add('hidden'));
     if (_edCounselors.length) switchTab(`counselor-${_edCounselors[0].id}`);
+  } else {
+    renderAll();
   }
 }
 
@@ -232,17 +238,25 @@ function buildDayRow(dateStr) {
         </div>`;
     }),
     ...dayEvents.map(e => {
-      const sColor  = SECTION_COLORS[e.parSection] || '#6b7280';
-      const secBadge = `<span style="font-size:0.68rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:20px;background:${sColor};color:#fff;margin-left:0.4rem;vertical-align:middle;">${esc(e.parSection)}</span>`;
-      const typeLabel = e.type === 'counseling_session' ? 'Session'
-                      : e.type === 'case_management'    ? 'Case Mgmt'
-                      : e.costType === 'T'              ? 'Training'
-                      : 'Marketing';
+      const sColor     = SECTION_COLORS[e.parSection] || '#6b7280';
+      const secBadge   = `<span style="font-size:0.68rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:20px;background:${sColor};color:#fff;margin-left:0.4rem;vertical-align:middle;">${esc(e.parSection)}</span>`;
+      const isFromSession = e.source === 'session';
+      const typeLabel  = isFromSession             ? 'Session (auto)'
+                       : e.type === 'counseling_session' ? 'Session'
+                       : e.type === 'case_management'    ? 'Case Mgmt'
+                       : e.costType === 'T'              ? 'Training'
+                       : 'Marketing';
+      const clientLabel = e.clientId
+        ? `<a href="client.html?id=${esc(e.clientId)}" style="color:inherit;font-weight:600;text-decoration:underline;">${esc(e.clientName)}</a>`
+        : esc(e.clientName);
       const detail = e.clientName
-        ? `${esc(e.clientName)} · ${esc(e.rxCaseNo || '')}${e.nofaInitiative ? ' · ' + esc(e.nofaInitiative) : ''}`
+        ? `${clientLabel}${e.rxCaseNo ? ' · ' + esc(e.rxCaseNo) : ''}`
         : esc(e.description || e.activityNote || '');
       const mins = e.durationMinutes || 0;
       const hrsDisplay = mins % 60 === 0 ? `${mins/60}h` : `${Math.floor(mins/60)}h ${mins%60}m`;
+      const delBtn = isFromSession
+        ? `<span title="Managed from client file" style="font-size:0.75rem;color:var(--text-muted);padding:0 0.35rem;">🔒</span>`
+        : `<button class="entry-chip-del" data-id="${esc(e.id)}" data-src="event" title="Delete">×</button>`;
       return `
         <div class="entry-chip">
           <div class="entry-chip-info">
@@ -250,7 +264,7 @@ function buildDayRow(dateStr) {
             ${detail ? `<div class="entry-chip-desc">${detail}</div>` : ''}
           </div>
           <div class="entry-chip-hrs">${hrsDisplay}</div>
-          <button class="entry-chip-del" data-id="${esc(e.id)}" data-src="event" title="Delete">×</button>
+          ${delBtn}
         </div>`;
     }),
   ].join('');
@@ -452,10 +466,8 @@ async function performRxLookup(form) {
   resultEl.removeAttribute('data-par-row');
 
   try {
-    const snap = await getDocs(
-      query(collectionGroup(db, 'rxNumbers'), where('rxNumber', '==', rxNum))
-    );
-    const match = snap.docs.find(d => d.data().active !== false);
+    const snap  = await getDocs(collectionGroup(db, 'rxNumbers'));
+    const match = snap.docs.find(d => d.data().rxNumber === rxNum && d.data().active !== false);
     if (!match) {
       resultEl.textContent = `Rx "${rxNum}" not found.`;
       resultEl.style.color = 'var(--danger)';
@@ -661,6 +673,12 @@ function renderMonthlySummary() {
     rowTotals[key] = (rowTotals[key] || 0) + (e.hours || 0);
   });
 
+  _hudEvents.forEach(e => {
+    const sLabel = hudEventSectionLabel(e.parSection);
+    const key    = `${sLabel} — ${e.parRow || e.parSection || ''}`;
+    rowTotals[key] = (rowTotals[key] || 0) + (e.durationMinutes || 0) / 60;
+  });
+
   if (Object.keys(rowTotals).length === 0) {
     container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No entries this month.</p>';
     return;
@@ -668,13 +686,14 @@ function renderMonthlySummary() {
 
   const totalHrs = Object.values(rowTotals).reduce((s, h) => s + h, 0);
   const rows     = Object.entries(rowTotals).sort((a, b) => a[0].localeCompare(b[0]));
+  const fmt      = h => h % 1 === 0 ? `${h}h` : `${h.toFixed(2)}h`;
 
   container.innerHTML = `
     <table class="summary-table">
       <thead><tr><th>Section / Row</th><th style="text-align:right;">Hours</th></tr></thead>
       <tbody>
-        ${rows.map(([key, hrs]) => `<tr><td>${esc(key)}</td><td style="text-align:right;">${hrs}h</td></tr>`).join('')}
-        <tr><td>Total</td><td style="text-align:right;">${totalHrs}h</td></tr>
+        ${rows.map(([key, hrs]) => `<tr><td>${esc(key)}</td><td style="text-align:right;">${fmt(hrs)}</td></tr>`).join('')}
+        <tr><td>Total</td><td style="text-align:right;">${fmt(totalHrs)}</td></tr>
       </tbody>
     </table>`;
 }
@@ -682,26 +701,37 @@ function renderMonthlySummary() {
 // ── My Entries tab ────────────────────────────────────────────────────────────
 function renderMyEntries() {
   const body = document.getElementById('myEntriesBody');
-  if (_entries.length === 0) {
+
+  const eventRows = _hudEvents.map(e => normalizeHudEvent(e));
+  const allRows   = [..._entries.map(e => ({ ...e, _src: 'legacy' })), ...eventRows]
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  if (!allRows.length) {
     body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">No entries for this month.</td></tr>';
     return;
   }
 
-  body.innerHTML = _entries.map(e => {
+  const fmt = h => { const n = Number(h) || 0; return n % 1 === 0 ? `${n}h` : `${n.toFixed(2)}h`; };
+
+  body.innerHTML = allRows.map(e => {
     const dateObj  = new Date(e.date + 'T12:00:00');
     const dateDisp = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short', timeZone: 'UTC' });
     const isAuto   = !!e.autoCreated;
     const autoBadge = isAuto ? `<span class="derived-badge" style="margin-left:4px;">NOFA</span>` : '';
+    const sectionDisp = e._src === 'event' ? e.sectionLabel : (SECTION_LABELS[e.section] || e.section || '');
     return `
       <tr>
         <td style="white-space:nowrap;">${dateDisp}</td>
-        <td>${esc(SECTION_LABELS[e.section] || e.section || '')}${autoBadge}</td>
+        <td>${esc(sectionDisp)}${autoBadge}</td>
         <td>${esc(e.parRow || '—')}</td>
-        <td style="max-width:320px;">${esc(e.activityDescription || '')}</td>
-        <td style="text-align:right;">${e.hours || 0}h</td>
+        <td style="max-width:320px;">${e.clientId
+          ? `<a href="client.html?id=${esc(e.clientId)}" style="color:inherit;font-weight:600;text-decoration:underline;">${esc(e.activityDescription || '')}</a>`
+          : esc(e.activityDescription || '')}</td>
+        <td style="text-align:right;">${fmt(e.hours)}</td>
         <td style="text-align:center;white-space:nowrap;">
-          <button class="entry-chip-edit" data-id="${esc(e.id)}" title="Edit" style="margin-right:0.25rem;">✎</button>
-          ${isAuto ? '' : `<button class="entry-chip-del" data-id="${esc(e.id)}" title="Delete">×</button>`}
+          ${e._src === 'legacy' && !isAuto ? `<button class="entry-chip-edit" data-id="${esc(e.id)}" title="Edit" style="margin-right:0.25rem;">✎</button>` : ''}
+          ${!isAuto && e.source !== 'session' ? `<button class="entry-chip-del" data-id="${esc(e.id)}" data-src="${e._src}" title="Delete">×</button>` : ''}
+          ${e.source === 'session' ? `<span title="Managed from client file" style="font-size:0.75rem;color:var(--text-muted);">🔒</span>` : ''}
         </td>
       </tr>`;
   }).join('');
@@ -713,7 +743,7 @@ function renderMyEntries() {
     });
   });
   body.querySelectorAll('.entry-chip-del').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id, btn.dataset.src || 'legacy'));
   });
 }
 
@@ -740,7 +770,7 @@ function renderCounselorTabs() {
     const btn = document.createElement('button');
     btn.className    = 'hud-tab';
     btn.dataset.tab  = `counselor-${c.id}`;
-    btn.textContent  = c.name || c.id;
+    btn.textContent  = c.id === _myId ? 'My Entries' : (c.name || c.id);
     tabBar.appendChild(btn);
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 
@@ -753,19 +783,7 @@ function renderCounselorTabs() {
           <span>${esc(c.name)}</span>
           <span id="counselorStatus-${esc(c.id)}" style="font-weight:400;color:var(--text-muted);"></span>
         </div>
-        <div style="overflow-x:auto;">
-          <table style="font-size:0.85rem;width:100%;">
-            <thead>
-              <tr>
-                <th>Date</th><th>Section</th><th>PAR Row</th><th>Description</th>
-                <th style="text-align:right;">Hours</th>
-              </tr>
-            </thead>
-            <tbody id="counselorBody-${esc(c.id)}">
-              <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Select this tab to load.</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div id="counselorParLog-${esc(c.id)}" style="padding:0.25rem 0;"></div>
       </div>`;
     lastPanel.insertAdjacentElement('afterend', panel);
   });
@@ -774,7 +792,7 @@ function renderCounselorTabs() {
 async function loadCounselorTab(counselorId) {
   const cacheKey = `${counselorId}-${_month}`;
   if (_counselorDataCache[cacheKey]) {
-    renderCounselorEntries(counselorId, _counselorDataCache[cacheKey]);
+    renderCounselorParLog(counselorId, _counselorDataCache[cacheKey]);
     return;
   }
 
@@ -783,54 +801,176 @@ async function loadCounselorTab(counselorId) {
   if (statusEl) statusEl.textContent = 'Loading…';
   if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>';
 
-  try {
-    const snap = await getDocs(query(
-      collection(db, 'hudTimeEntries'),
-      where('counselorId', '==', counselorId),
-      where('month', '==', _month),
-    ));
-    const entries = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    _counselorDataCache[cacheKey] = entries;
-    renderCounselorEntries(counselorId, entries);
-  } catch (err) {
-    if (statusEl) statusEl.textContent = 'Error loading.';
-    if (bodyEl) bodyEl.innerHTML = `<tr><td colspan="5" style="color:var(--danger);padding:1rem;">${esc(err.message)}</td></tr>`;
-  }
+  const cName = (_edCounselors.find(c => c.id === counselorId))?.name || '';
+
+  // Query by doc ID (normal case) and by counselorName (fallback if entry was saved with user UID)
+  const safe = p => p.catch(() => null);
+  const [byIdLegacy, byIdEvent, byNameLegacy, byNameEvent] = await Promise.all([
+    safe(getDocs(query(collection(db, 'hudTimeEntries'), where('counselorId',   '==', counselorId), where('month', '==', _month)))),
+    safe(getDocs(query(collection(db, 'hudEvents'),      where('counselorId',   '==', counselorId), where('month', '==', _month)))),
+    cName ? safe(getDocs(query(collection(db, 'hudTimeEntries'), where('counselorName', '==', cName)))) : Promise.resolve(null),
+    cName ? safe(getDocs(query(collection(db, 'hudEvents'),      where('counselorName', '==', cName)))) : Promise.resolve(null),
+  ]);
+
+  const seen = new Set();
+  const all  = [];
+
+  const addLegacy = d => {
+    if (seen.has(d.id)) return;
+    const data = d.data();
+    if (data.month && data.month !== _month) return; // name queries return all months
+    seen.add(d.id);
+    all.push({ id: d.id, ...data, _src: 'legacy' });
+  };
+  const addEvent = d => {
+    if (seen.has(d.id)) return;
+    const data = d.data();
+    if (data.month && data.month !== _month) return;
+    seen.add(d.id);
+    all.push(normalizeHudEvent({ id: d.id, ...data }));
+  };
+
+  byIdLegacy?.docs.forEach(addLegacy);
+  byIdEvent?.docs.forEach(addEvent);
+  byNameLegacy?.docs.forEach(addLegacy);
+  byNameEvent?.docs.forEach(addEvent);
+
+  all.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  _counselorDataCache[cacheKey] = all;
+  renderCounselorParLog(counselorId, all);
 }
 
-function renderCounselorEntries(counselorId, entries) {
-  const statusEl = document.getElementById(`counselorStatus-${counselorId}`);
-  const bodyEl   = document.getElementById(`counselorBody-${counselorId}`);
-  if (!bodyEl) return;
+function renderCounselorParLog(counselorId, entries) {
+  const statusEl  = document.getElementById(`counselorStatus-${counselorId}`);
+  const container = document.getElementById(`counselorParLog-${counselorId}`);
+  if (!container) return;
 
-  const total = entries.reduce((s, e) => s + (e.hours || 0), 0);
+  const fmt   = h => { const n = Number(h) || 0; return n % 1 === 0 ? `${n}h` : `${n.toFixed(2)}h`; };
+  const total = entries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
   if (statusEl) statusEl.textContent = entries.length
-    ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${total}h`
+    ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${fmt(total)}`
     : 'No entries this month';
 
-  if (!entries.length) {
-    bodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No entries for this month.</td></tr>';
-    return;
+  const byDate = {};
+  entries.forEach(e => { if (!byDate[e.date]) byDate[e.date] = []; byDate[e.date].push(e); });
+
+  const [yr, mo]    = _month.split('-').map(Number);
+  const daysInMonth = new Date(yr, mo, 0).getDate();
+  const SECTION_COLORS = { S1: '#1a73e8', S2: '#0d9488', S3: '#7c3aed', S4: '#6b7280' };
+
+  const rows = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr    = `${_month}-${String(d).padStart(2, '0')}`;
+    const dayDate    = new Date(dateStr + 'T12:00:00');
+    const isWeekend  = [0, 6].includes(dayDate.getUTCDay());
+    const dayLabel   = dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const dayEntries = byDate[dateStr] || [];
+    const dayHrs     = dayEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+
+    const chips = dayEntries.map(e => {
+      const isFromSession = e.source === 'session';
+      const isLegacy      = e._src === 'legacy';
+      const isAuto        = !!e.autoCreated;
+
+      if (isLegacy) {
+        const autoBadge = isAuto ? `<span class="derived-badge">NOFA</span>` : '';
+        const delBtn    = isAuto ? '' : `<button class="c-chip-del" data-id="${esc(e.id)}" data-src="legacy" title="Delete">×</button>`;
+        return `<div class="entry-chip">
+          <div class="entry-chip-info">
+            <div class="entry-chip-row">${esc(e.parRow || e.section)} ${autoBadge}</div>
+            ${e.activityDescription ? `<div class="entry-chip-desc">${esc(e.activityDescription)}</div>` : ''}
+          </div>
+          <div class="entry-chip-hrs">${fmt(e.hours)}</div>
+          ${delBtn}
+        </div>`;
+      } else {
+        const sColor    = SECTION_COLORS[e.section] || '#6b7280';
+        const secBadge  = `<span style="font-size:0.68rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:20px;background:${sColor};color:#fff;margin-left:0.4rem;vertical-align:middle;">${esc(e.section)}</span>`;
+        const typeLabel = isFromSession ? 'Session (auto)' : (e.parRow || 'Entry');
+        const clientLabel = e.clientId
+          ? `<a href="client.html?id=${esc(e.clientId)}" style="color:inherit;font-weight:600;text-decoration:underline;">${esc(e.activityDescription || '')}</a>`
+          : esc(e.activityDescription || '');
+        const delBtn = isFromSession
+          ? `<span title="Managed from client file" style="font-size:0.75rem;color:var(--text-muted);padding:0 0.35rem;">🔒</span>`
+          : `<button class="c-chip-del" data-id="${esc(e.id)}" data-src="event" title="Delete">×</button>`;
+        return `<div class="entry-chip">
+          <div class="entry-chip-info">
+            <div class="entry-chip-row">${typeLabel}${secBadge}</div>
+            ${e.activityDescription ? `<div class="entry-chip-desc">${clientLabel}</div>` : ''}
+          </div>
+          <div class="entry-chip-hrs">${fmt(e.hours)}</div>
+          ${delBtn}
+        </div>`;
+      }
+    }).join('');
+
+    rows.push(`
+      <div class="day-row" id="cday-${esc(counselorId)}-${dateStr}">
+        <div class="day-header ${isWeekend ? 'weekend' : ''}" data-cday="${dateStr}">
+          <span class="day-arrow">▶</span>
+          <span class="day-label">${dayLabel}</span>
+          <span class="day-hours">${dayHrs > 0 ? fmt(dayHrs) : ''}</span>
+        </div>
+        <div class="day-body">${chips}</div>
+      </div>`);
   }
 
-  bodyEl.innerHTML = entries.map(e => {
-    const dateObj  = new Date(e.date + 'T12:00:00');
-    const dateDisp = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short', timeZone: 'UTC' });
-    const isAuto   = !!e.autoCreated;
-    const autoBadge = isAuto ? `<span class="derived-badge" style="margin-left:4px;">NOFA</span>` : '';
-    return `<tr>
-      <td style="white-space:nowrap;">${dateDisp}</td>
-      <td>${esc(SECTION_LABELS[e.section] || e.section || '')}${autoBadge}</td>
-      <td>${esc(e.parRow || '—')}</td>
-      <td style="max-width:320px;">${esc(e.activityDescription || '')}</td>
-      <td style="text-align:right;">${e.hours || 0}h</td>
-    </tr>`;
-  }).join('');
+  container.innerHTML = rows.join('');
+
+  container.querySelectorAll('[data-cday]').forEach(header => {
+    header.addEventListener('click', () => {
+      const row    = header.closest('.day-row');
+      const isOpen = row.classList.toggle('open');
+      row.querySelector('.day-arrow').style.transform = isOpen ? 'rotate(90deg)' : '';
+    });
+  });
+
+  container.querySelectorAll('.c-chip-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this entry?')) return;
+      btn.disabled = true;
+      try {
+        const coll = btn.dataset.src === 'event' ? 'hudEvents' : 'hudTimeEntries';
+        await deleteDoc(doc(db, coll, btn.dataset.id));
+        btn.closest('.entry-chip').remove();
+        delete _counselorDataCache[`${counselorId}-${_month}`];
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 function esc(str) {
   return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function hudEventSectionLabel(parSection) {
+  if (parSection === 'S1') return SECTION_LABELS['PAR-S1'];
+  if (parSection === 'S2') return SECTION_LABELS['PAR-S2'];
+  if (parSection === 'S3') return SECTION_LABELS['PAR-S3'];
+  return SECTION_LABELS['CML'] || 'CML';
+}
+
+function normalizeHudEvent(e) {
+  const hrs  = (e.durationMinutes || 0) / 60;
+  const desc = e.clientName
+    ? `${e.clientName}${e.rxCaseNo ? ' · ' + e.rxCaseNo : ''}${e.activityNote ? ' — ' + e.activityNote : ''}`
+    : (e.description || e.activityNote || '');
+  return {
+    id:                  e.id,
+    date:                e.date,
+    _src:                'event',
+    source:              e.source    || '',
+    sessionId:           e.sessionId || '',
+    clientId:            e.clientId  || '',
+    section:             e.parSection,
+    sectionLabel:        hudEventSectionLabel(e.parSection),
+    parRow:              e.parRow || '',
+    activityDescription: desc,
+    hours:               hrs,
+    autoCreated:         false,
+  };
 }

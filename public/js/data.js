@@ -1,4 +1,4 @@
-export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT'];
+export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Workshop'];
 
 export const AMI_LEVELS = [
   'Extremely Low',
@@ -91,7 +91,7 @@ export const AWARD_TYPES = [
   'Other',
 ];
 
-export const BILLING_TYPES = ['In-Person', 'Case Management Activity', 'Court'];
+export const BILLING_TYPES = ['In-Person', 'Case Management Activity', 'Court', 'Group Education'];
 
 export const RX_GUARANTORS = ['NOFA', 'Anti-Pred', 'CHCI', 'HEMAP', 'M&D'];
 
