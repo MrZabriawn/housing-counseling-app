@@ -51,16 +51,16 @@ function amiNumeric(val) {
 
 function amiTier(label) {
   const n = amiNumeric(label);
-  if (n <= 50)  return 'grant';
-  if (n <= 80)  return 'loan';
-  return 'sharing';
+  if (n <= 50)  return 'tier1';
+  if (n <= 80)  return 'tier2';
+  return 'tier3';
 }
 
 function assistanceLabel(label) {
   const tier = amiTier(label);
-  if (tier === 'grant')   return '100% Forgivable Grant';
-  if (tier === 'loan')    return '5-Year Forgivable Loan';
-  return 'Cost-Sharing (up to 50%)';
+  if (tier === 'tier1') return 'Tier 1 — 100% Forgivable';
+  if (tier === 'tier2') return 'Tier 2 — Cost-Sharing (25%)';
+  return 'Tier 3 — Cost-Sharing (50%)';
 }
 
 // ── Score calculation ─────────────────────────────────────────────────────────

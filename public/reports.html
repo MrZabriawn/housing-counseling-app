@@ -68,6 +68,38 @@
       .inv-header-table .lbl { font-weight: 700; white-space: nowrap; width: 1%; }
       [contenteditable] { border-bottom: none !important; outline: none !important; }
     }
+
+    /* ── HEMAP screen styles ─────────────────────────────────────────────────── */
+    #hemapPrintArea { display: none; }
+
+    /* ── HEMAP print styles ──────────────────────────────────────────────────── */
+    .hemap-print-wrap {
+      display: flex; flex-direction: row; width: 100%; min-height: 100vh;
+      font-family: Arial, sans-serif; font-size: 9pt;
+    }
+    .hemap-print-main { flex: 1; padding: 0.4in 0.3in 0.3in 0.4in; }
+    .hemap-print-header { margin-bottom: 0.6rem; font-size: 9pt; line-height: 1.5; }
+    .hemap-print-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+    .hemap-print-table th {
+      border: 1px solid #000; padding: 0.2rem 0.3rem;
+      background: #e8e8e8; font-size: 7.5pt; text-align: left; vertical-align: bottom;
+    }
+    .hp-td { border: 1px solid #000; padding: 0.2rem 0.3rem; font-size: 8.5pt; min-height: 1.3em; }
+    .hemap-print-title {
+      width: 0.9in; background: #1a1a1a; color: #fff;
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      font-size: 13pt; font-weight: 700; text-align: center;
+      letter-spacing: 0.04em; padding: 0.5rem 0.15rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    @media print {
+      body.printing-hemap > *:not(#hemapPrintArea) { display: none !important; }
+      body.printing-hemap #hemapPrintArea {
+        display: block !important; position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+      }
+    }
   </style>
 
   <!-- CDN libraries for HUD report generation (globals required before ES module) -->
@@ -91,6 +123,7 @@
       <button class="reports-tab" data-tab="tab-court">Court</button>
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
+      <button class="reports-tab" data-tab="tab-hemap">HEMAP</button>
     </div>
 
     <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
@@ -356,13 +389,154 @@
       </div>
     </div>
 
+    <!-- ══ HEMAP Log panel ═══════════════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-hemap">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0;">HEMAP Submissions Log</h3>
+        <div style="display:flex;gap:0.5rem;">
+          <button id="hemapGenerateBtn" class="btn btn-primary btn-sm hidden">Generate Invoice</button>
+          <button id="hemapAddBtn" class="btn btn-secondary btn-sm">+ Add Entry</button>
+        </div>
+      </div>
+
+      <!-- Pending table -->
+      <div class="card" style="padding:0;margin-bottom:1rem;">
+        <div style="padding:0.65rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#f8f9fb;border-radius:var(--radius) var(--radius) 0 0;">
+          <span style="font-weight:600;font-size:0.875rem;">Pending — Not Yet Invoiced</span>
+          <span style="font-size:0.8125rem;color:var(--text-muted);">Total: <strong id="hemapPendingTotal">$0.00</strong></span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
+            <thead>
+              <tr style="background:#f8f9fb;">
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Property Address</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Date Sent</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:center;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Hrs</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:right;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Total</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Comments</th>
+                <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
+              </tr>
+            </thead>
+            <tbody id="hemapPendingBody">
+              <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Billed section (collapsed) -->
+      <details id="hemapBilledDetails" style="border:1px solid var(--border);border-radius:var(--radius);">
+        <summary style="padding:0.75rem 1rem;cursor:pointer;font-weight:600;font-size:0.875rem;background:#f8f9fb;border-radius:var(--radius);">
+          Billed Submissions — Invoice History
+        </summary>
+        <div id="hemapBilledContent" style="padding:0.75rem 1rem;"></div>
+      </details>
+    </div>
+
   </main>
+
+  <!-- HEMAP Modal -->
+  <div id="hemapModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:580px;">
+      <h3 id="hemapModalTitle">Add HEMAP Entry</h3>
+      <div style="margin-top:1rem;">
+        <div class="form-group" style="margin-bottom:0.75rem;">
+          <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Link to Client File</label>
+          <div id="hemapClientChip"></div>
+          <input type="text" id="hemapClientSearch" placeholder="Search by client name…" autocomplete="off">
+          <ul id="hemapClientDropdown" style="display:none;list-style:none;margin:0;padding:0;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);background:#fff;max-height:180px;overflow-y:auto;position:relative;z-index:100;"></ul>
+          <input type="hidden" id="hemapClientId">
+        </div>
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="hemapClientName">Client Name (as on HEMAP application) *</label>
+            <input type="text" id="hemapClientName" placeholder="Full legal name">
+          </div>
+          <div class="form-group full-width">
+            <label for="hemapAddress">Property Address</label>
+            <input type="text" id="hemapAddress" placeholder="Street, City, ZIP">
+          </div>
+          <div class="form-group">
+            <label for="hemapDateSent">Date Sent to PHFA *</label>
+            <input type="date" id="hemapDateSent">
+          </div>
+          <div class="form-group">
+            <label for="hemapHours">Hours</label>
+            <input type="number" id="hemapHours" value="5" min="0.25" step="0.25" style="max-width:100px;">
+            <div style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.3rem;">Total: <strong id="hemapTotalDisplay">$375.00</strong></div>
+          </div>
+          <div class="form-group">
+            <label for="hemapCounselor">Counselor</label>
+            <select id="hemapCounselor">
+              <option value="">— Select —</option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label for="hemapComments">Comments</label>
+            <input type="text" id="hemapComments" placeholder="Optional">
+          </div>
+        </div>
+      </div>
+      <p id="hemapModalError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="hemapModalSave" class="btn btn-primary">Save</button>
+        <button id="hemapModalCancel" class="btn btn-secondary">Cancel</button>
+        <button id="hemapModalDelete" class="btn btn-danger btn-sm hidden" style="margin-left:auto;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEMAP Print Area (hidden in app, shown only when printing invoice) -->
+  <div id="hemapPrintArea">
+    <div class="hemap-print-wrap">
+      <div class="hemap-print-main">
+        <div class="hemap-print-header">
+          <strong>Housing Opportunities Inc.</strong><br>
+          293 Pinney Street<br>
+          Rochester, PA 15074<br>
+          Counseling Agency and Address<br>
+          Phone Number: (724) 728-7511<br>
+          HEMAP CA #: 54
+          <div style="margin:0.6rem 0 0.3rem;">
+            For Month Ending <strong id="hemapPrintMonth"></strong><br>
+            <em style="font-size:8pt;">Invoices are due the 15 of the following month</em>
+          </div>
+          <div style="margin-top:0.75rem;border-top:1px solid #000;padding-top:0.4rem;font-size:8.5pt;">
+            Signature of Authorized CCCA Approving Officer &amp; Date &nbsp;_______________________________
+          </div>
+        </div>
+        <table class="hemap-print-table">
+          <thead>
+            <tr>
+              <th style="width:22%;">NAME AS ON THE<br>APPLICATION SUBMITTED</th>
+              <th style="width:26%;">PROPERTY ADDRESS<br>(ADDRESS, CITY, ZIP)</th>
+              <th style="width:10%;">DATE<br>SENT</th>
+              <th style="width:8%;text-align:center;"># OF<br>HOURS</th>
+              <th style="width:14%;text-align:right;">TOTAL<br>(# hours x $75/hr)</th>
+              <th style="width:20%;">COMMENTS</th>
+            </tr>
+          </thead>
+          <tbody id="hemapPrintRows"></tbody>
+          <tfoot>
+            <tr>
+              <td class="hp-td" colspan="4"></td>
+              <td class="hp-td" style="text-align:right;font-weight:700;" id="hemapPrintTotal"></td>
+              <td class="hp-td"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="hemap-print-title">HEMAP &#8212; HOMEOWNER&#8217;S EMERGENCY MORTGAGE ASSISTANCE PROGRAM</div>
+    </div>
+  </div>
 
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports } from './js/reports.js?v=9';
     import { initChciReports } from './js/chci-reports.js';
     import { initIncompleteReport } from './js/incomplete-report.js';
+    import { initHemapLog } from './js/hemap-reports.js';
 
     function switchReportsTab(tabId) {
       document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
@@ -382,6 +556,7 @@
       await initCdbgReports(user, profile);
       initChciReports();
       await initIncompleteReport(user, profile);
+      await initHemapLog(user, profile);
 
       // Auto-switch to incomplete tab if linked from the banner
       const params = new URLSearchParams(window.location.search);

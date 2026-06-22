@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js';
+import { amiCategory } from './data.js';
 import {
   collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -382,7 +383,7 @@ async function renderLinkResults() {
     <div class="client-selector-item" data-client-id="${c.id}">
       <div>
         <div class="cs-name">${esc(toTitleCase(c.clientName || ''))}</div>
-        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(c.amiPercent || '')}</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.counselingType || '')} · ${esc(amiCategory(c.amiPercent) || '')}</div>
       </div>
       <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Link →</span>
     </div>`).join('');
@@ -513,7 +514,7 @@ function renderClientSelector() {
     <div class="client-selector-item" data-client-id="${c.id}">
       <div>
         <div class="cs-name">${esc(toTitleCase(c.clientName))}</div>
-        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(c.amiPercent || '')} · PRE</div>
+        <div class="cs-meta">${esc(c.counselor || '')} · ${esc(amiCategory(c.amiPercent) || '')} · PRE</div>
       </div>
       <span style="font-size:0.75rem;color:var(--primary);font-weight:600;">Add →</span>
     </div>`).join('');

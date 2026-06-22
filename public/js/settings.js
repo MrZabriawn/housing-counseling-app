@@ -16,22 +16,22 @@ requireED(async (user, profile) => {
   setupNav(profile, 'settings');
 
   await loadPendingUsers();
-  await loadAllUsers();
-  await loadCounselors();
+  await loadStaff();
   await loadRemapTable();
   await loadWeights();
   await loadRates();
   await loadDemoPasscode();
 
-  // Add counselor
+  // Add staff member
   document.getElementById('addCounselorBtn').addEventListener('click', addCounselor);
   document.getElementById('newCounselorName').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addCounselor();
   });
 
-  // Edit counselor modal
-  document.getElementById('editCounselorCancelBtn').addEventListener('click', () => {
-    document.getElementById('editCounselorModal').classList.add('hidden');
+  // Edit staff modal
+  document.getElementById('editCounselorCancelBtn').addEventListener('click', closeStaffModal);
+  document.getElementById('editCounselorModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('editCounselorModal')) closeStaffModal();
   });
   document.getElementById('editCounselorSaveBtn').addEventListener('click', saveEditCounselor);
 
@@ -82,92 +82,150 @@ requireED(async (user, profile) => {
   document.getElementById('legacyLogSearch').addEventListener('input', filterLegacyLog);
 });
 
-// ── Counselors ────────────────────────────────────────────────────────────────
+// ── Staff & Roles ─────────────────────────────────────────────────────────────
 
 const TH = 'style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
 const TD = 'style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);"';
 
-async function loadCounselors() {
-  const container = document.getElementById('counselorsList');
+const ROLE_OPTIONS = [
+  { value: 'counselor',          label: 'Counselor' },
+  { value: 'admin',              label: 'Admin' },
+  { value: 'executive_director', label: 'Executive Director' },
+];
+
+
+async function loadStaff() {
+  const container = document.getElementById('staffList');
   try {
-    const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
-    if (snap.empty) {
-      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No counselors added yet.</p>';
-      return;
-    }
+    const [userSnap, counselorSnap] = await Promise.all([
+      getDocs(query(collection(db, 'users'), orderBy('name'))),
+      getDocs(query(collection(db, 'counselors'), orderBy('name'))),
+    ]);
+
+    const users      = userSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const counselors = counselorSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Join by name (case-insensitive)
+    const matchedCounselorIds = new Set();
+    const rows = users.map(u => {
+      const c = counselors.find(c => (c.name || '').toLowerCase() === (u.name || '').toLowerCase());
+      if (c) matchedCounselorIds.add(c.id);
+      return { user: u, counselor: c || null };
+    });
+    // Counselors with no user account
+    counselors.filter(c => !matchedCounselorIds.has(c.id)).forEach(c => {
+      rows.push({ user: null, counselor: c });
+    });
+    // Sort by name
+    rows.sort((a, b) => {
+      const na = (a.user?.name || a.counselor?.name || '').toLowerCase();
+      const nb = (b.user?.name || b.counselor?.name || '').toLowerCase();
+      return na.localeCompare(nb);
+    });
+
+    const ROLE_LABELS = { counselor: 'Counselor', admin: 'Admin', executive_director: 'ED', pending: 'Pending' };
+
+    const bodyRows = rows.map(({ user: u, counselor: c }) => {
+      const name        = u?.name || c?.name || '—';
+      const isActive    = c ? c.active !== false : true;
+      const isCounselor = c ? c.isCounselor !== false : false;
+      const hasStaff    = !!c;
+
+      const missingHud = hasStaff && isActive && isCounselor && (c.staffNumber == null || !c.staffTitle);
+      const warn = missingHud
+        ? `<span title="Staff # or Title missing — HUD reports won't generate" style="color:#e65100;margin-left:0.3rem;">⚠</span>`
+        : '';
+
+      const roleLabel = u?.role
+        ? `<span style="font-size:0.75rem;font-weight:700;background:#f0f4ff;color:var(--primary);padding:0.15rem 0.45rem;border-radius:10px;">${escHtml(ROLE_LABELS[u.role] || u.role)}</span>`
+        : `<span style="font-size:0.75rem;color:var(--text-muted);">No account</span>`;
+
+      const staffNum = hasStaff && c.staffNumber != null
+        ? `<strong>${escHtml(String(c.staffNumber))}</strong>`
+        : '<span style="color:var(--text-muted);">—</span>';
+
+      // Inline counselor toggle button
+      const counselorToggle = hasStaff
+        ? `<button class="staff-counselor-toggle btn btn-sm ${isCounselor ? 'btn-primary' : 'btn-secondary'}"
+              data-cid="${escAttr(c.id)}" data-is-counselor="${isCounselor}"
+              style="min-width:42px;font-size:0.75rem;">${isCounselor ? 'Yes' : 'No'}</button>`
+        : '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
+
+      const editData = `data-cid="${escAttr(c?.id || '')}" data-uid="${escAttr(u?.id || '')}"
+        data-name="${escAttr(name)}"
+        data-staff-num="${escAttr(c?.staffNumber != null ? String(c.staffNumber) : '')}"
+        data-staff-title="${escAttr(c?.staffTitle || '')}"
+        data-is-counselor="${isCounselor}"
+        data-base-salary="${escAttr(c?.baseSalary != null ? String(c.baseSalary) : '')}"
+        data-fringe="${escAttr(c?.fringe != null ? String(c.fringe) : '')}"
+        data-role="${escAttr(u?.role || '')}"`;
+
+      const title = hasStaff && c.staffTitle ? escHtml(c.staffTitle) : '<span style="color:var(--text-muted);">—</span>';
+
+      const statusBtn = hasStaff
+        ? isActive
+          ? `<button class="btn btn-sm btn-secondary staff-toggle-btn" data-cid="${escAttr(c.id)}" data-active="true" style="margin-left:4px;">Deactivate</button>`
+          : `<button class="btn btn-sm btn-danger staff-remove-btn" data-cid="${escAttr(c.id)}" style="margin-left:4px;">Remove</button>`
+        : '';
+
+      const actionBtns = `
+        <button class="btn btn-sm btn-secondary staff-edit-btn" ${editData}>Edit</button>
+        ${statusBtn}`;
+
+      return `<tr style="opacity:${isActive ? '1' : '0.55'};">
+        <td ${TD}>${escHtml(name)}${warn}</td>
+        <td ${TD}>${roleLabel}</td>
+        <td ${TD} style="text-align:center;">${staffNum}</td>
+        <td ${TD} style="font-size:0.8125rem;">${title}</td>
+        <td ${TD} style="text-align:center;">${counselorToggle}</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;">${actionBtns}</td>
+      </tr>`;
+    }).join('');
+
     container.innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
-        <thead>
-          <tr style="background:#f8f9fb;">
-            <th ${TH}>Name</th>
-            <th ${TH}>Staff #</th>
-            <th ${TH}>Title</th>
-            <th ${TH} style="text-align:center;">Status</th>
-            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${snap.docs.map(d => {
-            const c = d.data();
-            const isActive   = c.active !== false;
-            const missingHud = isActive && (c.staffNumber == null || !c.staffTitle);
-            const warn = missingHud
-              ? `<span title="Staff Number or Title missing — HUD reports cannot be generated for this counselor"
-                   style="color:#e65100;margin-left:0.35rem;cursor:default;font-size:0.85em;">⚠</span>`
-              : '';
-            const staffNum = c.staffNumber != null ? escHtml(String(c.staffNumber)) : '<span style="color:var(--text-muted);">—</span>';
-            const title    = c.staffTitle ? escHtml(c.staffTitle) : '<span style="color:var(--text-muted);">—</span>';
-            return `<tr style="opacity:${isActive ? '1' : '0.55'};">
-              <td ${TD}>${escHtml(c.name)}${warn}</td>
-              <td ${TD}>${staffNum}</td>
-              <td ${TD}>${title}</td>
-              <td ${TD} style="text-align:center;">
-                <span style="font-size:0.75rem;font-weight:600;color:${isActive ? 'var(--accent,green)' : 'var(--text-muted)'};">
-                  ${isActive ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
-                <button class="btn btn-sm btn-secondary" data-edit="${d.id}"
-                  data-name="${escAttr(c.name)}"
-                  data-staff-num="${escAttr(c.staffNumber != null ? String(c.staffNumber) : '')}"
-                  data-staff-title="${escAttr(c.staffTitle || '')}"
-                  data-base-salary="${escAttr(c.baseSalary != null ? String(c.baseSalary) : '')}"
-                  data-fringe="${escAttr(c.fringe != null ? String(c.fringe) : '')}">Edit</button>
-                <button class="btn btn-sm btn-secondary" data-toggle="${d.id}" data-active="${isActive}" style="margin-left:4px;">${isActive ? 'Mark Inactive' : 'Mark Active'}</button>
-                <button class="btn btn-sm btn-danger" data-delete="${d.id}" style="margin-left:4px;">Remove</button>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
+        <thead><tr style="background:#f8f9fb;">
+          <th ${TH}>Name</th>
+          <th ${TH}>Role</th>
+          <th ${TH} style="text-align:center;">Staff #</th>
+          <th ${TH}>Title</th>
+          <th ${TH} style="text-align:center;">Counselor</th>
+          <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
+        </tr></thead>
+        <tbody>${bodyRows || '<tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--text-muted);">No staff found.</td></tr>'}</tbody>
       </table>`;
 
-    container.querySelectorAll('button[data-edit]').forEach(btn => {
+    container.querySelectorAll('.staff-counselor-toggle').forEach(btn =>
+      btn.addEventListener('click', () => toggleIsCounselor(btn.dataset.cid, btn.dataset.isCounselor === 'true', btn)));
+
+    container.querySelectorAll('.staff-edit-btn').forEach(btn =>
       btn.addEventListener('click', () => openEditCounselor(
-        btn.dataset.edit,
-        btn.dataset.name,
-        btn.dataset.staffNum,
-        btn.dataset.staffTitle,
-        btn.dataset.baseSalary,
-        btn.dataset.fringe,
-      ));
-    });
-    container.querySelectorAll('button[data-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => toggleCounselor(btn.dataset.toggle, btn.dataset.active === 'true', btn));
-    });
-    container.querySelectorAll('button[data-delete]').forEach(btn => {
-      btn.addEventListener('click', () => removeCounselor(btn.dataset.delete, btn));
-    });
+        btn.dataset.cid, btn.dataset.uid, btn.dataset.name, btn.dataset.staffNum,
+        btn.dataset.staffTitle, btn.dataset.isCounselor === 'true',
+        btn.dataset.baseSalary, btn.dataset.fringe, btn.dataset.role
+      )));
+
+    container.querySelectorAll('.staff-toggle-btn').forEach(btn =>
+      btn.addEventListener('click', () => toggleCounselor(btn.dataset.cid, btn.dataset.active === 'true', btn)));
+
+    container.querySelectorAll('.staff-remove-btn').forEach(btn =>
+      btn.addEventListener('click', () => removeCounselor(btn.dataset.cid, btn)));
+
   } catch (err) {
     container.innerHTML = `<p class="error-msg">Failed to load: ${err.message}</p>`;
   }
 }
 
+// Keep loadCounselors as an alias so other internal callers still work
+async function loadCounselors() { await loadStaff(); }
+
 async function addCounselor() {
-  const nameEl     = document.getElementById('newCounselorName');
-  const staffNumEl = document.getElementById('newCounselorStaffNum');
-  const titleEl    = document.getElementById('newCounselorTitle');
-  const msgEl      = document.getElementById('counselorMsg');
-  const btn        = document.getElementById('addCounselorBtn');
+  const nameEl          = document.getElementById('newCounselorName');
+  const staffNumEl      = document.getElementById('newCounselorStaffNum');
+  const titleEl         = document.getElementById('newCounselorTitle');
+  const isCounselorEl   = document.getElementById('newCounselorIsCounselor');
+  const msgEl           = document.getElementById('counselorMsg');
+  const btn             = document.getElementById('addCounselorBtn');
 
   const name = nameEl.value.trim();
   if (!name) { showMsg(msgEl, 'Enter a name.', false); return; }
@@ -175,21 +233,23 @@ async function addCounselor() {
   const staffNumRaw = staffNumEl.value.trim();
   const staffNum    = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
   const staffTitle  = titleEl.value.trim();
+  const isCounselor = isCounselorEl.checked;
 
   btn.disabled = true;
   btn.textContent = 'Adding…';
   msgEl.classList.add('hidden');
 
   try {
-    const data = { name, active: true, createdAt: serverTimestamp() };
-    if (staffNum  != null) data.staffNumber = staffNum;
-    if (staffTitle)        data.staffTitle  = staffTitle;
+    const data = { name, active: true, isCounselor, createdAt: serverTimestamp() };
+    if (staffNum != null) data.staffNumber = staffNum;
+    if (staffTitle)       data.staffTitle  = staffTitle;
 
     await addDoc(collection(db, 'counselors'), data);
-    nameEl.value     = '';
-    staffNumEl.value = '';
-    titleEl.value    = '';
-    await loadCounselors();
+    nameEl.value            = '';
+    staffNumEl.value        = '';
+    titleEl.value           = '';
+    isCounselorEl.checked   = true;
+    await loadStaff();
     showMsg(msgEl, `${name} added.`, true);
   } catch (err) {
     showMsg(msgEl, 'Failed: ' + err.message, false);
@@ -199,26 +259,36 @@ async function addCounselor() {
   }
 }
 
-async function toggleCounselor(id, currentlyActive, btn) {
-  btn.disabled = true;
-  btn.textContent = '…';
+async function toggleIsCounselor(id, currentlyIs, btn) {
+  btn.disabled = true; btn.textContent = '…';
   try {
-    await updateDoc(doc(db, 'counselors', id), { active: !currentlyActive });
-    await loadCounselors();
+    await updateDoc(doc(db, 'counselors', id), { isCounselor: !currentlyIs });
+    await loadStaff();
   } catch (err) {
     alert('Failed: ' + err.message);
     btn.disabled = false;
-    btn.textContent = currentlyActive ? 'Mark Inactive' : 'Mark Active';
+    btn.textContent = currentlyIs ? 'Yes' : 'No';
+  }
+}
+
+async function toggleCounselor(id, currentlyActive, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    await updateDoc(doc(db, 'counselors', id), { active: !currentlyActive });
+    await loadStaff();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = currentlyActive ? 'Deactivate' : 'Activate';
   }
 }
 
 async function removeCounselor(id, btn) {
-  if (!confirm('Remove this counselor? This only removes them from the dropdown — existing records are not changed.')) return;
-  btn.disabled = true;
-  btn.textContent = '…';
+  if (!confirm('Remove this staff member? This only removes their staff record — existing session records are not changed.')) return;
+  btn.disabled = true; btn.textContent = '…';
   try {
     await deleteDoc(doc(db, 'counselors', id));
-    await loadCounselors();
+    await loadStaff();
   } catch (err) {
     alert('Failed: ' + err.message);
     btn.disabled = false;
@@ -226,27 +296,49 @@ async function removeCounselor(id, btn) {
   }
 }
 
-function openEditCounselor(id, name, staffNum, staffTitle, baseSalary, fringe) {
-  document.getElementById('editCounselorId').value           = id;
-  document.getElementById('editCounselorName').value         = name;
-  document.getElementById('editCounselorStaffNum').value     = staffNum;
-  document.getElementById('editCounselorTitle').value        = staffTitle;
-  document.getElementById('editCounselorBaseSalary').value   = baseSalary || '';
-  document.getElementById('editCounselorFringe').value       = fringe     || '';
+function closeStaffModal() {
+  document.getElementById('editCounselorModal').classList.add('hidden');
+}
+
+function openEditCounselor(cid, uid, name, staffNum, staffTitle, isCounselor, baseSalary, fringe, role) {
+  document.getElementById('editCounselorId').value         = cid || '';
+  document.getElementById('editStaffUserId').value         = uid || '';
+  document.getElementById('editCounselorName').value       = name || '';
+  document.getElementById('editCounselorStaffNum').value   = staffNum || '';
+  document.getElementById('editCounselorTitle').value      = staffTitle || '';
+  document.getElementById('editCounselorIsCounselor').checked = isCounselor !== false && isCounselor !== 'false';
+  document.getElementById('editCounselorBaseSalary').value = baseSalary || '';
+  document.getElementById('editCounselorFringe').value     = fringe || '';
   document.getElementById('editCounselorError').classList.add('hidden');
   document.getElementById('editCounselorSaveBtn').disabled    = false;
   document.getElementById('editCounselorSaveBtn').textContent = 'Save';
+  document.getElementById('editStaffModalTitle').textContent  = cid ? 'Edit Staff Member' : 'Edit User';
+
+  // Role row — only show if there's a user account
+  const roleRow = document.getElementById('editStaffRoleRow');
+  const roleSel = document.getElementById('editStaffRole');
+  if (uid) {
+    roleRow.classList.remove('hidden');
+    roleSel.innerHTML = '<option value="">— pending —</option>' +
+      ROLE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+    if (role) roleSel.value = role;
+  } else {
+    roleRow.classList.add('hidden');
+  }
+
   document.getElementById('editCounselorModal').classList.remove('hidden');
   document.getElementById('editCounselorName').focus();
 }
 
 async function saveEditCounselor() {
-  const id         = document.getElementById('editCounselorId').value;
-  const name       = document.getElementById('editCounselorName').value.trim();
+  const cid         = document.getElementById('editCounselorId').value;
+  const uid         = document.getElementById('editStaffUserId').value;
+  const name        = document.getElementById('editCounselorName').value.trim();
   const staffNumRaw = document.getElementById('editCounselorStaffNum').value.trim();
-  const staffTitle = document.getElementById('editCounselorTitle').value.trim();
-  const errorEl    = document.getElementById('editCounselorError');
-  const saveBtn    = document.getElementById('editCounselorSaveBtn');
+  const staffTitle  = document.getElementById('editCounselorTitle').value.trim();
+  const isCounselor = document.getElementById('editCounselorIsCounselor').checked;
+  const errorEl     = document.getElementById('editCounselorError');
+  const saveBtn     = document.getElementById('editCounselorSaveBtn');
 
   if (!name) {
     errorEl.textContent = 'Name is required.';
@@ -254,24 +346,40 @@ async function saveEditCounselor() {
     return;
   }
 
-  const staffNum = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
+  const staffNum      = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
+  const baseSalaryRaw = document.getElementById('editCounselorBaseSalary').value.trim();
+  const fringeRaw     = document.getElementById('editCounselorFringe').value.trim();
 
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving…';
   errorEl.classList.add('hidden');
 
   try {
-    const baseSalaryRaw = document.getElementById('editCounselorBaseSalary').value.trim();
-    const fringeRaw     = document.getElementById('editCounselorFringe').value.trim();
-    const update = { name, staffTitle: staffTitle || '', updatedAt: serverTimestamp() };
-    update.staffNumber = staffNum !== null ? staffNum : null;
-    update.baseSalary  = baseSalaryRaw !== '' ? parseFloat(baseSalaryRaw) : null;
-    update.fringe      = fringeRaw     !== '' ? parseFloat(fringeRaw)     : null;
+    const ops = [];
 
-    await updateDoc(doc(db, 'counselors', id), update);
-    document.getElementById('editCounselorModal').classList.add('hidden');
-    await loadCounselors();
-    showMsg(document.getElementById('counselorMsg'), `${name} updated.`, true);
+    // Save counselor/staff fields if they have a counselors doc
+    if (cid) {
+      const update = {
+        name, staffTitle: staffTitle || '', isCounselor, updatedAt: serverTimestamp(),
+        staffNumber: staffNum !== null ? staffNum : null,
+        baseSalary:  baseSalaryRaw !== '' ? parseFloat(baseSalaryRaw) : null,
+        fringe:      fringeRaw     !== '' ? parseFloat(fringeRaw)     : null,
+      };
+      ops.push(updateDoc(doc(db, 'counselors', cid), update));
+    }
+
+    // Save role if user account exists and role field is visible
+    const roleRow = document.getElementById('editStaffRoleRow');
+    if (uid && !roleRow.classList.contains('hidden')) {
+      const role = document.getElementById('editStaffRole').value;
+      if (role) ops.push(updateDoc(doc(db, 'users', uid), { role, updatedAt: serverTimestamp() }));
+    }
+
+    await Promise.all(ops);
+    closeStaffModal();
+    await loadStaff();
+    await loadPendingUsers();
+    showMsg(document.getElementById('staffMsg'), `${name} updated.`, true);
   } catch (err) {
     errorEl.textContent = 'Save failed: ' + err.message;
     errorEl.classList.remove('hidden');
@@ -1583,85 +1691,23 @@ function showMsg(el, text, success) {
 
 // ── Pending Users ─────────────────────────────────────────────────────────────
 
-const ROLE_OPTIONS = [
-  { value: 'counselor',          label: 'Counselor' },
-  { value: 'executive_director', label: 'Executive Director' },
-  { value: 'admin',              label: 'Admin' },
-];
-
-async function loadAllUsers() {
-  const container = document.getElementById('allUsersList');
-  try {
-    const snap = await getDocs(query(collection(db, 'users'), orderBy('name')));
-    if (snap.empty) {
-      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No users found.</p>';
-      return;
-    }
-    const roleOpts = ROLE_OPTIONS.map(o =>
-      `<option value="${o.value}">${o.label}</option>`
-    ).join('');
-    const rows = snap.docs.map(d => {
-      const u = { id: d.id, ...d.data() };
-      return `<tr>
-        <td ${TD}>${escHtml(u.name || u.email || u.id)}</td>
-        <td ${TD} style="color:var(--text-muted);font-size:0.8rem;">${escHtml(u.email || '')}</td>
-        <td ${TD}>
-          <select class="all-user-role-sel" data-uid="${escAttr(u.id)}"
-            style="font-size:0.875rem;padding:0.25rem 0.4rem;">
-            <option value="">— pending —</option>
-            ${roleOpts}
-          </select>
-        </td>
-        <td ${TD}>
-          <button class="btn btn-sm btn-primary all-user-save-btn" data-uid="${escAttr(u.id)}">Save</button>
-        </td>
-      </tr>`;
-    }).join('');
-
-    container.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr>
-          <th ${TH}>Name</th><th ${TH}>Email</th><th ${TH}>Role</th><th ${TH}></th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-
-    // Pre-select current roles
-    snap.docs.forEach(d => {
-      const u   = { id: d.id, ...d.data() };
-      const sel = container.querySelector(`.all-user-role-sel[data-uid="${u.id}"]`);
-      if (sel && u.role && u.role !== 'pending') sel.value = u.role;
-    });
-
-    container.querySelectorAll('.all-user-save-btn').forEach(btn => {
-      btn.addEventListener('click', () => changeUserRole(btn.dataset.uid, btn));
-    });
-  } catch (err) {
-    container.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
-  }
-}
-
 async function changeUserRole(uid, btn) {
-  const sel  = document.querySelector(`.all-user-role-sel[data-uid="${uid}"]`);
+  const sel  = document.querySelector(`.staff-role-sel[data-uid="${uid}"]`);
   const role = sel?.value;
   if (!role) return;
 
-  const msgEl = document.getElementById('allUsersMsg');
+  const msgEl = document.getElementById('staffMsg');
   btn.disabled    = true;
   btn.textContent = 'Saving…';
 
   try {
     await updateDoc(doc(db, 'users', uid), { role, updatedAt: serverTimestamp() });
-    msgEl.textContent = 'Role updated.';
-    msgEl.style.color = 'var(--accent)';
-    msgEl.classList.remove('hidden');
-    await loadAllUsers();
+    await loadStaff();
     await loadPendingUsers();
+    showMsg(msgEl, 'Role updated.', true);
     setTimeout(() => msgEl.classList.add('hidden'), 3000);
   } catch (err) {
-    msgEl.textContent = 'Failed: ' + err.message;
-    msgEl.style.color = 'var(--danger)';
-    msgEl.classList.remove('hidden');
+    showMsg(msgEl, 'Failed: ' + err.message, false);
     btn.disabled    = false;
     btn.textContent = 'Save';
   }

@@ -193,7 +193,7 @@ function renderPreviews(unique) {
   renderInvoiceTable(reportData.sessionRows);
 }
 
-const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non Low-Moderate'];
+const CDBG_AMI_LEVELS = ['Extremely Low', 'Very Low', 'Low', 'Moderate', 'Non Low-Moderate'];
 
 function countCdbgAmi(rows) {
   const counts = {};
@@ -612,13 +612,7 @@ function countByField(rows, field, orderedKeys) {
 }
 
 function amiLabel(level) {
-  const map = {
-    'Extremely Low':    'Extremely Low (or Very Low)',
-    'Low':              'Low',
-    'Moderate':         'Moderate (or Low-Moderate)',
-    'Non Low-Moderate': 'Non Low-Moderate',
-  };
-  return map[level] || level;
+  return level;
 }
 
 // ── Court Appearance Report ───────────────────────────────────────────────────

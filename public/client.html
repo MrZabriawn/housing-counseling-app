@@ -817,8 +817,20 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="sRxNumber">Rx Number</label>
-          <input type="text" id="sRxNumber">
+          <label for="sRxSelect">Rx / Case No.</label>
+          <select id="sRxSelect">
+            <option value="">— None —</option>
+          </select>
+          <div id="sRxHoursDisplay" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;min-height:1.1em;"></div>
+        </div>
+        <div class="form-group" id="sNewRxGroup" style="display:none;">
+          <label>New Rx Details</label>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="sNewRxNumber" placeholder="Rx number" style="flex:1;min-width:120px;">
+            <select id="sNewRxGuarantor" style="flex:1;min-width:140px;">
+              <option value="">— Guarantor —</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
           <label for="sHudType">Session Type</label>

@@ -391,7 +391,7 @@ async function loadCounselorOptions(selectId) {
     const sel  = document.getElementById(selectId);
     if (!sel) return;
     snap.docs
-      .filter(d => d.data().active !== false)
+      .filter(d => d.data().active !== false && d.data().isCounselor !== false)
       .forEach(d => {
         const o = document.createElement('option');
         o.value = d.data().name;
@@ -954,7 +954,7 @@ function renderSessionsTable(sessions) {
     <tr>
       <td style="white-space:nowrap">${fmtDate(s.date)}</td>
       <td>${escHtml(s.counselor || '—')}</td>
-      <td>${escHtml(s.rxNumber || '—')}</td>
+      <td>${s.rxNumber ? escHtml(s.rxNumber) + (s.rxGuarantor ? `<br><span style="font-size:0.75rem;color:var(--text-muted);">${escHtml(s.rxGuarantor)}</span>` : '') : '—'}</td>
       <td style="text-align:right">${s.hours || '—'}</td>
       <td>${escHtml(s.caseStatus || '—')}</td>
       <td class="session-notes" title="${escHtml(s.notes || '')}">${escHtml(s.notes || '—')}</td>
@@ -1003,13 +1003,12 @@ function openAddSession() {
   document.getElementById('sCounselingType').value = _client.counselingType || '';
   document.getElementById('sDate').value      = new Date().toISOString().split('T')[0];
   document.getElementById('sCounselor').value = _client.counselor || '';
-  // Pre-fill with the first HUD-billable Rx (NOFA + active), else first active, else first
+  // Pre-select first active NOFA Rx, else first active, else none
   const defaultRx = (
     _rxDocs.find(r => r.active !== false && r.guarantor === 'NOFA') ||
-    _rxDocs.find(r => r.active !== false) ||
-    _rxDocs[0]
-  )?.rxNumber || '';
-  document.getElementById('sRxNumber').value = defaultRx;
+    _rxDocs.find(r => r.active !== false)
+  );
+  populateRxDropdown(defaultRx?.rxNumber || '', defaultRx?.guarantor || '');
 
   document.getElementById('sessionModalError').classList.add('hidden');
   document.getElementById('sessionModal').classList.remove('hidden');
@@ -1028,7 +1027,7 @@ function openEditSession(sessionId) {
   document.getElementById('sCounselingType').value = session.counselingType || _client.counselingType || '';
   document.getElementById('sDate').value         = toDateInputValue(session.date);
   document.getElementById('sCounselor').value    = session.counselor || '';
-  document.getElementById('sRxNumber').value     = session.rxNumber  || '';
+  populateRxDropdown(session.rxNumber || '', session.rxGuarantor || '');
   document.getElementById('sHudType').value      = session.hudType   || 'counseling';
   document.getElementById('sHours').value        = session.hours     || '';
   document.getElementById('sDollarsFor').value   = session.dollarsFor  || '';
@@ -1041,12 +1040,58 @@ function openEditSession(sessionId) {
 }
 
 function clearSessionModal() {
-  ['sCounselingType','sDate','sCounselor','sRxNumber','sHours',
+  ['sCounselingType','sDate','sCounselor','sHours',
    'sDollarsFor','sCaseStatus','sOutcome','sNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
   document.getElementById('sHudType').value = 'counseling';
+  populateRxDropdown('', '');
+}
+
+function populateRxDropdown(selectedRxNumber = '', selectedGuarantor = '') {
+  const sel      = document.getElementById('sRxSelect');
+  const newGroup = document.getElementById('sNewRxGroup');
+  const hoursDiv = document.getElementById('sRxHoursDisplay');
+  const guarSel  = document.getElementById('sNewRxGuarantor');
+  if (!sel) return;
+
+  guarSel.innerHTML = '<option value="">— Guarantor —</option>' +
+    RX_GUARANTORS.map(g => `<option value="${escAttr(g)}">${escHtml(g)}</option>`).join('');
+
+  const activeRx = _rxDocs.filter(r => r.active !== false);
+  sel.innerHTML = '<option value="">— None —</option>' +
+    activeRx.map(r =>
+      `<option value="${escAttr(r.rxNumber)}" data-guarantor="${escAttr(r.guarantor || '')}"
+        ${r.rxNumber === selectedRxNumber && (r.guarantor || '') === selectedGuarantor ? 'selected' : ''}>
+        ${escHtml(r.rxNumber)}${r.guarantor ? ' — ' + escHtml(r.guarantor) : ''}
+      </option>`
+    ).join('') +
+    `<option value="__new__">+ Add new Rx…</option>`;
+
+  sel.onchange = () => {
+    const isNew = sel.value === '__new__';
+    newGroup.style.display = isNew ? '' : 'none';
+    updateRxHoursDisplay();
+  };
+
+  newGroup.style.display = 'none';
+  updateRxHoursDisplay();
+}
+
+function updateRxHoursDisplay() {
+  const sel      = document.getElementById('sRxSelect');
+  const hoursDiv = document.getElementById('sRxHoursDisplay');
+  if (!sel || !hoursDiv) return;
+  if (!sel.value || sel.value === '__new__') { hoursDiv.textContent = ''; return; }
+
+  const rxNum     = sel.value;
+  const guarantor = sel.options[sel.selectedIndex]?.dataset?.guarantor || '';
+  const total = _sessions
+    .filter(s => s.rxNumber === rxNum && (s.rxGuarantor || '') === guarantor)
+    .reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0);
+
+  hoursDiv.textContent = `${total % 1 === 0 ? total : total.toFixed(2)} hrs logged under this Rx`;
 }
 
 function closeSessionModal() {
@@ -1061,12 +1106,21 @@ function toDateInputValue(ts) {
 }
 
 function readSessionForm() {
-  const dateVal = document.getElementById('sDate').value;
+  const dateVal  = document.getElementById('sDate').value;
+  const rxSel    = document.getElementById('sRxSelect');
+  const isNewRx  = rxSel?.value === '__new__';
+  const rxNumber = isNewRx
+    ? (document.getElementById('sNewRxNumber')?.value.trim() || '')
+    : (rxSel?.value || '');
+  const rxGuarantor = isNewRx
+    ? (document.getElementById('sNewRxGuarantor')?.value || '')
+    : (rxSel?.options[rxSel?.selectedIndex]?.dataset?.guarantor || '');
   return {
     counselingType: document.getElementById('sCounselingType').value,
     date:       dateVal ? new Date(dateVal + 'T12:00:00') : null,
     counselor:  document.getElementById('sCounselor').value,
-    rxNumber:   document.getElementById('sRxNumber').value.trim(),
+    rxNumber,
+    rxGuarantor,
     hudType:    document.getElementById('sHudType').value,
     hours:      parseFloat(document.getElementById('sHours').value) || 0,
     dollarsFor: document.getElementById('sDollarsFor').value.trim(),
@@ -1121,13 +1175,27 @@ async function saveSession() {
         } catch (_) {}
       }
     } else {
+      // If counselor added a new Rx, save it to the subcollection first
+      const rxSel = document.getElementById('sRxSelect');
+      if (rxSel?.value === '__new__' && data.rxNumber) {
+        const newRxRef = await addDoc(collection(db, 'clients', clientId, 'rxNumbers'), {
+          rxNumber:  data.rxNumber,
+          guarantor: data.rxGuarantor || '',
+          active:    true,
+          createdAt: serverTimestamp(),
+        });
+        _rxDocs.push({ id: newRxRef.id, rxNumber: data.rxNumber, guarantor: data.rxGuarantor || '', active: true });
+      }
+
       // New session — embed point-in-time client snapshot (includes financials)
       data.createdAt      = serverTimestamp();
       data.clientSnapshot = buildClientSnapshot();
       const sessionRef    = await addDoc(collection(db, 'clients', clientId, 'sessions'), data);
 
-      // Auto-create HUD entry if client has an active NOFA Rx
-      const nofaRx = _rxDocs.find(r => r.guarantor === 'NOFA' && r.active !== false);
+      // Auto-create HUD entry if session Rx is NOFA (skip for Case Management)
+      const nofaRx = data.counselingType !== 'Case Management' && data.rxGuarantor === 'NOFA' && data.rxNumber
+        ? { rxNumber: data.rxNumber }
+        : null;
       if (nofaRx) {
         try {
           let counselorDocId = '';

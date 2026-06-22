@@ -28,37 +28,33 @@
     </div>
 
     <!-- Manage All Users -->
-    <div class="card" style="max-width:860px;margin-top:1.25rem;">
-      <div class="card-title">Manage User Roles</div>
+    <!-- Staff & Roles -->
+    <div class="card" style="max-width:960px;margin-top:1.25rem;">
+      <div class="card-title">Staff &amp; Roles</div>
       <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
-        View and change roles for all registered users.
+        Manage app login roles and staff details in one place. The <strong>Counselor</strong> column controls whether someone appears in session, TAL, and call dropdowns — you can have a staff number without being a counselor. Staff # is used in HUD reporting.
       </p>
-      <div id="allUsersList"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
-      <p id="allUsersMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
-    </div>
+      <div id="staffList"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
+      <p id="staffMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
 
-    <!-- Counselors -->
-    <div class="card" style="max-width:860px;margin-top:1.25rem;">
-      <div class="card-title">Active Counselors</div>
-
-      <div id="counselorsList" style="margin-bottom:1rem;">
-        <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
-      </div>
-
-      <div style="border-top:1px solid var(--border);padding-top:1rem;">
-        <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.75rem;">Add Counselor</p>
+      <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+        <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.75rem;">Add Staff Member</p>
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
           <div class="form-group" style="flex:2;min-width:160px;">
             <label for="newCounselorName">Full Name</label>
             <input type="text" id="newCounselorName" placeholder="Jane Smith">
           </div>
-          <div class="form-group" style="flex:0 0 100px;">
+          <div class="form-group" style="flex:0 0 90px;">
             <label for="newCounselorStaffNum">Staff #</label>
             <input type="number" id="newCounselorStaffNum" placeholder="e.g. 3" min="1" step="1">
           </div>
           <div class="form-group" style="flex:2;min-width:160px;">
-            <label for="newCounselorTitle">Staff Title</label>
+            <label for="newCounselorTitle">Title</label>
             <input type="text" id="newCounselorTitle" placeholder="Housing Counselor">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;display:flex;align-items:center;gap:0.4rem;padding-bottom:2px;">
+            <input type="checkbox" id="newCounselorIsCounselor" checked style="width:15px;height:15px;">
+            <label for="newCounselorIsCounselor" style="font-size:0.8125rem;font-weight:600;cursor:pointer;margin:0;">Counselor</label>
           </div>
           <button id="addCounselorBtn" class="btn btn-primary" style="margin-bottom:2px;">Add</button>
         </div>
@@ -66,39 +62,46 @@
       </div>
     </div>
 
-    <!-- Edit Counselor Modal -->
-    <div id="editCounselorModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;display:flex;align-items:center;justify-content:center;">
-      <div style="background:#fff;border-radius:var(--radius);padding:1.5rem;width:100%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-        <h3 style="margin:0 0 1.25rem;font-size:1rem;">Edit Counselor</h3>
-        <div class="form-group">
-          <label for="editCounselorName">Full Name</label>
-          <input type="text" id="editCounselorName">
-        </div>
-        <div style="display:flex;gap:0.75rem;">
+    <!-- Edit Staff Modal -->
+    <div id="editCounselorModal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:500px;">
+        <h3 id="editStaffModalTitle">Edit Staff Member</h3>
+        <div class="form-grid" style="margin-top:1rem;">
+          <div class="form-group full-width">
+            <label for="editCounselorName">Full Name</label>
+            <input type="text" id="editCounselorName">
+          </div>
+          <div id="editStaffRoleRow" class="form-group full-width hidden">
+            <label for="editStaffRole">App Role</label>
+            <select id="editStaffRole"></select>
+          </div>
           <div class="form-group" style="flex:0 0 110px;">
             <label for="editCounselorStaffNum">Staff #</label>
             <input type="number" id="editCounselorStaffNum" min="1" step="1">
           </div>
-          <div class="form-group" style="flex:1;">
-            <label for="editCounselorTitle">Staff Title</label>
+          <div class="form-group">
+            <label for="editCounselorTitle">Title</label>
             <input type="text" id="editCounselorTitle" placeholder="Housing Counselor">
           </div>
-        </div>
-        <div style="display:flex;gap:0.75rem;">
-          <div class="form-group" style="flex:1;">
+          <div class="form-group full-width" style="display:flex;align-items:center;gap:0.5rem;">
+            <input type="checkbox" id="editCounselorIsCounselor" style="width:16px;height:16px;">
+            <label for="editCounselorIsCounselor" style="font-size:0.875rem;font-weight:600;cursor:pointer;margin:0;">Include in counselor dropdowns (sessions, TAL, calls)</label>
+          </div>
+          <div class="form-group">
             <label for="editCounselorBaseSalary">Base Salary ($/hr)</label>
             <input type="number" id="editCounselorBaseSalary" min="0" step="0.01" placeholder="e.g. 24.50">
           </div>
-          <div class="form-group" style="flex:1;">
+          <div class="form-group">
             <label for="editCounselorFringe">Fringe ($/hr)</label>
             <input type="number" id="editCounselorFringe" min="0" step="0.01" placeholder="e.g. 8.00">
           </div>
         </div>
         <input type="hidden" id="editCounselorId">
+        <input type="hidden" id="editStaffUserId">
         <p id="editCounselorError" class="hidden" style="font-size:0.8125rem;color:var(--danger);margin-bottom:0.75rem;"></p>
-        <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:0.5rem;">
-          <button id="editCounselorCancelBtn" class="btn btn-secondary">Cancel</button>
+        <div class="form-actions">
           <button id="editCounselorSaveBtn" class="btn btn-primary">Save</button>
+          <button id="editCounselorCancelBtn" class="btn btn-secondary">Cancel</button>
         </div>
       </div>
     </div>

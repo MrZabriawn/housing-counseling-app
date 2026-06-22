@@ -1,4 +1,4 @@
-export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Workshop'];
+export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Workshop', 'Case Management'];
 
 export const AMI_LEVELS = [
   'Extremely Low',
@@ -31,25 +31,11 @@ export function amiCategory(val) {
 }
 
 export function amiDisplayLabel(val) {
-  if (val == null || val === '') return '';
-  const n = Number(val);
-  if (!isNaN(n) && n > 0) {
-    const cat = amiCategory(n);
-    const ranges = {
-      'Extremely Low':    '≤30%',
-      'Very Low':         '31–50%',
-      'Low':              '51–80%',
-      'Moderate':         '81–100%',
-      'Non Low-Moderate': '>100%',
-    };
-    return cat ? `${cat} (${ranges[cat]})` : '';
-  }
   return amiCategory(val);
 }
 
 export function amiCdbgCategory(val) {
-  const cat = amiCategory(val);
-  return cat === 'Very Low' ? 'Extremely Low' : cat;
+  return amiCategory(val);
 }
 
 export const RE_CODES = [

@@ -178,8 +178,12 @@ async function loadCounselorOptions() {
     const selCrt = document.getElementById('courtCounselorOut');
     const selCnv = document.getElementById('convertCounselor');
     const selWs  = document.getElementById('wsWorkshopCounselor');
-    snap.docs
-      .filter(d => d.data().active !== false)
+    const talSel = document.getElementById('talStaffSelect');
+    const active = snap.docs.filter(d => d.data().active !== false);
+
+    // Counselor-only dropdowns (sessions, calls, etc.)
+    active
+      .filter(d => d.data().isCounselor !== false)
       .forEach(d => {
         const name = d.data().name;
         [sel, selCrt, selCnv, selWs].forEach(s => {
@@ -188,19 +192,33 @@ async function loadCounselorOptions() {
           s.appendChild(o);
         });
       });
+
+    // TAL dropdown: all active staff (counselors AND non-counselors with staff #)
+    active.forEach(d => {
+      const data = d.data();
+      const name = data.name;
+      const to   = document.createElement('option');
+      to.value = JSON.stringify({ name, staffNumber: data.staffNumber ?? null, id: d.id });
+      to.textContent = data.staffNumber != null ? `${name} (#${data.staffNumber})` : name;
+      talSel.appendChild(to);
+    });
     // Pre-select current counselor
     sel.value    = window._currentCounselor;
     selCrt.value = window._currentCounselor;
     selCnv.value = window._currentCounselor;
     selWs.value  = window._currentCounselor;
 
-    // Capture staffNumber + doc ID for the logged-in counselor (used by TAL modal)
+    // Pre-select current counselor in TAL dropdown
     const myDoc = snap.docs.find(
       d => d.data().name === window._currentCounselor && d.data().active !== false
     );
     if (myDoc) {
       _talStaffNum    = myDoc.data().staffNumber ?? null;
       _talCounselorId = myDoc.id;
+      // Select matching option by counselor id
+      Array.from(talSel.options).forEach(o => {
+        try { if (JSON.parse(o.value).id === myDoc.id) talSel.value = o.value; } catch (_) {}
+      });
     }
   } catch (_) {}
 }
@@ -1025,10 +1043,8 @@ function escAttr(str) {
 // ── TAL Hours modal ───────────────────────────────────────────────────────────
 
 function openTalModal() {
-  document.getElementById('talDate').value      = new Date().toISOString().split('T')[0];
-  document.getElementById('talTime').value      = '';
-  document.getElementById('talStaffNum').value  = _talStaffNum !== null ? String(_talStaffNum) : '';
-  document.getElementById('talStaffName').value = _talStaffName;
+  document.getElementById('talDate').value  = new Date().toISOString().split('T')[0];
+  document.getElementById('talTime').value  = '';
   document.getElementById('talType').value      = '';
   document.getElementById('talCost').value      = '';
   document.getElementById('talDesc').value      = '';
@@ -1052,8 +1068,14 @@ function toAMPM(timeVal) {
 async function saveTal() {
   const date      = document.getElementById('talDate').value;
   const time      = document.getElementById('talTime').value;
-  const staffNumR = document.getElementById('talStaffNum').value.trim();
-  const staffName = document.getElementById('talStaffName').value.trim();
+  const talStaffRaw = document.getElementById('talStaffSelect').value;
+  let staffName = '', staffNum = 0, talCounselorId = _talCounselorId;
+  try {
+    const parsed  = JSON.parse(talStaffRaw);
+    staffName     = parsed.name || '';
+    staffNum      = parsed.staffNumber ?? 0;
+    talCounselorId = parsed.id || _talCounselorId;
+  } catch (_) {}
   const certType  = document.getElementById('talType').value;
   const costType  = document.getElementById('talCost').value.trim();
   const desc      = document.getElementById('talDesc').value.trim();
@@ -1064,20 +1086,18 @@ async function saveTal() {
   errEl.classList.add('hidden');
   if (!date)       { showTalErr('Date is required.');                        return; }
   if (!time)       { showTalErr('Time is required.');                        return; }
-  if (!staffName)  { showTalErr('Staff name is required.');                  return; }
+  if (!staffName)  { showTalErr('Select a staff member.');                   return; }
   if (!certType)   { showTalErr('Select a certification activity type.');    return; }
   if (!desc)       { showTalErr('Description is required.');                 return; }
   if (duration <= 0) { showTalErr('Duration must be greater than 0.');      return; }
-
-  const staffNum = staffNumR !== '' ? parseInt(staffNumR, 10) : 0;
 
   saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
 
   try {
     await addDoc(collection(db, 'hudTrainingEntries'), {
-      counselorId:               _talCounselorId || _talUserId,
+      counselorId:               talCounselorId || _talUserId,
       counselorName:             staffName,
-      staffNumber:               isNaN(staffNum) ? 0 : staffNum,
+      staffNumber:               staffNum,
       month:                     date.substring(0, 7),
       date,
       time:                      toAMPM(time),

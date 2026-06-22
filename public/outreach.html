@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -69,7 +69,6 @@
     <div class="outreach-tabs">
       <button class="outreach-tab active" data-panel="phone-panel">Phone Log</button>
       <button class="outreach-tab" data-panel="cmc-panel">CMC</button>
-      <button class="outreach-tab" data-panel="court-panel">Court</button>
       <button class="outreach-tab" data-panel="workshop-panel">Workshop</button>
     </div>
 
@@ -194,71 +193,6 @@
       </div>
 
     </div><!-- /phone-panel -->
-
-    <!-- ══ Court panel ═══════════════════════════════════════════════════════ -->
-    <div id="court-panel" class="outreach-panel">
-
-      <div class="card" style="max-width:860px;">
-        <div class="card-title">Log Court Appearances</div>
-        <div id="courtSuccessBanner" class="hidden" style="background:#f0fdf4;border-left:4px solid var(--accent);border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem;">
-          <p id="courtSuccessMsg" style="font-weight:600;margin:0 0 0.5rem;"></p>
-          <button id="courtLogAnotherBtn" class="btn btn-secondary btn-sm">Log Another Court Date</button>
-        </div>
-
-        <div id="courtForm">
-          <div class="form-grid" style="margin-bottom:1rem;">
-            <div class="form-group">
-              <label for="courtDate">Court Date *</label>
-              <input type="date" id="courtDate">
-            </div>
-            <div class="form-group">
-              <label for="courtCounty">County *</label>
-              <select id="courtCounty">
-                <option value="">— Select —</option>
-                <option value="Beaver County">Beaver County</option>
-                <option value="Lawrence County">Lawrence County</option>
-                <option value="Mercer County">Mercer County</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="courtCounselorOut">Counselor *</label>
-              <select id="courtCounselorOut">
-                <option value="">— Select —</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="courtHoursOut">Hours per client</label>
-              <input type="number" id="courtHoursOut" value="2" min="0.25" step="0.25" style="max-width:100px;">
-            </div>
-            <div class="form-group full-width">
-              <label for="courtNotesOut">Court Notes</label>
-              <textarea id="courtNotesOut" rows="3" placeholder="What happened in court today? (optional — applied to all sessions)"></textarea>
-            </div>
-          </div>
-
-          <div style="margin-bottom:0.75rem;">
-            <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);display:block;margin-bottom:0.4rem;">
-              Clients Present (<span id="courtSelectedCount">0</span>)
-            </label>
-            <input type="text" id="courtClientSearch" placeholder="Search by name, counselor, or Rx…"
-              style="margin-bottom:0.4rem;" autocomplete="off">
-            <div id="courtClientResults"
-              style="border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;font-size:0.875rem;display:none;"></div>
-          </div>
-
-          <div id="courtSelectedList"
-            style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:1rem;min-height:40px;font-size:0.875rem;color:var(--text-muted);">
-            No clients added yet. Search above to add clients.
-          </div>
-
-          <p id="courtSubmitError" class="error-msg hidden"></p>
-          <div class="form-actions" style="margin-top:0;">
-            <button id="courtSubmitBtn" class="btn btn-primary">Log Court Appearances</button>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /court-panel -->
 
     <!-- ══ Workshop panel ════════════════════════════════════════════════════ -->
     <div id="workshop-panel" class="outreach-panel">
@@ -497,13 +431,11 @@
           <label for="talTime">Time *</label>
           <input type="time" id="talTime">
         </div>
-        <div class="form-group">
-          <label for="talStaffNum">Staff Number</label>
-          <input type="number" id="talStaffNum" min="1" step="1" placeholder="e.g. 3">
-        </div>
-        <div class="form-group">
-          <label for="talStaffName">Staff Name *</label>
-          <input type="text" id="talStaffName">
+        <div class="form-group full-width">
+          <label for="talStaffSelect">Staff *</label>
+          <select id="talStaffSelect">
+            <option value="">— Select staff —</option>
+          </select>
         </div>
         <div class="form-group">
           <label for="talType">Certification Activity Type *</label>
