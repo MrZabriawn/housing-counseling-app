@@ -129,11 +129,6 @@ requireAuth(async (user, profile) => {
     if (e.target === document.getElementById('talModal')) closeTalModal();
   });
 
-  // Court tab
-  document.getElementById('courtClientSearch').addEventListener('input', renderCourtClientSearch);
-  document.getElementById('courtSubmitBtn').addEventListener('click', submitCourtBatch);
-  document.getElementById('courtLogAnotherBtn').addEventListener('click', resetCourtForm);
-
   // Convert prospect modal
   document.getElementById('convertSaveBtn').addEventListener('click', submitConvertProspect);
   document.getElementById('convertCancelBtn').addEventListener('click', closeConvertModal);
@@ -175,7 +170,6 @@ async function loadCounselorOptions() {
   try {
     const snap   = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const sel    = document.getElementById('callCounselor');
-    const selCrt = document.getElementById('courtCounselorOut');
     const selCnv = document.getElementById('convertCounselor');
     const selWs  = document.getElementById('wsWorkshopCounselor');
     const talSel = document.getElementById('talStaffSelect');
@@ -186,7 +180,7 @@ async function loadCounselorOptions() {
       .filter(d => d.data().isCounselor !== false)
       .forEach(d => {
         const name = d.data().name;
-        [sel, selCrt, selCnv, selWs].forEach(s => {
+        [sel, selCnv, selWs].forEach(s => {
           const o = document.createElement('option');
           o.value = name; o.textContent = name;
           s.appendChild(o);
@@ -204,7 +198,6 @@ async function loadCounselorOptions() {
     });
     // Pre-select current counselor
     sel.value    = window._currentCounselor;
-    selCrt.value = window._currentCounselor;
     selCnv.value = window._currentCounselor;
     selWs.value  = window._currentCounselor;
 

@@ -480,8 +480,8 @@ function populateClientForm(c) {
   updateBankruptcyAccountState();
 
   // Drive folder
-  if (c.driveFolderId) {
-    _driveFolder = { id: c.driveFolderId, name: c.driveFolderName, url: c.driveFolderUrl };
+  if (c.driveFolderId || c.driveFolderUrl) {
+    _driveFolder = { id: c.driveFolderId || '', name: c.driveFolderName || '', url: c.driveFolderUrl || '' };
   }
   renderFolderUI();
 
@@ -611,7 +611,7 @@ function renderDriveFolderBar(c) {
     linkWrap.innerHTML = `<span style="color:var(--text-muted);">No Drive folder linked yet.</span>`;
   }
 
-  if (setBtn && isAdmin(_profile)) {
+  if (setBtn) {
     setBtn.classList.remove('hidden');
     setBtn.onclick = async () => {
       const current = _client.driveFolderUrl || '';
@@ -621,6 +621,7 @@ function renderDriveFolderBar(c) {
       try {
         await updateDoc(doc(db, 'clients', clientId), { driveFolderUrl: trimmed || null });
         _client.driveFolderUrl = trimmed || null;
+        _driveFolder = trimmed ? { id: _driveFolder?.id || '', name: _driveFolder?.name || '', url: trimmed } : null;
         renderDriveFolderBar(_client);
       } catch (err) {
         alert('Failed to save: ' + err.message);
@@ -638,7 +639,7 @@ function showDriveModal() {
     linkDiv.innerHTML = `<a href="${escAttr(_client.driveFolderUrl)}" target="_blank" rel="noopener"
       style="color:#4285f4;font-weight:600;font-size:0.95rem;">📁 Open Drive Folder →</a>`;
   } else {
-    linkDiv.innerHTML = `<span style="color:var(--text-muted);font-size:0.875rem;">No Drive folder linked for this client. Ask the Operations Coordinator to add one.</span>`;
+    linkDiv.innerHTML = `<span style="color:var(--text-muted);font-size:0.875rem;">No Drive folder linked for this client yet.</span>`;
   }
 
   modal.classList.remove('hidden');
