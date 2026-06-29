@@ -105,6 +105,7 @@
   <!-- CDN libraries for HUD report generation (globals required before ES module) -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -124,6 +125,7 @@
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
       <button class="reports-tab" data-tab="tab-hemap">HEMAP</button>
+      <button class="reports-tab" data-tab="tab-tmcrf">TMCRF</button>
     </div>
 
     <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
@@ -531,12 +533,63 @@
     </div>
   </div>
 
+  <!-- ══ TMCRF tab ══════════════════════════════════════════════════════════ -->
+  <div class="reports-panel" id="tab-tmcrf">
+    <div class="card" style="max-width:900px;">
+      <div class="card-title">Credit Report Reimbursement (TMCRF)</div>
+      <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1.25rem;">
+        Upload the CoreLogic Credco monthly statement to extract charges and generate the reimbursement invoice.
+      </p>
+
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+        <label class="btn btn-secondary" for="tmcrfFileInput" style="cursor:pointer;white-space:nowrap;">
+          Upload CoreLogic Bill (PDF)
+        </label>
+        <input type="file" id="tmcrfFileInput" accept=".pdf" class="hidden">
+        <span id="tmcrfFileName" style="font-size:0.875rem;color:var(--text-muted);">No file selected</span>
+      </div>
+
+      <p id="tmcrfError" class="error-msg hidden" style="margin-bottom:1rem;"></p>
+
+      <div id="tmcrfPreview" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
+          <div>
+            <strong id="tmcrfMonthLabel"></strong>
+            <span id="tmcrfCountLabel" style="color:var(--text-muted);font-size:0.875rem;margin-left:0.6rem;"></span>
+          </div>
+          <button id="tmcrfGenerateBtn" class="btn btn-primary">Generate Invoice</button>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rx #</th>
+                <th>Date</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Type of Report</th>
+                <th style="text-align:right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="tmcrfPreviewBody"></tbody>
+          </table>
+        </div>
+
+        <div style="text-align:right;font-weight:600;margin-top:0.75rem;font-size:0.95rem;">
+          Total: <span id="tmcrfTotal"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports } from './js/reports.js?v=9';
     import { initChciReports } from './js/chci-reports.js';
     import { initIncompleteReport } from './js/incomplete-report.js';
     import { initHemapLog } from './js/hemap-reports.js';
+    import { initTmcrf }   from './js/tmcrf.js';
 
     function switchReportsTab(tabId) {
       document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
@@ -557,6 +610,7 @@
       initChciReports();
       await initIncompleteReport(user, profile);
       await initHemapLog(user, profile);
+      initTmcrf();
 
       // Auto-switch to incomplete tab if linked from the banner
       const params = new URLSearchParams(window.location.search);
