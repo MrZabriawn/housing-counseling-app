@@ -2,30 +2,29 @@ export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Worksho
 
 export const AMI_LEVELS = [
   'Extremely Low',
-  'Very Low',
   'Low',
   'Moderate',
-  'Non Low-Moderate'
+  'Non-Moderate'
 ];
 
 export function amiCategory(val) {
   if (val == null || val === '') return '';
   const n = Number(val);
   if (!isNaN(n) && n > 0) {
-    if (n <= 30)  return 'Extremely Low';
-    if (n <= 50)  return 'Very Low';
-    if (n <= 80)  return 'Low';
-    if (n <= 100) return 'Moderate';
-    return 'Non Low-Moderate';
+    if (n <= 30) return 'Extremely Low';
+    if (n <= 50) return 'Low';
+    if (n <= 80) return 'Moderate';
+    return 'Non-Moderate';
   }
   const s = String(val).toLowerCase().trim();
   const legacyMap = {
     'extremely low':    'Extremely Low',
-    'very low':         'Very Low',
-    'low':              'Low',
-    'moderate':         'Moderate',
-    'non low-moderate': 'Non Low-Moderate',
-    'non low moderate': 'Non Low-Moderate',
+    'very low':         'Low',
+    'low':              'Moderate',
+    'moderate':         'Non-Moderate',
+    'non low-moderate': 'Non-Moderate',
+    'non low moderate': 'Non-Moderate',
+    'non-moderate':     'Non-Moderate',
   };
   return legacyMap[s] || String(val);
 }
@@ -91,20 +90,22 @@ export function getDefaultRate(counselingType) {
 // AMI label normalization for CSV import
 export const AMI_IMPORT_MAP = {
   'extremely low': 'Extremely Low',
-  'very low':      'Extremely Low',
   '<30%':          'Extremely Low',
   '0-30%':         'Extremely Low',
-  'low':           'Low',
+  'very low':      'Low',
   '30-50%':        'Low',
+  '31-50%':        'Low',
   'low income':    'Low',
-  'moderate':      'Moderate',
+  'low':           'Moderate',
   'low-moderate':  'Moderate',
   'mod':           'Moderate',
   '51-80%':        'Moderate',
   '50-80%':        'Moderate',
-  'non low-moderate':    'Non Low-Moderate',
-  'non low moderate':    'Non Low-Moderate',
-  'above moderate':      'Non Low-Moderate',
-  '>80%':                'Non Low-Moderate',
-  'above 80%':           'Non Low-Moderate'
+  'moderate':      'Non-Moderate',
+  'non low-moderate':    'Non-Moderate',
+  'non low moderate':    'Non-Moderate',
+  'non-moderate':        'Non-Moderate',
+  'above moderate':      'Non-Moderate',
+  '>80%':                'Non-Moderate',
+  'above 80%':           'Non-Moderate'
 };

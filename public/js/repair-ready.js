@@ -35,10 +35,12 @@ import {
 // ── AMI helpers ───────────────────────────────────────────────────────────────
 
 const AMI_NUMERIC = {
-  'Extremely Low':    30,
+  'Extremely Low': 30,
+  'Low':           50,
+  'Moderate':      80,
+  'Non-Moderate':  120,
+  // legacy
   'Very Low':         50,
-  'Low':              80,
-  'Moderate':         100,
   'Non Low-Moderate': 120,
 };
 

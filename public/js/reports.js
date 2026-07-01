@@ -193,7 +193,7 @@ function renderPreviews(unique) {
   renderInvoiceTable(reportData.sessionRows);
 }
 
-const CDBG_AMI_LEVELS = ['Extremely Low', 'Very Low', 'Low', 'Moderate', 'Non Low-Moderate'];
+const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non-Moderate'];
 
 function countCdbgAmi(rows) {
   const counts = {};
