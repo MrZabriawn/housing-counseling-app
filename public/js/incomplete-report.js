@@ -42,7 +42,7 @@ async function loadIncomplete() {
     if (counsel) rows = rows.filter(c => c.counselor === counsel);
 
     const incomplete = rows
-      .filter(c => !c.amiPercent || !c.reCode || !c.rxNumbers?.length)
+      .filter(c => !c.amiPercent || !c.reCode || !c.rxNumbers?.length || !c.streetAddress)
       .sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
 
     if (!incomplete.length) {
@@ -93,6 +93,7 @@ async function loadIncomplete() {
 
 function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1px solid #f0f1f3;vertical-align:middle;"') {
   const issues = [];
+  if (!c.streetAddress)     issues.push('Address');
   if (!c.amiPercent)        issues.push('AMI');
   if (!c.reCode)            issues.push('R/E');
   if (!c.rxNumbers?.length) issues.push('Rx');
