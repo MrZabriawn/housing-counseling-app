@@ -67,6 +67,7 @@ node_modules/
 
 # Sensitive credentials — never commit
 scripts/serviceAccount.json
+scripts/*adminsdk*.json
 scripts/.env
 
 # Review generator — script, input, and output

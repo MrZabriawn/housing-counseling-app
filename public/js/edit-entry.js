@@ -86,7 +86,7 @@ async function loadCounselorOptions(selectId) {
     const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const sel  = document.getElementById(selectId);
     snap.docs
-      .filter(d => d.data().active !== false)
+      .filter(d => d.data().active !== false && d.data().isCounselor !== false)
       .forEach(d => {
         const o = document.createElement('option');
         o.value = d.data().name;

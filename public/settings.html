@@ -309,26 +309,6 @@
         </div>
         <div class="weight-row">
           <div class="weight-label">
-            <span>Estimated Budget</span>
-            <span class="weight-desc">Smaller project = slightly higher priority</span>
-          </div>
-          <div class="weight-control">
-            <input type="range" id="wBudget" min="0" max="100" step="1" class="weight-slider">
-            <span id="wBudgetVal" class="weight-val">15</span>
-          </div>
-        </div>
-        <div class="weight-row">
-          <div class="weight-label">
-            <span>Time to Completion</span>
-            <span class="weight-desc">Shorter project = slightly higher priority</span>
-          </div>
-          <div class="weight-control">
-            <input type="range" id="wTime" min="0" max="100" step="1" class="weight-slider">
-            <span id="wTimeVal" class="weight-val">15</span>
-          </div>
-        </div>
-        <div class="weight-row">
-          <div class="weight-label">
             <span>Wait Time</span>
             <span class="weight-desc">Longer on waitlist = higher priority</span>
           </div>
@@ -369,6 +349,28 @@
         Import historical session records from a spreadsheet. This tool is restricted to the Executive Director.
       </p>
       <a href="import.html" class="btn btn-primary btn-sm">Open Import Tool</a>
+    </div>
+
+    <!-- Deleted Clients -->
+    <div class="card" style="max-width:860px;margin-top:1.5rem;">
+      <div class="card-title">Deleted Clients</div>
+      <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">
+        Clients removed from the counseling log. Records are fully preserved — restore to make a client visible again.
+      </p>
+      <div id="deletedClientsWrap">
+        <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+      </div>
+    </div>
+
+    <!-- Deleted Sessions -->
+    <div class="card" style="max-width:1000px;margin-top:1.5rem;">
+      <div class="card-title">Deleted Sessions</div>
+      <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">
+        Sessions removed from client profiles. Records are fully preserved — restore to make a session visible again.
+      </p>
+      <div id="deletedSessionsWrap">
+        <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+      </div>
     </div>
 
   </main>

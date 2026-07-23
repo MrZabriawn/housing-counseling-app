@@ -32,6 +32,51 @@ import {
   collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, query, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+// ── Qrew sync ─────────────────────────────────────────────────────────────────
+
+const QREW_SYNC_URL   = 'https://housing-workforce.web.app/api/housing-status-update';
+const QREW_API_KEY    = '_zzGwMJluTft1osRTpE9eWGMSdjHl_i8nftNuB-lz5SkdDTP';
+const QREW_JOB_BASE   = 'https://housing-workforce.web.app/jobs/';
+
+const HOUSING_TO_QREW = {
+  'er_review':    'draft',
+  'repair_ready': 'soliciting',
+  'complete':     'complete',
+};
+
+async function pushStatusToQrew(qrewJobId, housingStatus) {
+  const qrewStatus = HOUSING_TO_QREW[housingStatus];
+  if (!qrewStatus) return null; // not a syncable status — no push needed
+  try {
+    const res = await fetch(QREW_SYNC_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': QREW_API_KEY },
+      body:    JSON.stringify({ jobFileId: qrewJobId, status: qrewStatus, _syncSource: 'housing' }),
+    });
+    return res.ok ? 'synced' : 'failed';
+  } catch {
+    return 'failed';
+  }
+}
+
+function renderQrewUI() {
+  const r         = _editingRecord;
+  const linkedBar = document.getElementById('qrewLinkedBar');
+  const linkInputs = document.getElementById('qrewLinkInputs');
+  if (r?.qrewJobId) {
+    linkedBar.style.display  = 'flex';
+    linkInputs.style.display = 'none';
+    document.getElementById('qrewJobCodeDisplay').textContent = r.qrewJobCode || r.qrewJobId;
+    document.getElementById('qrewJobOpenLink').href = `${QREW_JOB_BASE}?job=${r.qrewJobId}`;
+  } else {
+    linkedBar.style.display  = 'none';
+    linkInputs.style.display = 'flex';
+    document.getElementById('editQrewJobId').value   = '';
+    document.getElementById('editQrewJobCode').value = '';
+  }
+  document.getElementById('qrewSyncMsg').textContent = '';
+}
+
 // ── AMI helpers ───────────────────────────────────────────────────────────────
 
 const AMI_NUMERIC = {
@@ -67,32 +112,24 @@ function assistanceLabel(label) {
 
 // ── Score calculation ─────────────────────────────────────────────────────────
 
-const BUDGET_MAX   = 200000;
-const DAYS_MAX     = 730;
 const WAIT_MAX_MS  = 730 * 24 * 60 * 60 * 1000; // 2 years
 
 function calcScore(r, weights) {
-  const amiVal  = amiNumeric(r.amiPercent);
-  const amiScore     = Math.max(0, Math.min(100, (120 - amiVal) / 120 * 100));
-  const budgetScore  = Math.max(0, Math.min(100, (BUDGET_MAX - (r.estimatedBudget || 0)) / BUDGET_MAX * 100));
-  const timeScore    = Math.max(0, Math.min(100, (DAYS_MAX   - (r.estimatedDays   || 0)) / DAYS_MAX   * 100));
-  const enrolledMs   = r.enrolledAt?.toDate ? r.enrolledAt.toDate().getTime() : (r.enrolledAt || 0);
-  const waitScore    = Math.min(100, (Date.now() - enrolledMs) / WAIT_MAX_MS * 100);
+  const amiVal   = amiNumeric(r.amiPercent);
+  const amiScore  = Math.max(0, Math.min(100, (120 - amiVal) / 120 * 100));
+  const enrolledMs = r.enrolledAt?.toDate ? r.enrolledAt.toDate().getTime() : (r.enrolledAt || 0);
+  const waitScore  = Math.min(100, (Date.now() - enrolledMs) / WAIT_MAX_MS * 100);
 
-  const total = weights.amiWeight + weights.budgetWeight + weights.timeWeight + weights.waitTimeWeight;
+  const total = weights.amiWeight + weights.waitTimeWeight;
   if (total === 0) return 0;
-  return (
-    (amiScore    * weights.amiWeight +
-     budgetScore * weights.budgetWeight +
-     timeScore   * weights.timeWeight +
-     waitScore   * weights.waitTimeWeight) / total
-  );
+  return (amiScore * weights.amiWeight + waitScore * weights.waitTimeWeight) / total;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS = {
   needs_scope:  'Needs Scope',
+  waitlisted:   'Waitlisted',
   er_review:    'ER Review',
   repair_ready: 'Repair Ready',
   complete:     'Complete',
@@ -101,6 +138,7 @@ const STATUS_LABELS = {
 
 const STATUS_COLORS = {
   needs_scope:  'badge-yellow',
+  waitlisted:   'badge-purple',
   er_review:    'badge-blue',
   repair_ready: 'badge-green',
   complete:     'badge-gray',
@@ -109,7 +147,7 @@ const STATUS_COLORS = {
 
 let allRows        = [];
 let _allClients    = [];   // cached for client selector + link search
-let weights        = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
+let weights        = { amiWeight: 50, waitTimeWeight: 50 };
 let editingId      = null;
 let _editingRecord = null; // full higWaitlist record currently open in the edit modal
 let _editFile      = null;
@@ -129,6 +167,19 @@ requireAuth(async (user, profile) => {
     if (profile.role === 'executive_director') return true;
     return (r.careTeam || []).includes(user.uid);
   });
+
+  // Back-fill address for existing records that predate address storage
+  const needsAddr = allRows.filter(r => r.clientId && !r.streetAddress);
+  if (needsAddr.length) {
+    const clientSnaps = await getDocs(collection(db, 'clients'));
+    const clientMap = {};
+    clientSnaps.docs.forEach(d => { clientMap[d.id] = d.data(); });
+    allRows = allRows.map(r => {
+      if (!r.clientId || r.streetAddress) return r;
+      const c = clientMap[r.clientId];
+      return c ? { ...r, streetAddress: c.streetAddress || '', city: c.city || '', zipCode: c.zipCode || '' } : r;
+    });
+  }
 
   render();
 
@@ -183,7 +234,77 @@ requireAuth(async (user, profile) => {
     _editFolder = null;
     renderFolderUI();
   });
+
+  // Qrew job link / unlink
+  document.getElementById('linkQrewBtn').addEventListener('click', async () => {
+    const jobId   = document.getElementById('editQrewJobId').value.trim();
+    const jobCode = document.getElementById('editQrewJobCode').value.trim().toUpperCase();
+    const msgEl   = document.getElementById('qrewSyncMsg');
+    if (!jobId) {
+      msgEl.textContent = 'Paste the Qrew Job ID (doc ID) first.';
+      msgEl.style.color = 'var(--danger)';
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'higWaitlist', editingId), { qrewJobId: jobId, qrewJobCode: jobCode, updatedAt: serverTimestamp() });
+      _editingRecord = { ..._editingRecord, qrewJobId: jobId, qrewJobCode: jobCode };
+      const idx = allRows.findIndex(x => x.id === editingId);
+      if (idx !== -1) allRows[idx] = { ...allRows[idx], qrewJobId: jobId, qrewJobCode: jobCode };
+      renderQrewUI();
+      msgEl.textContent = 'Linked.';
+      msgEl.style.color = 'var(--accent)';
+      setTimeout(() => { msgEl.textContent = ''; }, 2000);
+    } catch (err) {
+      msgEl.textContent = 'Link failed: ' + err.message;
+      msgEl.style.color = 'var(--danger)';
+    }
+  });
+
+  document.getElementById('unlinkQrewBtn').addEventListener('click', async () => {
+    if (!confirm('Unlink this Qrew job? Status sync will stop.')) return;
+    const msgEl = document.getElementById('qrewSyncMsg');
+    try {
+      await updateDoc(doc(db, 'higWaitlist', editingId), { qrewJobId: '', qrewJobCode: '', updatedAt: serverTimestamp() });
+      _editingRecord = { ..._editingRecord, qrewJobId: '', qrewJobCode: '' };
+      const idx = allRows.findIndex(x => x.id === editingId);
+      if (idx !== -1) allRows[idx] = { ...allRows[idx], qrewJobId: '', qrewJobCode: '' };
+      renderQrewUI();
+    } catch (err) {
+      msgEl.textContent = 'Unlink failed: ' + err.message;
+      msgEl.style.color = 'var(--danger)';
+    }
+  });
 });
+
+function addrCell(r) {
+  const s = toTitleCase(r.streetAddress || '');
+  const c = [toTitleCase(r.city || ''), r.zipCode].filter(Boolean).join(' ');
+  return s ? (c ? `${esc(s)}, ${esc(c)}` : esc(s)) : (c ? esc(c) : '<span class="text-muted">—</span>');
+}
+
+function docsCell(r) {
+  const docLink    = r.driveFileUrl   ? `<a href="${r.driveFileUrl}"   target="_blank" style="font-size:0.8rem;display:block;">📄 Doc</a>`    : '';
+  const folderLink = r.driveFolderUrl ? `<a href="${r.driveFolderUrl}" target="_blank" style="font-size:0.8rem;display:block;">📁 Folder</a>` : '';
+  return (docLink || folderLink) ? (docLink + folderLink) : '<span class="text-muted">—</span>';
+}
+
+function wireClickableRows(tbody) {
+  tbody.querySelectorAll('.clickable-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      if (e.target.closest('.edit-entry-btn')) {
+        openEditModal(e.target.closest('.edit-entry-btn').dataset.id);
+        return;
+      }
+      const clientId = row.dataset.clientId;
+      if (clientId) {
+        window.location.href = `client.html?id=${clientId}`;
+      } else {
+        openEditModal(row.dataset.id);
+      }
+    });
+  });
+}
 
 function render() {
   const statusFilter = document.getElementById('filterStatus').value;
@@ -203,58 +324,65 @@ function render() {
     return true;
   });
 
-  // Score and rank
-  filtered = filtered
+  // Split waitlisted out — they get their own date-sorted section
+  const waitlisted = filtered.filter(r => r.status === 'waitlisted')
+    .sort((a, b) => {
+      const aMs = a.enrolledAt?.toDate ? a.enrolledAt.toDate().getTime() : (a.enrolledAt || 0);
+      const bMs = b.enrolledAt?.toDate ? b.enrolledAt.toDate().getTime() : (b.enrolledAt || 0);
+      return aMs - bMs; // oldest first
+    });
+  const scored = filtered
+    .filter(r => r.status !== 'waitlisted')
     .map(r => ({ ...r, _score: calcScore(r, weights) }))
     .sort((a, b) => b._score - a._score);
 
+  // ── Main scored table ───────────────────────────────────────────────────────
   const tbody = document.getElementById('higBody');
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="padding:2rem;text-align:center;">No entries found.</td></tr>';
-    return;
+  if (!scored.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="padding:2rem;text-align:center;">No entries found.</td></tr>';
+  } else {
+    tbody.innerHTML = scored.map((r, i) => {
+      const enrolledMs  = r.enrolledAt?.toDate ? r.enrolledAt.toDate().getTime() : 0;
+      const daysWaiting = enrolledMs ? Math.floor((Date.now() - enrolledMs) / 86400000) : '—';
+      return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}" style="${r.status === 'closed' ? 'opacity:0.55;' : ''}">
+        <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
+        <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
+        <td>${esc(amiDisplayLabel(r.amiPercent))}</td>
+        <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
+        <td style="font-size:0.8rem;">${addrCell(r)}</td>
+        <td style="font-weight:600;">${r._score.toFixed(1)}</td>
+        <td>${daysWaiting}</td>
+        <td><span class="badge ${STATUS_COLORS[r.status] || ''}">${STATUS_LABELS[r.status] || r.status}</span></td>
+        <td>${docsCell(r)}</td>
+        <td><button class="btn btn-secondary btn-sm edit-entry-btn" data-id="${r.id}" style="white-space:nowrap;">Edit Entry</button></td>
+      </tr>`;
+    }).join('');
+    wireClickableRows(tbody);
   }
 
-  tbody.innerHTML = filtered.map((r, i) => {
-    const enrolledMs = r.enrolledAt?.toDate ? r.enrolledAt.toDate().getTime() : 0;
-    const daysWaiting = enrolledMs ? Math.floor((Date.now() - enrolledMs) / 86400000) : '—';
-    const docLink = r.driveFileUrl
-      ? `<a href="${r.driveFileUrl}" target="_blank" style="font-size:0.8rem;display:block;">📄 Doc</a>`
-      : '';
-    const folderLink = r.driveFolderUrl
-      ? `<a href="${r.driveFolderUrl}" target="_blank" style="font-size:0.8rem;display:block;">📁 Folder</a>`
-      : '';
-    const docs = (docLink || folderLink) ? (docLink + folderLink) : '<span class="text-muted">—</span>';
-
-    return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}" style="${r.status === 'closed' ? 'opacity:0.55;' : ''}">
-      <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
-      <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
-      <td>${esc(amiDisplayLabel(r.amiPercent))}</td>
-      <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
-      <td>${r.estimatedBudget ? '$' + Number(r.estimatedBudget).toLocaleString() : '—'}</td>
-      <td>${r.estimatedDays || '—'}</td>
-      <td style="font-weight:600;">${r._score.toFixed(1)}</td>
-      <td>${daysWaiting}</td>
-      <td><span class="badge ${STATUS_COLORS[r.status] || ''}">${STATUS_LABELS[r.status] || r.status}</span></td>
-      <td>${docs}</td>
-      <td><button class="btn btn-secondary btn-sm edit-entry-btn" data-id="${r.id}" style="white-space:nowrap;">Edit Entry</button></td>
-    </tr>`;
-  }).join('');
-
-  tbody.querySelectorAll('.clickable-row').forEach(row => {
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('a')) return;
-      if (e.target.closest('.edit-entry-btn')) {
-        openEditModal(e.target.closest('.edit-entry-btn').dataset.id);
-        return;
-      }
-      const clientId = row.dataset.clientId;
-      if (clientId) {
-        window.location.href = `client.html?id=${clientId}`;
-      } else {
-        openEditModal(row.dataset.id);
-      }
-    });
-  });
+  // ── Waitlisted section ──────────────────────────────────────────────────────
+  const wSection = document.getElementById('waitlistedSection');
+  const wBody    = document.getElementById('waitlistedBody');
+  if (!waitlisted.length) {
+    wSection.classList.add('hidden');
+  } else {
+    wSection.classList.remove('hidden');
+    wBody.innerHTML = waitlisted.map((r, i) => {
+      const enrolledMs  = r.enrolledAt?.toDate ? r.enrolledAt.toDate().getTime() : 0;
+      const daysWaiting = enrolledMs ? Math.floor((Date.now() - enrolledMs) / 86400000) : '—';
+      return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}">
+        <td style="text-align:center;font-weight:600;color:var(--text-muted);">${i + 1}</td>
+        <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
+        <td>${esc(amiDisplayLabel(r.amiPercent))}</td>
+        <td style="font-size:0.8rem;">${assistanceLabel(r.amiPercent)}</td>
+        <td style="font-size:0.8rem;">${addrCell(r)}</td>
+        <td>${daysWaiting}</td>
+        <td>${docsCell(r)}</td>
+        <td><button class="btn btn-secondary btn-sm edit-entry-btn" data-id="${r.id}" style="white-space:nowrap;">Edit Entry</button></td>
+      </tr>`;
+    }).join('');
+    wireClickableRows(wBody);
+  }
 }
 
 function toggleClosureSection() {
@@ -273,8 +401,6 @@ function openEditModal(id) {
 
   document.getElementById('higEditTitle').textContent  = toTitleCase(r.clientName);
   document.getElementById('editHigScope').value        = r.scopeOfWork     || '';
-  document.getElementById('editHigBudget').value       = r.estimatedBudget || '';
-  document.getElementById('editHigDays').value         = r.estimatedDays   || '';
   document.getElementById('editHigStatus').value       = r.status          || 'needs_scope';
   document.getElementById('editHigNotes').value        = r.notes           || '';
 
@@ -291,6 +417,7 @@ function openEditModal(id) {
   _editFolder = r.driveFolderId ? { id: r.driveFolderId, name: r.driveFolderName || '', url: r.driveFolderUrl || '' } : null;
   renderSowUI();
   renderFolderUI();
+  renderQrewUI();
 
   document.getElementById('higEditError').classList.add('hidden');
 
@@ -386,7 +513,9 @@ async function saveEdit() {
   saveBtn.textContent = 'Saving…';
 
   try {
-    const status = document.getElementById('editHigStatus').value;
+    const status    = document.getElementById('editHigStatus').value;
+    const prevStatus = _editingRecord.status;
+    const qrewJobId  = _editingRecord.qrewJobId || '';
     const isClosed = status === 'closed';
 
     const closureDateVal = document.getElementById('editClosureDate').value;
@@ -399,8 +528,6 @@ async function saveEdit() {
 
     const updates = {
       scopeOfWork:     document.getElementById('editHigScope').value.trim(),
-      estimatedBudget: parseFloat(document.getElementById('editHigBudget').value) || 0,
-      estimatedDays:   parseInt(document.getElementById('editHigDays').value, 10) || 0,
       status,
       notes:           document.getElementById('editHigNotes').value.trim(),
       driveFileId:     _editFile?.id    || '',
@@ -428,6 +555,14 @@ async function saveEdit() {
 
     closeModal();
     render();
+
+    // Push status to Qrew in the background (non-blocking)
+    if (qrewJobId && status !== prevStatus) {
+      pushStatusToQrew(qrewJobId, status).then(result => {
+        if (result === 'failed') console.warn('[Qrew sync] Status push failed — check Qrew endpoint');
+        else if (result === 'synced') console.info(`[Qrew sync] → ${HOUSING_TO_QREW[status]}`);
+      });
+    }
   } catch (err) {
     errorEl.textContent = 'Save failed: ' + err.message;
     errorEl.classList.remove('hidden');
@@ -495,6 +630,9 @@ async function linkHigClientToEntry(clientDocId) {
       clientId:        clientDocId,
       clientName:      c.clientName      || _editingRecord.clientName || '',
       amiPercent:      c.amiPercent      || '',
+      streetAddress:   c.streetAddress   || '',
+      city:            c.city            || '',
+      zipCode:         c.zipCode         || '',
       driveFolderId:   c.driveFolderId   || '',
       driveFolderName: c.driveFolderName || '',
       driveFolderUrl:  c.driveFolderUrl  || '',
@@ -621,12 +759,13 @@ async function addClientToList(clientId) {
       clientId,
       clientName:      client.clientName      || '',
       amiPercent:      client.amiPercent       || '',
+      streetAddress:   client.streetAddress    || '',
+      city:            client.city             || '',
+      zipCode:         client.zipCode          || '',
       driveFolderId:   client.driveFolderId    || '',
       driveFolderName: client.driveFolderName  || '',
       driveFolderUrl:  client.driveFolderUrl   || '',
       scopeOfWork:     '',
-      estimatedBudget: 0,
-      estimatedDays:   0,
       status:          'needs_scope',
       notes:           '',
       enrolledAt:      serverTimestamp(),
@@ -635,7 +774,9 @@ async function addClientToList(clientId) {
 
     // Add to local list immediately
     allRows.push({ id: newDoc.id, clientId, clientName: client.clientName,
-      amiPercent: client.amiPercent, status: 'needs_scope', enrolledAt: new Date() });
+      amiPercent: client.amiPercent, streetAddress: client.streetAddress || '',
+      city: client.city || '', zipCode: client.zipCode || '',
+      status: 'needs_scope', enrolledAt: new Date() });
     closeClientSelector();
     render();
   } catch (err) {

@@ -67,8 +67,182 @@ export async function initHudReports(user, profile) {
   document.getElementById('genAllBtn').addEventListener('click',     () => runExport(genAll));
 
   document.getElementById('importSessionsBtn').addEventListener('click', runImport);
+  document.getElementById('scanMissingRxBtn').addEventListener('click', scanMissingRx);
+
+  // Populate counselor filter for missing-Rx scanner
+  try {
+    const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const sel   = document.getElementById('missingRxCounselor');
+    cSnap.docs
+      .map(d => d.data())
+      .filter(c => c.active !== false && c.isCounselor !== false)
+      .forEach(c => {
+        const o = document.createElement('option');
+        o.value = o.textContent = c.name;
+        sel.appendChild(o);
+      });
+  } catch (_) {}
 
   await refreshStatus();
+}
+
+// ── Sessions missing Rx scanner ───────────────────────────────────────────────
+const BILLABLE_TYPES = new Set(['In-Person', 'Case Management Activity', 'Court']);
+const CUTOFF_MISSING = '2026-01-01';
+
+async function scanMissingRx() {
+  const btn      = document.getElementById('scanMissingRxBtn');
+  const resultEl = document.getElementById('missingRxResult');
+  const counsel  = document.getElementById('missingRxCounselor').value;
+
+  btn.disabled    = true;
+  btn.textContent = 'Scanning…';
+  resultEl.innerHTML = '<p style="color:var(--text-muted);">Loading sessions…</p>';
+
+  try {
+    const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
+
+    const missing = [];
+    sessSnap.docs.forEach(d => {
+      const s        = d.data();
+      const clientId = d.ref.parent.parent.id;
+      const billing  = s.billingType || s.counselingType || '';
+      if (!BILLABLE_TYPES.has(billing)) return;
+      if ((s.rxNumber || '').trim()) return; // has Rx — fine
+      if (counsel && s.counselor !== counsel) return;
+
+      let dateStr = '';
+      if (s.date?.toDate) dateStr = s.date.toDate().toISOString().split('T')[0];
+      else if (typeof s.date === 'string') dateStr = s.date.slice(0, 10);
+      if (dateStr < CUTOFF_MISSING) return;
+
+      missing.push({ clientId, clientName: s.clientName || clientId, counselor: s.counselor || '—', date: dateStr, billing, sessionId: d.id });
+    });
+
+    if (!missing.length) {
+      resultEl.innerHTML = '<p style="color:var(--accent);font-weight:600;">No sessions missing Rx found — all good.</p>';
+      return;
+    }
+
+    missing.sort((a, b) => (a.counselor + a.date).localeCompare(b.counselor + b.date));
+
+    const TH = 'style="text-align:left;padding:0.35rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);white-space:nowrap;"';
+    const TD = 'style="padding:0.32rem 0.6rem;border-bottom:1px solid #f0f1f3;font-size:0.8125rem;"';
+
+    resultEl.innerHTML = `
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.6rem;">${missing.length} session${missing.length !== 1 ? 's' : ''} missing Rx/guarantor.</p>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#f8f9fb;">
+            <th ${TH}>Date</th>
+            <th ${TH}>Client</th>
+            <th ${TH}>Counselor</th>
+            <th ${TH}>Billing Type</th>
+          </tr></thead>
+          <tbody>
+            ${missing.map(r => `<tr>
+              <td ${TD}>${escHtml(r.date)}</td>
+              <td ${TD}><a href="client.html?id=${escAttr(r.clientId)}" target="_blank" style="color:var(--primary);font-weight:600;">${escHtml(r.clientName)} →</a></td>
+              <td ${TD}>${escHtml(r.counselor)}</td>
+              <td ${TD}>${escHtml(r.billing)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    resultEl.innerHTML = `<p style="color:var(--danger);">Scan failed: ${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Scan Sessions';
+  }
+}
+
+
+// ── Status detail builders ────────────────────────────────────────────────────
+function _detTH() { return 'style="padding:0.3rem 0.65rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:2px solid var(--border);text-align:left;"'; }
+function _detTD() { return 'style="padding:0.3rem 0.65rem;border-bottom:1px solid var(--border);font-size:0.8rem;"'; }
+
+function buildParDetailHtml(sessions, hudEvents, clientMap) {
+  const THs = _detTH(), DT = _detTD();
+  const sessRows = [...sessions]
+    .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
+    .map(s => {
+      const nm  = (clientMap[s.clientId] || {}).name || s.clientId;
+      const hrs = (parseFloat(s.hours) || 0).toFixed(2);
+      const tp  = s.hudType === 'case_management' ? 'Case Mgmt' : 'Counseling';
+      return `<tr>
+        <td ${DT}>${fmtDate(s.dateObj)}</td>
+        <td ${DT}><a href="client.html?id=${escAttr(s.clientId)}" target="_blank" style="color:var(--accent)">${escHtml(nm)}</a></td>
+        <td ${DT}>${escHtml(s.rxNumber||'—')}</td>
+        <td ${DT}>${tp}</td>
+        <td ${DT} style="text-align:right">${hrs}</td>
+      </tr>`;
+    }).join('');
+  const talRows = [...hudEvents]
+    .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
+    .map(e => {
+      const hrs = ((e.durationMinutes||0)/60).toFixed(2);
+      const tp  = e.costType === 'M' ? 'Marketing' : 'Training';
+      return `<tr style="background:color-mix(in srgb,var(--bg,#fff) 88%,var(--border,#ddd))">
+        <td ${DT}>${escHtml(e.date||'')}</td>
+        <td ${DT} colspan="2">${escHtml(e.description||tp)}</td>
+        <td ${DT}>${tp}</td>
+        <td ${DT} style="text-align:right">${hrs}</td>
+      </tr>`;
+    }).join('');
+  if (!sessRows && !talRows) return '<p style="padding:0.5rem 0.75rem;font-size:0.8rem;color:var(--text-muted)">No entries</p>';
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th ${THs}>Date</th><th ${THs}>Client / Activity</th><th ${THs}>Rx #</th>
+      <th ${THs}>Type</th><th ${THs} style="text-align:right">Hrs</th>
+    </tr></thead>
+    <tbody>${sessRows}${talRows}</tbody></table>`;
+}
+
+function buildCmlDetailHtml(sessions, clientMap) {
+  const THs = _detTH(), DT = _detTD();
+  if (!sessions.length) return '<p style="padding:0.5rem 0.75rem;font-size:0.8rem;color:var(--text-muted)">No case management entries</p>';
+  const rows = [...sessions]
+    .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
+    .map(s => {
+      const nm  = (clientMap[s.clientId] || {}).name || s.clientId;
+      const hrs = (parseFloat(s.hours) || 0).toFixed(2);
+      return `<tr>
+        <td ${DT}>${fmtDate(s.dateObj)}</td>
+        <td ${DT}><a href="client.html?id=${escAttr(s.clientId)}" target="_blank" style="color:var(--accent)">${escHtml(nm)}</a></td>
+        <td ${DT}>${escHtml(s.rxNumber||'—')}</td>
+        <td ${DT} style="text-align:right">${hrs}</td>
+      </tr>`;
+    }).join('');
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th ${THs}>Date</th><th ${THs}>Client</th><th ${THs}>Rx #</th>
+      <th ${THs} style="text-align:right">Hrs</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function buildTalDetailHtml(hudEvents) {
+  const THs = _detTH(), DT = _detTD();
+  if (!hudEvents.length) return '<p style="padding:0.5rem 0.75rem;font-size:0.8rem;color:var(--text-muted)">No training/marketing entries</p>';
+  const rows = [...hudEvents]
+    .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
+    .map(e => {
+      const hrs = ((e.durationMinutes||0)/60).toFixed(2);
+      const tp  = e.costType === 'M' ? 'Marketing' : 'Training';
+      return `<tr>
+        <td ${DT}>${escHtml(e.date||'')}</td>
+        <td ${DT}>${escHtml(e.description||'')}</td>
+        <td ${DT}>${tp}</td>
+        <td ${DT} style="text-align:right">${hrs}</td>
+      </tr>`;
+    }).join('');
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th ${THs}>Date</th><th ${THs}>Description</th><th ${THs}>Category</th>
+      <th ${THs} style="text-align:right">Hrs</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 
 // ── Status table ──────────────────────────────────────────────────────────────
@@ -83,6 +257,43 @@ async function refreshStatus() {
     const TH = 'style="text-align:left;padding:0.4rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
     const TD = 'style="padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);"';
 
+    const rows = data.counselors.filter(c => c.active !== false).map(c => {
+      const mySessions  = data.sessions.filter(s => s.counselor === c.name && data.nofaRxSet.has((s.rxNumber||'').trim()) && (parseFloat(s.hours) || 0) > 0);
+      const myTM        = data.hudEvents.filter(e => e.counselorId === c.id);
+      const cmlSessions = mySessions.filter(s => s.hudType === 'case_management');
+      const parEntries  = mySessions.length + myTM.length;
+      const cmlCnt      = cmlSessions.length;
+      const talCnt      = myTM.length;
+      const issues      = [];
+      if (!c.staffNumber) issues.push('missing Staff #');
+      if (!c.staffTitle)  issues.push('missing Title');
+      if (!c.baseSalary)  issues.push('missing Base Salary');
+
+      const cid     = escAttr(c.id);
+      const parHtml = buildParDetailHtml(mySessions, myTM, data.clientMap);
+      const cmlHtml = buildCmlDetailHtml(cmlSessions, data.clientMap);
+      const talHtml = buildTalDetailHtml(myTM);
+
+      const countBtn = (n, cat) => n > 0
+        ? `<button class="det-toggle" data-cid="${cid}" data-cat="${cat}" style="background:none;border:none;cursor:pointer;color:var(--accent);font-weight:600;font-size:inherit;text-decoration:underline dotted;padding:0;">${n}</button>`
+        : `<span style="color:var(--text-muted)">0</span>`;
+
+      return `<tr>
+          <td ${TD}>${escHtml(c.name)}</td>
+          <td ${TD} style="text-align:center">${countBtn(parEntries,'par')}</td>
+          <td ${TD} style="text-align:center">${countBtn(cmlCnt,'cml')}</td>
+          <td ${TD} style="text-align:center">${countBtn(talCnt,'tal')}</td>
+          <td ${TD}>${issues.length ? issues.map(i => `<span class="warn-badge">⚠ ${i}</span>`).join(' ') : '<span style="color:var(--accent);font-size:0.8rem;">✓ OK</span>'}</td>
+        </tr>
+        <tr id="det-${cid}" style="display:none">
+          <td colspan="5" style="padding:0;background:var(--bg-alt,#f8f9fa)">
+            <div id="det-${cid}-par" style="display:none">${parHtml}</div>
+            <div id="det-${cid}-cml" style="display:none">${cmlHtml}</div>
+            <div id="det-${cid}-tal" style="display:none">${talHtml}</div>
+          </td>
+        </tr>`;
+    }).join('');
+
     wrap.innerHTML = `
       <table class="status-table">
         <thead>
@@ -94,27 +305,24 @@ async function refreshStatus() {
             <th ${TH}>Issues</th>
           </tr>
         </thead>
-        <tbody>
-          ${data.counselors.filter(c => c.active !== false).map(c => {
-            const mySessions = data.sessions.filter(s => s.counselor === c.name && data.nofaRxSet.has((s.rxNumber||'').trim()));
-            const myTM       = data.hudEvents.filter(e => e.counselorId === c.id);
-            const parEntries = mySessions.length + myTM.length;
-            const cmlCnt  = mySessions.filter(s => s.hudType === 'case_management').length;
-            const talCnt  = myTM.length;
-            const issues  = [];
-            if (!c.staffNumber) issues.push('missing Staff #');
-            if (!c.staffTitle)  issues.push('missing Title');
-            if (!c.baseSalary)  issues.push('missing Base Salary');
-            return `<tr>
-              <td ${TD}>${escHtml(c.name)}</td>
-              <td ${TD} style="text-align:center;">${parEntries}</td>
-              <td ${TD} style="text-align:center;">${cmlCnt}</td>
-              <td ${TD} style="text-align:center;">${talCnt}</td>
-              <td ${TD}>${issues.length ? issues.map(i => `<span class="warn-badge">⚠ ${i}</span>`).join(' ') : '<span style="color:var(--accent);font-size:0.8rem;">✓ OK</span>'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
+        <tbody>${rows}</tbody>
       </table>`;
+
+    wrap.querySelectorAll('.det-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { cid, cat } = btn.dataset;
+        const detRow  = document.getElementById(`det-${cid}`);
+        const allDivs = ['par','cml','tal'].map(k => document.getElementById(`det-${cid}-${k}`));
+        const target  = document.getElementById(`det-${cid}-${cat}`);
+        const isOpen  = detRow.style.display !== 'none' && target && target.style.display !== 'none';
+        detRow.style.display = 'none';
+        allDivs.forEach(d => { if (d) d.style.display = 'none'; });
+        if (!isOpen) {
+          detRow.style.display = '';
+          if (target) target.style.display = '';
+        }
+      });
+    });
 
     renderExportButtons(data.counselors.filter(c => c.active !== false));
   } catch (err) {
@@ -180,7 +388,9 @@ async function loadAllData(year, mon) {
     getDocs(collection(db, 'hudScheduledHours')),
   ]);
 
-  const counselors = counselorSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const counselors = counselorSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(c => c.active !== false && c.isCounselor !== false);
 
   const clientMap = {};
   clientSnap.docs.forEach(d => {
@@ -212,6 +422,7 @@ async function loadAllData(year, mon) {
     const dateObj  = toDateObj(s.date);
     if (!dateObj) return;
     if (dateObj.getFullYear() !== year || (dateObj.getMonth() + 1) !== mon) return;
+    if (s.rxGuarantor === 'Non-Billable') return;
     sessions.push({ sessionId: d.id, clientId, dateObj, ...s });
   });
 
@@ -870,7 +1081,7 @@ async function importFromSessions() {
       guarantor: 'NOFA',
       nofaInitiative: rxInfo.nofaInitiative,
       activityNote: '',
-      delivery: type === 'counseling_session' ? 'face-to-face' : undefined,
+      ...(type === 'counseling_session' ? { delivery: 'face-to-face' } : {}),
       durationMinutes,
       sourceSessionId: d.id,
       createdAt: serverTimestamp(),

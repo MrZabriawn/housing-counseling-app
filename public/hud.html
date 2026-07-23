@@ -291,6 +291,20 @@
         <button id="importSessionsBtn" class="btn btn-secondary">Import from Sessions</button>
         <p id="importMsg" class="hidden" style="margin-top:0.75rem;font-size:0.8125rem;"></p>
       </div>
+
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-title">Sessions Missing Rx / Guarantor</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Finds In-Person, Case Management, and Court sessions from Jan 2026 onward that have no Rx number assigned — these sessions cannot be imported to HUD Time until fixed.
+        </p>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <button id="scanMissingRxBtn" class="btn btn-secondary">Scan Sessions</button>
+          <select id="missingRxCounselor" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">All Counselors</option>
+          </select>
+        </div>
+        <div id="missingRxResult" style="font-size:0.8125rem;color:var(--text-muted);">Click Scan to begin.</div>
+      </div>
     </div>
 
   </main>

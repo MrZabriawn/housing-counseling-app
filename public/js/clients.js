@@ -4,6 +4,7 @@ import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, BILLING_TYPES, RX_GUARANTORS, amiCategory, amiDisplayLabel } from './data.js';
 import {
   collection, collectionGroup, getDocs, addDoc, query, orderBy, serverTimestamp,
+  writeBatch, doc, updateDoc,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const SS = 'clientsFilters'; // sessionStorage key
@@ -22,6 +23,13 @@ let _metricsRendered   = false; // true after first visit to Metrics tab
 let _rxGuarantorMap    = new Map(); // rxNumber string → guarantor string
 let _matchingSessions  = null;  // null = client view; array = session view (date filter active)
 
+// Session Admin tab state
+let _adminSessions = [];
+let _adminFiltered = [];
+const _adminSelected  = new Set(); // `clientId/sessionId` keys
+const _saGuarantors   = new Set(); // guarantor values selected in multi-select; empty = all
+let _adminSort = { col: 'date', dir: 'asc' };
+
 requireAuth(async (user, profile) => {
   _user    = user;
   _profile = profile;
@@ -31,7 +39,7 @@ requireAuth(async (user, profile) => {
   try {
     const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     _counselorDocs = cSnap.docs
-      .filter(d => d.data().active !== false)
+      .filter(d => d.data().active !== false && d.data().isCounselor !== false)
       .map(d => ({ id: d.id, name: d.data().name, staffNumber: d.data().staffNumber ?? null }));
   } catch (_) { _counselorDocs = []; }
 
@@ -74,6 +82,33 @@ requireAuth(async (user, profile) => {
   document.getElementById('emCancelBtn').addEventListener('click', () => document.getElementById('emModal').classList.add('hidden'));
   document.getElementById('emModal').addEventListener('click', e => { if (e.target === document.getElementById('emModal')) document.getElementById('emModal').classList.add('hidden'); });
   document.getElementById('emSaveBtn').addEventListener('click', saveEm);
+
+  // Session Admin tab
+  populateSessionAdminDropdowns();
+  document.getElementById('saLoadBtn').addEventListener('click', loadSessionAdmin);
+  document.getElementById('saFilterBtn').addEventListener('click', applySessionAdminFilter);
+  document.getElementById('saThDate').addEventListener('click', () => setSaSort('date'));
+  document.getElementById('saThGuarantor').addEventListener('click', () => setSaSort('rxGuarantor'));
+  document.getElementById('saSelectAll').addEventListener('change', e => {
+    const checked = e.target.checked;
+    document.querySelectorAll('.sa-chk').forEach(chk => {
+      chk.checked = checked;
+      const key = chk.dataset.key;
+      if (checked) _adminSelected.add(key); else _adminSelected.delete(key);
+      chk.closest('tr').style.background = checked ? 'var(--bg-alt,#eef2ff)' : '';
+    });
+    updateSaBulkBar();
+  });
+  document.getElementById('saBulkApplyBtn').addEventListener('click', bulkApplyGuarantor);
+  document.getElementById('saBulkClearBtn').addEventListener('click', () => {
+    _adminSelected.clear();
+    document.querySelectorAll('.sa-chk').forEach(chk => {
+      chk.checked = false;
+      chk.closest('tr').style.background = '';
+    });
+    document.getElementById('saSelectAll').checked = false;
+    updateSaBulkBar();
+  });
 
 });
 
@@ -173,7 +208,7 @@ async function loadClients() {
     getDocs(collectionGroup(db, 'rxNumbers')),
   ]);
 
-  allClients   = clientSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(canViewClient);
+  allClients   = clientSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => !c.deleted).filter(canViewClient);
   _allSessions = sessSnap.docs.map(d => ({ clientId: d.ref.parent.parent.id, ...d.data() }));
   _rxGuarantorMap = new Map(
     rxSnap.docs.map(d => [d.data().rxNumber, d.data().guarantor]).filter(([rx]) => rx)
@@ -487,7 +522,8 @@ function renderTable(clients) {
 }
 
 function renderStats(clients) {
-  const active   = clients.filter(c => (c.status || 'active') === 'active').length;
+  const active      = clients.filter(c => (c.status || 'active') === 'active').length;
+  const households  = clients.filter(c => (c.sessionCount || 0) > 0).length;
   const sessions = clients.reduce((s, c) => s + (c.sessionCount || 0), 0);
   const dollars  = clients.reduce((s, c) => {
     const val = (c.status === 'closed' && c.closureOutcomeValue > 0)
@@ -496,7 +532,8 @@ function renderStats(clients) {
     return s + val;
   }, 0);
 
-  document.getElementById('statClients').textContent  = active;
+  document.getElementById('statClients').textContent     = active;
+  document.getElementById('statHouseholds').textContent  = households;
   document.getElementById('statSessions').textContent = sessions;
   document.getElementById('statHours').textContent    =
     _filteredHours === null
@@ -1072,5 +1109,322 @@ function renderMetrics() {
       mxStat('Complete Files', `${complete} (${pct}%)`) +
       mxStat('Incomplete', incomplete)
     }</div>${missingHtml}`;
+}
+
+// ── Session Admin ─────────────────────────────────────────────────────────────
+function populateSessionAdminDropdowns() {
+  // Bulk-apply guarantor select
+  const bulkSel = document.getElementById('saBulkGuarantor');
+  RX_GUARANTORS.forEach(g => bulkSel.add(new Option(g, g)));
+
+  // Counselor filter
+  const cSel = document.getElementById('saFCounselor');
+  _counselorDocs.forEach(c => cSel.add(new Option(c.name, c.name)));
+
+  // Multi-select guarantor filter panel
+  const panel = document.getElementById('saGuarantorPanel');
+  const items = [{ label: 'Missing', value: '__missing__' }, ...RX_GUARANTORS.map(g => ({ label: g, value: g }))];
+  panel.innerHTML = [
+    `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.75rem;font-size:0.85rem;cursor:pointer;border-bottom:1px solid var(--border);margin-bottom:0.2rem;text-align:left;">
+       <input type="checkbox" id="saGAll" checked> All
+     </label>`,
+    ...items.map(it => `
+      <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.75rem;font-size:0.85rem;cursor:pointer;text-align:left;">
+        <input type="checkbox" class="sa-g-chk" value="${escAttr(it.value)}"> ${escHtml(it.label)}
+      </label>`),
+  ].join('');
+
+  // Toggle panel open/close
+  const btn = document.getElementById('saGuarantorBtn');
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  });
+  document.addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.addEventListener('click', e => e.stopPropagation());
+
+  // "All" checkbox logic
+  document.getElementById('saGAll').addEventListener('change', e => {
+    if (e.target.checked) {
+      _saGuarantors.clear();
+      panel.querySelectorAll('.sa-g-chk').forEach(chk => { chk.checked = false; });
+    }
+    updateSaGuarantorLabel();
+  });
+
+  panel.querySelectorAll('.sa-g-chk').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if (chk.checked) {
+        _saGuarantors.add(chk.value);
+        document.getElementById('saGAll').checked = false;
+      } else {
+        _saGuarantors.delete(chk.value);
+        if (_saGuarantors.size === 0) document.getElementById('saGAll').checked = true;
+      }
+      updateSaGuarantorLabel();
+    });
+  });
+}
+
+function updateSaGuarantorLabel() {
+  const lbl = document.getElementById('saGuarantorLabel');
+  if (_saGuarantors.size === 0) {
+    lbl.textContent = '— any —';
+  } else {
+    const names = [..._saGuarantors].map(v => v === '__missing__' ? 'Missing' : v);
+    lbl.textContent = names.join(', ');
+  }
+}
+
+async function loadSessionAdmin() {
+  const status   = document.getElementById('saStatus');
+  const tableWrap = document.getElementById('saTableWrap');
+  const filterBtn = document.getElementById('saFilterBtn');
+  const loadBtn   = document.getElementById('saLoadBtn');
+
+  loadBtn.disabled = true;
+  loadBtn.textContent = 'Loading…';
+  status.textContent = 'Fetching all sessions…';
+  tableWrap.style.display = 'none';
+
+  try {
+    // Build client name map from already-loaded allClients
+    const clientMap = {};
+    allClients.forEach(c => { clientMap[c.id] = c.clientName || c.id; });
+
+    const sessSnap = await getDocs(collectionGroup(db, 'sessions'));
+    _adminSessions = sessSnap.docs.map(d => {
+      const s        = d.data();
+      const clientId = d.ref.parent.parent.id;
+      let dateStr    = '';
+      if (s.date && s.date.toDate) dateStr = s.date.toDate().toISOString().split('T')[0];
+      else if (typeof s.date === 'string') dateStr = s.date;
+      return {
+        _clientId:   clientId,
+        _sessionId:  d.id,
+        clientName:  clientMap[clientId] || clientId,
+        date:        dateStr,
+        counselor:   s.counselor   || '',
+        rxNumber:    s.rxNumber    || '',
+        rxGuarantor: s.rxGuarantor || '',
+        hours:       s.hours       || '',
+      };
+    });
+
+    _adminSelected.clear();
+    tableWrap.style.display = '';
+    filterBtn.style.display = '';
+    applySessionAdminFilter();
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    console.error(err);
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.textContent = 'Reload';
+  }
+}
+
+function applySessionAdminFilter() {
+  const counselor = document.getElementById('saFCounselor').value;
+  const dateFrom  = document.getElementById('saFDateFrom').value;
+  const dateTo    = document.getElementById('saFDateTo').value;
+  const client    = document.getElementById('saFClient').value.trim().toLowerCase();
+
+  _adminFiltered = _adminSessions.filter(s => {
+    if (counselor && s.counselor !== counselor) return false;
+    if (_saGuarantors.size > 0) {
+      const missing = !s.rxGuarantor;
+      const matchesMissing  = _saGuarantors.has('__missing__') && missing;
+      const matchesValue    = !missing && _saGuarantors.has(s.rxGuarantor);
+      if (!matchesMissing && !matchesValue) return false;
+    }
+    if (dateFrom && s.date < dateFrom) return false;
+    if (dateTo   && s.date > dateTo)   return false;
+    if (client   && !s.clientName.toLowerCase().includes(client)) return false;
+    return true;
+  });
+
+  renderSessionAdmin();
+}
+
+function setSaSort(col) {
+  if (_adminSort.col === col) {
+    _adminSort.dir = _adminSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _adminSort = { col, dir: 'asc' };
+  }
+  renderSessionAdmin();
+}
+
+function renderSessionAdmin() {
+  const tbody  = document.getElementById('saBody');
+  const status = document.getElementById('saStatus');
+  const TD = 'style="padding:0.35rem 0.6rem;border-bottom:1px solid var(--border);"';
+
+  // Update sort indicators on headers
+  const { col, dir } = _adminSort;
+  const arrow = dir === 'asc' ? ' ▲' : ' ▼';
+  document.getElementById('saThDate').textContent      = 'Date'      + (col === 'date'        ? arrow : '');
+  document.getElementById('saThGuarantor').textContent = 'Guarantor' + (col === 'rxGuarantor' ? arrow : '');
+
+  // Sort
+  const sorted = [..._adminFiltered].sort((a, b) => {
+    const av = (a[col] || '').toLowerCase();
+    const bv = (b[col] || '').toLowerCase();
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ?  1 : -1;
+    return 0;
+  });
+
+  if (!_adminFiltered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">No sessions match the current filters.</td></tr>`;
+    status.textContent = '0 sessions shown.';
+    document.getElementById('saSelectAll').checked = false;
+    updateSaBulkBar();
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(s => {
+    const key     = `${s._clientId}/${s._sessionId}`;
+    const checked = _adminSelected.has(key);
+    const rowBg   = checked ? 'style="background:var(--bg-alt,#eef2ff)"' : '';
+    const gBadge  = s.rxGuarantor
+      ? `<span style="font-size:0.78rem;background:#f0f4ff;color:#334;border-radius:3px;padding:0.1rem 0.45rem;">${escHtml(s.rxGuarantor)}</span>`
+      : `<span style="font-size:0.78rem;color:var(--danger);font-weight:600;">missing</span>`;
+    return `<tr data-key="${escAttr(key)}" ${rowBg}>
+      <td ${TD} style="text-align:center"><input type="checkbox" class="sa-chk" data-key="${escAttr(key)}" ${checked ? 'checked' : ''}></td>
+      <td ${TD} style="white-space:nowrap">${escHtml(s.date)}</td>
+      <td ${TD}><a href="client.html?id=${escAttr(s._clientId)}" target="_blank" style="color:var(--accent)">${escHtml(s.clientName)}</a></td>
+      <td ${TD}>${escHtml(s.counselor || '—')}</td>
+      <td ${TD}>${escHtml(s.rxNumber  || '—')}</td>
+      <td ${TD}>${gBadge}</td>
+      <td ${TD} style="white-space:nowrap;">
+        <input type="number" class="sa-hrs-input" data-key="${escAttr(key)}" value="${escHtml(String(s.hours || ''))}" min="0" step="0.25"
+          style="width:4.2rem;padding:0.2rem 0.35rem;border:1px solid var(--border);border-radius:3px;font-size:0.8rem;text-align:right;">
+        <button class="sa-hrs-save btn btn-sm btn-primary" data-key="${escAttr(key)}" disabled
+          style="padding:0.18rem 0.5rem;font-size:0.75rem;margin-left:0.25rem;opacity:0.35;cursor:default;">Save</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.sa-chk').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const key = chk.dataset.key;
+      if (chk.checked) _adminSelected.add(key); else _adminSelected.delete(key);
+      chk.closest('tr').style.background = chk.checked ? 'var(--bg-alt,#eef2ff)' : '';
+      updateSaBulkBar();
+    });
+  });
+
+  tbody.querySelectorAll('.sa-hrs-input').forEach(input => {
+    const orig = input.value;
+    input.addEventListener('input', () => {
+      const saveBtn = tbody.querySelector(`.sa-hrs-save[data-key="${CSS.escape(input.dataset.key)}"]`);
+      const changed = input.value !== orig;
+      if (saveBtn) {
+        saveBtn.disabled = !changed;
+        saveBtn.style.opacity = changed ? '1' : '0.35';
+        saveBtn.style.cursor  = changed ? 'pointer' : 'default';
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.sa-hrs-save').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key   = btn.dataset.key;
+      const input = tbody.querySelector(`.sa-hrs-input[data-key="${CSS.escape(key)}"]`);
+      if (!input) return;
+      const slash     = key.indexOf('/');
+      const clientId  = key.slice(0, slash);
+      const sessionId = key.slice(slash + 1);
+      btn.textContent = '…';
+      btn.disabled = true;
+      try {
+        await saveSessionHours(clientId, sessionId, input.value);
+        btn.textContent = 'Saved';
+        btn.style.opacity = '0.5';
+        setTimeout(() => { btn.textContent = 'Save'; }, 1500);
+      } catch (err) {
+        btn.textContent = 'Error';
+        console.error(err);
+        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
+      }
+    });
+  });
+
+  const shown = _adminFiltered.length;
+  const sel   = _adminSelected.size;
+  status.textContent = `${shown} session${shown !== 1 ? 's' : ''} shown${sel ? `, ${sel} selected` : ''}.`;
+  document.getElementById('saSelectAll').checked = false;
+  updateSaBulkBar();
+}
+
+function updateSaBulkBar() {
+  const bar   = document.getElementById('saBulkBar');
+  const count = document.getElementById('saBulkCount');
+  const n = _adminSelected.size;
+  if (n > 0) {
+    bar.style.display = 'flex';
+    count.textContent = `${n} session${n !== 1 ? 's' : ''} selected`;
+  } else {
+    bar.style.display = 'none';
+  }
+  // keep status line in sync
+  const status = document.getElementById('saStatus');
+  if (status && _adminFiltered.length) {
+    const shown = _adminFiltered.length;
+    status.textContent = `${shown} session${shown !== 1 ? 's' : ''} shown${n ? `, ${n} selected` : ''}.`;
+  }
+}
+
+async function saveSessionHours(clientId, sessionId, hours) {
+  const val = String(hours).trim();
+  await updateDoc(doc(db, 'clients', clientId, 'sessions', sessionId), { hours: val });
+  const s = _adminSessions.find(s => s._clientId === clientId && s._sessionId === sessionId);
+  if (s) s.hours = val;
+}
+
+async function bulkApplyGuarantor() {
+  const newGuarantor = document.getElementById('saBulkGuarantor').value;
+  if (!newGuarantor) { alert('Please choose a guarantor to apply.'); return; }
+  if (!_adminSelected.size) return;
+
+  const applyBtn = document.getElementById('saBulkApplyBtn');
+  applyBtn.disabled = true;
+  applyBtn.textContent = 'Saving…';
+
+  try {
+    const keys = [..._adminSelected];
+    const CHUNK = 400;
+    for (let i = 0; i < keys.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      keys.slice(i, i + CHUNK).forEach(key => {
+        const slash = key.indexOf('/');
+        const clientId  = key.slice(0, slash);
+        const sessionId = key.slice(slash + 1);
+        batch.update(doc(db, 'clients', clientId, 'sessions', sessionId), { rxGuarantor: newGuarantor });
+      });
+      await batch.commit();
+    }
+
+    // Update in-memory data so re-filter reflects changes immediately
+    keys.forEach(key => {
+      const slash = key.indexOf('/');
+      const clientId  = key.slice(0, slash);
+      const sessionId = key.slice(slash + 1);
+      const s = _adminSessions.find(s => s._clientId === clientId && s._sessionId === sessionId);
+      if (s) s.rxGuarantor = newGuarantor;
+    });
+
+    _adminSelected.clear();
+    document.getElementById('saSelectAll').checked = false;
+    applySessionAdminFilter();
+  } catch (err) {
+    alert('Error: ' + err.message);
+    console.error(err);
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.textContent = 'Apply';
+  }
 }
 

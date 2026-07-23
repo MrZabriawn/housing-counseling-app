@@ -33,6 +33,7 @@
         <select id="filterStatus">
           <option value="">All Active Statuses</option>
           <option value="needs_scope">Needs Scope</option>
+          <option value="waitlisted">Waitlisted</option>
           <option value="er_review">ER Review</option>
           <option value="repair_ready">Repair Ready</option>
           <option value="complete">Complete</option>
@@ -67,8 +68,7 @@
             <th>Client</th>
             <th>AMI</th>
             <th>Assistance Type</th>
-            <th>Est. Budget</th>
-            <th>Est. Days</th>
+            <th>Address</th>
             <th>Score</th>
             <th>Days Waiting</th>
             <th>Status</th>
@@ -77,10 +77,36 @@
           </tr>
         </thead>
         <tbody id="higBody">
-          <tr><td colspan="11" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
+          <tr><td colspan="10" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
+
+    <!-- Waitlisted — separate section, sorted by intake date -->
+    <div id="waitlistedSection" class="hidden" style="margin-top:1.5rem;">
+      <h3 style="font-size:0.95rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">
+        Waitlisted — In Order of Intake
+      </h3>
+      <div class="card" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:2.5rem;">#</th>
+              <th>Client</th>
+              <th>AMI</th>
+              <th>Assistance Type</th>
+              <th>Address</th>
+              <th>Days Waiting</th>
+              <th>Documents</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="waitlistedBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 
   <!-- Edit Modal -->
@@ -108,17 +134,10 @@
           <textarea id="editHigScope" rows="3"></textarea>
         </div>
         <div class="form-group">
-          <label for="editHigBudget">Estimated Budget ($)</label>
-          <input type="number" id="editHigBudget" min="0" step="1">
-        </div>
-        <div class="form-group">
-          <label for="editHigDays">Est. Time to Completion (days)</label>
-          <input type="number" id="editHigDays" min="1" step="1">
-        </div>
-        <div class="form-group">
           <label for="editHigStatus">Status</label>
           <select id="editHigStatus">
             <option value="needs_scope">Needs Scope</option>
+            <option value="waitlisted">Waitlisted</option>
             <option value="er_review">ER Review</option>
             <option value="repair_ready">Repair Ready</option>
             <option value="complete">Complete</option>
@@ -166,6 +185,28 @@
             <button type="button" id="unlinkHigFolderBtn" class="btn btn-secondary btn-sm hidden">Unlink</button>
           </div>
         </div>
+        <!-- Qrew job link -->
+        <div class="form-group full-width">
+          <label>Qrew Job</label>
+          <div id="qrewLinkedBar" style="display:none;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <span id="qrewJobCodeDisplay" style="font-weight:700;font-size:0.8125rem;font-family:monospace;color:var(--primary);"></span>
+            <a id="qrewJobOpenLink" href="#" target="_blank" class="btn btn-secondary btn-sm">Open in Qrew →</a>
+            <button type="button" id="unlinkQrewBtn" class="btn btn-secondary btn-sm">Unlink</button>
+          </div>
+          <div id="qrewLinkInputs" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+            <div style="flex:2;min-width:170px;">
+              <label for="editQrewJobId" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job ID (doc ID)</label>
+              <input type="text" id="editQrewJobId" placeholder="e.g. 4sR2VNPH4Cbx2zleXYNX" style="font-family:monospace;font-size:0.78rem;">
+            </div>
+            <div style="flex:1;min-width:90px;">
+              <label for="editQrewJobCode" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job Code</label>
+              <input type="text" id="editQrewJobCode" placeholder="e.g. BAL001">
+            </div>
+            <button type="button" id="linkQrewBtn" class="btn btn-secondary btn-sm" style="align-self:flex-end;margin-bottom:1px;">Link</button>
+          </div>
+          <div id="qrewSyncMsg" style="font-size:0.72rem;margin-top:0.35rem;min-height:1em;"></div>
+        </div>
+
         <div class="form-group full-width">
           <label for="editHigNotes">Notes</label>
           <textarea id="editHigNotes" rows="2"></textarea>

@@ -56,6 +56,7 @@
     <div class="page-tabs">
       <button class="page-tab active" data-tab="clients-panel">Counseling Log</button>
       <button class="page-tab"        data-tab="metrics-panel">Metrics</button>
+      <button class="page-tab ed-only hidden" data-tab="session-admin-panel">Session Admin</button>
     </div>
 
     <!-- ══ Counseling Log panel (default) ══════════════════════════════════ -->
@@ -78,6 +79,10 @@
       <div class="stat-card">
         <div class="stat-label">Outcome Value</div>
         <div class="stat-value" id="statDollars">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Unique Households</div>
+        <div class="stat-value" id="statHouseholds">—</div>
       </div>
     </div>
 
@@ -359,6 +364,81 @@
     </div>
   </div>
 
+
+  <!-- ══ Session Admin panel ══════════════════════════════════════════════ -->
+  <div id="session-admin-panel" class="page-panel" style="padding-top:0.25rem;">
+
+    <!-- Filter bar -->
+    <div class="filter-card" style="margin-bottom:1rem;">
+      <div style="display:flex;gap:0.65rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;min-width:155px;">
+          <label>Counselor</label>
+          <select id="saFCounselor"><option value="">— any —</option></select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:160px;position:relative;">
+          <label>Guarantor</label>
+          <div style="position:relative;">
+            <button type="button" id="saGuarantorBtn" style="width:100%;text-align:left;background:var(--input-bg,#fff);border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem 0.6rem;font-size:0.875rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
+              <span id="saGuarantorLabel" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">— any —</span>
+              <span style="flex-shrink:0;color:var(--text-muted);">▾</span>
+            </button>
+            <div id="saGuarantorPanel" style="display:none;position:absolute;top:calc(100% + 2px);left:0;z-index:200;background:var(--bg,#fff);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 14px rgba(0,0,0,0.12);min-width:170px;padding:0.3rem 0;">
+              <!-- populated by JS -->
+            </div>
+          </div>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Date From</label>
+          <input type="date" id="saFDateFrom">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Date To</label>
+          <input type="date" id="saFDateTo">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+          <label>Client</label>
+          <input type="text" id="saFClient" placeholder="Search name…">
+        </div>
+        <button id="saLoadBtn" class="btn btn-secondary btn-sm">Load Sessions</button>
+        <button id="saFilterBtn" class="btn btn-primary btn-sm" style="display:none">Apply Filter</button>
+      </div>
+    </div>
+
+    <p id="saStatus" style="color:var(--text-muted);font-size:0.875rem;margin-bottom:0.75rem;">
+      Click "Load Sessions" to fetch all records.
+    </p>
+
+    <!-- Bulk action bar -->
+    <div id="saBulkBar" style="display:none;background:var(--primary);color:#fff;border-radius:var(--radius);padding:0.55rem 1rem;margin-bottom:0.75rem;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+      <span id="saBulkCount" style="font-weight:600;font-size:0.875rem;flex-shrink:0;"></span>
+      <span style="font-size:0.875rem;flex-shrink:0;">Set guarantor:</span>
+      <select id="saBulkGuarantor" style="border-radius:var(--radius);padding:0.3rem 0.5rem;font-size:0.875rem;border:none;flex-shrink:0;">
+        <option value="">— choose —</option>
+      </select>
+      <button id="saBulkApplyBtn" class="btn btn-sm" style="background:#fff;color:var(--primary);font-weight:700;flex-shrink:0;">Apply</button>
+      <button id="saBulkClearBtn" class="btn btn-sm" style="background:rgba(255,255,255,0.18);color:#fff;border:1px solid rgba(255,255,255,0.4);flex-shrink:0;">Clear selection</button>
+    </div>
+
+    <!-- Table -->
+    <div id="saTableWrap" style="display:none;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr>
+            <th style="width:2.2rem;text-align:center;padding:0.4rem 0.4rem;border-bottom:2px solid var(--border);">
+              <input type="checkbox" id="saSelectAll" title="Select / deselect all visible">
+            </th>
+            <th id="saThDate"      style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);white-space:nowrap;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);cursor:pointer;user-select:none;">Date</th>
+            <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Client</th>
+            <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Counselor</th>
+            <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Rx #</th>
+            <th id="saThGuarantor" style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);cursor:pointer;user-select:none;">Guarantor</th>
+            <th style="padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);text-align:right;">Hrs</th>
+          </tr>
+        </thead>
+        <tbody id="saBody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <script type="module" src="js/clients.js"></script>
 </body>

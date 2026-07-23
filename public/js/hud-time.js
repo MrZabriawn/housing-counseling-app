@@ -753,7 +753,7 @@ async function loadEdCounselors() {
     const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const all = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(c => c.active !== false);
+      .filter(c => c.active !== false && c.isCounselor !== false);
     // Put the ED's own entry first so their tab is the default
     _edCounselors = [
       ...all.filter(c => c.id === _myId),

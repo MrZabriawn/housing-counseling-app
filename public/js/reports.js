@@ -23,7 +23,7 @@ export async function initCdbgReports(user, profile) {
   try {
     const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const sel  = document.getElementById('reportCounselor');
-    snap.docs.filter(d => d.data().active !== false).forEach(d => {
+    snap.docs.filter(d => d.data().active !== false && d.data().isCounselor !== false).forEach(d => {
       const o = document.createElement('option');
       o.value = d.data().name; o.textContent = d.data().name;
       sel.appendChild(o);
@@ -389,7 +389,7 @@ function renderClientDetail(allRows, unique) {
           return `<tr>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:right;color:var(--text-muted);">${i + 1}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(isDemoMode() ? demoClientName(r._clientId) : (r.clientName || '—'))}</td>
-            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;white-space:nowrap;${!r.streetAddress ? 'background:#fff5f5;color:var(--danger);font-weight:700;' : ''}">${(() => { const s = r.streetAddress || ''; const c = r.city || ''; const z = r.zipCode || ''; if (!s && !c && !z) return 'No Address'; const line2 = [c, z].filter(Boolean).join(' '); return line2 ? `${esc(s)}<br>${esc(line2)}` : esc(s); })()}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;white-space:nowrap;${!r.streetAddress ? 'background:#fff5f5;color:var(--danger);font-weight:700;' : ''}">${(() => { const s = r.streetAddress || ''; const c = r.city || ''; const z = r.zipCode || ''; if (!s && !c && !z) return 'No Address'; const line2 = [c, z].filter(Boolean).join(' '); return line2 ? `${esc(titleCase(s))}<br>${esc(titleCase(c))} ${esc(z)}` : esc(titleCase(s)); })()}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${esc(r.counselor || '—')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${entry.sessions.join(', ')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.75rem;font-weight:700;color:${srcColor};">${src}</td>

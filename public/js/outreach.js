@@ -173,7 +173,7 @@ async function loadCounselorOptions() {
     const selCnv = document.getElementById('convertCounselor');
     const selWs  = document.getElementById('wsWorkshopCounselor');
     const talSel = document.getElementById('talStaffSelect');
-    const active = snap.docs.filter(d => d.data().active !== false);
+    const active = snap.docs.filter(d => d.data().active !== false && d.data().isCounselor !== false);
 
     // Counselor-only dropdowns (sessions, calls, etc.)
     active

@@ -291,6 +291,7 @@ tbody tr.clickable-row { cursor: pointer; }
 .badge-yellow      { background: #fff8e1; color: #e65100; }
 .badge-green       { background: #e8f5e9; color: #1b5e20; }
 .badge-gray        { background: #f3f4f6; color: #57606a; }
+.badge-purple      { background: #f3e8ff; color: #6b21a8; }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 .modal-overlay {

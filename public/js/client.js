@@ -176,7 +176,7 @@ async function loadSessions() {
   const snap = await getDocs(
     query(collection(db, 'clients', clientId, 'sessions'), orderBy('date', 'desc'))
   );
-  _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
   renderSessionsTable(_sessions);
 }
 
@@ -756,6 +756,25 @@ function wireClientForm() {
     if (e.target.id === 'finMonthsSinceLate') updateLastLateDisplay();
   });
 
+  // Delete Client button
+  document.getElementById('deleteClientBtn').addEventListener('click', async () => {
+    const name = _client?.clientName || 'this client';
+    if (!confirm(`Delete ${name}?\n\nThey will be hidden from the counseling log and statistics. The record is preserved and can be restored by an ED in Settings.`)) return;
+    try {
+      const deletedBy = _profile?.name || _user?.email || 'Unknown';
+      await updateDoc(doc(db, 'clients', _client.id), {
+        deleted:           true,
+        deletedAt:         serverTimestamp(),
+        deletedBy,
+        deletedClientName: name,
+      });
+      window.location.href = 'clients.html';
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+      console.error(err);
+    }
+  });
+
   // Close File button
   document.getElementById('closeFileBtn').addEventListener('click', () => {
     document.getElementById('closureDate').value         = new Date().toISOString().split('T')[0];
@@ -863,9 +882,9 @@ async function saveClient(msgId = 'clientSaveMsg') {
       driveFolderName:   _driveFolder?.name || '',
       driveFolderUrl:    _driveFolder?.url  || '',
       // Intake — Contact
-      streetAddress:     document.getElementById('streetAddress').value.trim(),
-      city:              document.getElementById('city').value.trim(),
-      county:            document.getElementById('county').value.trim(),
+      streetAddress:     toTitleCase(document.getElementById('streetAddress').value.trim()),
+      city:              toTitleCase(document.getElementById('city').value.trim()),
+      county:            toTitleCase(document.getElementById('county').value.trim()),
       dateOfBirth:       document.getElementById('dateOfBirth').value,
       ssn:               canViewSSN() ? readSsnField('ssn') : (_client.ssn || ''),
       email:             document.getElementById('email').value.trim(),
@@ -947,7 +966,7 @@ function fmtMoney(val) {
 function renderSessionsTable(sessions) {
   const tbody = document.getElementById('sessionsBody');
   if (!sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-muted)">No sessions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No sessions yet.</td></tr>';
     return;
   }
 
@@ -955,7 +974,8 @@ function renderSessionsTable(sessions) {
     <tr>
       <td style="white-space:nowrap">${fmtDate(s.date)}</td>
       <td>${escHtml(s.counselor || '—')}</td>
-      <td>${s.rxNumber ? escHtml(s.rxNumber) + (s.rxGuarantor ? `<br><span style="font-size:0.75rem;color:var(--text-muted);">${escHtml(s.rxGuarantor)}</span>` : '') : '—'}</td>
+      <td>${escHtml(s.rxNumber || '—')}</td>
+      <td>${escHtml(s.rxGuarantor || '—')}</td>
       <td style="text-align:right">${s.hours || '—'}</td>
       <td>${escHtml(s.caseStatus || '—')}</td>
       <td class="session-notes" title="${escHtml(s.notes || '')}">${escHtml(s.notes || '—')}</td>
@@ -1242,25 +1262,26 @@ async function saveSession() {
 
 async function deleteSession() {
   if (!_editingSessionId) return;
-  if (!confirm('Delete this session? This cannot be undone.')) return;
+  if (!confirm('Remove this session? It will be hidden from the session history but preserved in records. An ED can restore it from Settings.')) return;
 
   const delBtn = document.getElementById('sessionModalDelete');
   delBtn.disabled = true;
-  delBtn.textContent = 'Deleting…';
+  delBtn.textContent = 'Removing…';
 
   try {
-    // Delete linked HUD entry first (best-effort)
-    const session = _sessions.find(s => s.id === _editingSessionId);
-    if (session?.hudEventId) {
-      try { await deleteDoc(doc(db, 'hudEvents', session.hudEventId)); } catch (_) {}
-    }
-
-    await deleteDoc(doc(db, 'clients', clientId, 'sessions', _editingSessionId));
+    const session  = _sessions.find(s => s.id === _editingSessionId);
+    const deletedBy = _profile?.name || _user?.email || 'Unknown';
+    await updateDoc(doc(db, 'clients', clientId, 'sessions', _editingSessionId), {
+      deleted:    true,
+      deletedAt:  serverTimestamp(),
+      deletedBy,
+      deletedClientName: _client?.clientName || '',
+    });
     await refreshClientDenormalized();
     closeSessionModal();
     await loadSessions();
   } catch (err) {
-    alert('Delete failed: ' + err.message);
+    alert('Remove failed: ' + err.message);
   } finally {
     delBtn.disabled = false;
     delBtn.textContent = 'Delete Session';
@@ -1272,7 +1293,7 @@ async function refreshClientDenormalized() {
   const snap = await getDocs(
     query(collection(db, 'clients', clientId, 'sessions'), orderBy('date', 'asc'))
   );
-  const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
 
   const sessionCount      = sessions.length;
   const totalOutcomeValue = sessions.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0);
@@ -1576,7 +1597,6 @@ async function loadRxNumbers() {
   } catch (_) {
     _rxDocs = [];
   }
-  renderRxPanel();
 }
 
 function renderRxPanel() {

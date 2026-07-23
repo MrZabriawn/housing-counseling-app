@@ -9,7 +9,7 @@ import {
   query, where, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const DEFAULTS = { amiWeight: 50, budgetWeight: 15, timeWeight: 15, waitTimeWeight: 20 };
+const DEFAULTS = { amiWeight: 50, waitTimeWeight: 50 };
 const _sessionMonthCache = new Map(); // "YYYY-MM" → Set<clientId>
 
 requireED(async (user, profile) => {
@@ -21,6 +21,8 @@ requireED(async (user, profile) => {
   await loadWeights();
   await loadRates();
   await loadDemoPasscode();
+  loadDeletedClients();
+  loadDeletedSessions();
 
   // Add staff member
   document.getElementById('addCounselorBtn').addEventListener('click', addCounselor);
@@ -1648,10 +1650,8 @@ function escAttr(str) {
 async function loadWeights() {
   const snap = await getDoc(doc(db, 'config', 'higWeights'));
   const saved = snap.exists() ? snap.data() : DEFAULTS;
-  setSlider('wAmi',    'wAmiVal',    saved.amiWeight      ?? DEFAULTS.amiWeight);
-  setSlider('wBudget', 'wBudgetVal', saved.budgetWeight   ?? DEFAULTS.budgetWeight);
-  setSlider('wTime',   'wTimeVal',   saved.timeWeight     ?? DEFAULTS.timeWeight);
-  setSlider('wWait',   'wWaitVal',   saved.waitTimeWeight ?? DEFAULTS.waitTimeWeight);
+  setSlider('wAmi',  'wAmiVal',  saved.amiWeight      ?? DEFAULTS.amiWeight);
+  setSlider('wWait', 'wWaitVal', saved.waitTimeWeight ?? DEFAULTS.waitTimeWeight);
 }
 
 async function saveWeights() {
@@ -1662,10 +1662,8 @@ async function saveWeights() {
   msgEl.classList.add('hidden');
   try {
     await setDoc(doc(db, 'config', 'higWeights'), {
-      amiWeight:      parseInt(document.getElementById('wAmi').value,    10),
-      budgetWeight:   parseInt(document.getElementById('wBudget').value, 10),
-      timeWeight:     parseInt(document.getElementById('wTime').value,   10),
-      waitTimeWeight: parseInt(document.getElementById('wWait').value,   10),
+      amiWeight:      parseInt(document.getElementById('wAmi').value,  10),
+      waitTimeWeight: parseInt(document.getElementById('wWait').value, 10),
     });
     showMsg(msgEl, 'Weights saved.', true);
   } catch (err) {
@@ -2093,4 +2091,160 @@ function renderLegacyLog(rows) {
       </table>
     </div>
   `;
+}
+
+// ── Deleted Clients ───────────────────────────────────────────────────────────
+async function loadDeletedClients() {
+  const wrap = document.getElementById('deletedClientsWrap');
+  if (!wrap) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'clients'), where('deleted', '==', true)));
+    if (snap.empty) {
+      wrap.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No deleted clients.</p>';
+      return;
+    }
+    const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.deletedAt?.toMillis?.() || 0) - (a.deletedAt?.toMillis?.() || 0));
+    renderDeletedClients(clients);
+  } catch (err) {
+    wrap.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
+function renderDeletedClients(clients) {
+  const wrap = document.getElementById('deletedClientsWrap');
+  const TH = 'style="text-align:left;padding:0.35rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
+  const TD = 'style="padding:0.35rem 0.6rem;border-bottom:1px solid var(--border);font-size:0.875rem;"';
+  const fmtTs = ts => {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  wrap.innerHTML = `
+    <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.75rem;">${clients.length} deleted client${clients.length !== 1 ? 's' : ''}</p>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th ${TH}>Client Name</th>
+          <th ${TH}>Deleted By</th>
+          <th ${TH}>Deleted On</th>
+          <th ${TH}></th>
+        </tr></thead>
+        <tbody>
+          ${clients.map(c => `
+            <tr>
+              <td ${TD}><a href="client.html?id=${escAttr(c.id)}" target="_blank" style="color:var(--accent)">${escHtml(c.deletedClientName || c.clientName || c.id)}</a></td>
+              <td ${TD}>${escHtml(c.deletedBy || '—')}</td>
+              <td ${TD}>${fmtTs(c.deletedAt)}</td>
+              <td ${TD}><button class="btn btn-sm btn-secondary restore-client-btn" data-id="${escAttr(c.id)}" data-name="${escAttr(c.deletedClientName || c.clientName || '')}">Restore</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  wrap.querySelectorAll('.restore-client-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name || 'this client';
+      if (!confirm(`Restore ${name} to the counseling log?`)) return;
+      btn.disabled = true;
+      btn.textContent = 'Restoring…';
+      try {
+        await updateDoc(doc(db, 'clients', btn.dataset.id), {
+          deleted: false, deletedAt: null, deletedBy: null, deletedClientName: null,
+        });
+        await loadDeletedClients();
+      } catch (err) {
+        alert('Restore failed: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Restore';
+      }
+    });
+  });
+}
+
+// ── Deleted Sessions ──────────────────────────────────────────────────────────
+async function loadDeletedSessions() {
+  const wrap = document.getElementById('deletedSessionsWrap');
+  if (!wrap) return;
+  try {
+    const snap = await getDocs(query(collectionGroup(db, 'sessions'), where('deleted', '==', true)));
+    if (snap.empty) {
+      wrap.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No deleted sessions.</p>';
+      return;
+    }
+    const sessions = snap.docs.map(d => ({
+      _clientId:  d.ref.parent.parent.id,
+      _sessionId: d.id,
+      ...d.data(),
+    })).sort((a, b) => (b.deletedAt?.toMillis?.() || 0) - (a.deletedAt?.toMillis?.() || 0));
+    renderDeletedSessions(sessions);
+  } catch (err) {
+    wrap.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
+function renderDeletedSessions(sessions) {
+  const wrap = document.getElementById('deletedSessionsWrap');
+  const TH = 'style="text-align:left;padding:0.35rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);"';
+  const TD = 'style="padding:0.35rem 0.6rem;border-bottom:1px solid var(--border);font-size:0.875rem;"';
+  const fmtTs = ts => {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  const fmtDate = raw => {
+    if (!raw) return '—';
+    if (raw.toDate) return raw.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return raw;
+  };
+  wrap.innerHTML = `
+    <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.75rem;">${sessions.length} deleted session${sessions.length !== 1 ? 's' : ''}</p>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th ${TH}>Session Date</th>
+          <th ${TH}>Client</th>
+          <th ${TH}>Counselor</th>
+          <th ${TH}>Rx #</th>
+          <th ${TH}>Hours</th>
+          <th ${TH}>Deleted By</th>
+          <th ${TH}>Deleted On</th>
+          <th ${TH}></th>
+        </tr></thead>
+        <tbody>
+          ${sessions.map(s => `
+            <tr>
+              <td ${TD}>${fmtDate(s.date)}</td>
+              <td ${TD}><a href="client.html?id=${escAttr(s._clientId)}" target="_blank" style="color:var(--accent)">${escHtml(s.deletedClientName || s._clientId)}</a></td>
+              <td ${TD}>${escHtml(s.counselor || '—')}</td>
+              <td ${TD}>${escHtml(s.rxNumber || '—')}</td>
+              <td ${TD}>${escHtml(String(s.hours || '—'))}</td>
+              <td ${TD}>${escHtml(s.deletedBy || '—')}</td>
+              <td ${TD}>${fmtTs(s.deletedAt)}</td>
+              <td ${TD}><button class="btn btn-sm btn-secondary restore-session-btn"
+                data-client-id="${escAttr(s._clientId)}"
+                data-session-id="${escAttr(s._sessionId)}">Restore</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  wrap.querySelectorAll('.restore-session-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Restore this session to the client\'s profile?')) return;
+      btn.disabled = true;
+      btn.textContent = 'Restoring…';
+      try {
+        await updateDoc(
+          doc(db, 'clients', btn.dataset.clientId, 'sessions', btn.dataset.sessionId),
+          { deleted: false, deletedAt: null, deletedBy: null, deletedClientName: null }
+        );
+        await loadDeletedSessions();
+      } catch (err) {
+        alert('Restore failed: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Restore';
+      }
+    });
+  });
 }

@@ -179,7 +179,7 @@ requireAuth(async (user, profile) => {
 
     if (_isED) {
       _edCounselors = snap.docs
-        .filter(d => d.data().active !== false && d.id !== _myCounselorId)
+        .filter(d => d.data().active !== false && d.data().isCounselor !== false && d.id !== _myCounselorId)
         .map(d => ({ id: d.id, ...d.data() }));
     }
   } catch (_) {
