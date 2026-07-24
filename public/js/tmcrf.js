@@ -13,6 +13,7 @@ export function initTmcrf() {
   const genBtn     = document.getElementById('tmcrfGenerateBtn');
 
   let _records = [];
+  let _fees    = [];
   let _month   = '';
 
   fileInput.addEventListener('change', async () => {
@@ -27,8 +28,9 @@ export function initTmcrf() {
       fileLabel.textContent = `${file.name} — extracting…`;
       const result = await extractFromPdf(file);
       _records = result.records;
+      _fees    = result.fees;
       _month   = result.month;
-      renderPreview(_records, _month);
+      renderPreview(_records, _fees, _month);
       preview.classList.remove('hidden');
       fileLabel.textContent = file.name;
     } catch (err) {
@@ -39,7 +41,7 @@ export function initTmcrf() {
   });
 
   genBtn.addEventListener('click', () => {
-    if (_records.length) printInvoice(_records, _month);
+    if (_records.length) printInvoice(_records, _fees, _month);
   });
 }
 
@@ -53,7 +55,8 @@ async function extractFromPdf(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const lines = await extractLines(pdf);
-  return parseRecords(lines);
+  const { records, month } = parseRecords(lines);
+  return { records, month, fees: parseFees(lines) };
 }
 
 async function extractLines(pdf) {
@@ -108,12 +111,16 @@ function parseRecords(lines) {
     const line = lines[i];
     if (!line || SKIP.test(line)) continue;
 
-    // Notes line: 7-digit Rx# adjacent to ISO timestamp
-    const notesA = line.match(/(\d{7})\s+\d{4}-\d{2}-\d{2}T/);
-    const notesB = line.match(/\d{4}-\d{2}-\d{2}T.+?(\d{7})\s*$/);
-    const rx = notesA ? notesA[1] : (notesB ? notesB[1] : null);
+    // Notes line: identified by the ISO timestamp. The 7-digit Rx# is
+    // OPTIONAL — email-placed orders have a timestamp but no Rx#, and those
+    // rows must still be captured (otherwise a whole section is silently
+    // dropped and the invoice total comes up short).
+    const hasTimestamp = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(line);
+    const rxMatch = line.match(/(\d{7})\s+\d{4}-\d{2}-\d{2}T/)
+                 || line.match(/\d{4}-\d{2}-\d{2}T.+?(\d{7})\s*$/);
+    const rx = rxMatch ? rxMatch[1] : '';
 
-    if (rx && pending.name && pending.date && pending.charge !== null) {
+    if (hasTimestamp && pending.name && pending.date && pending.charge !== null) {
       records.push(...makeRecords(pending.name, pending.date, pending.charge, rx));
       pending.name = null; pending.date = null; pending.charge = null;
       continue;
@@ -167,16 +174,58 @@ function makeRecords(nameStr, dateStr, charge, rxNum) {
   return [{ rxNum, date, firstName: toTitleCase(firstPart), lastName, type: 'Single', amount: charge.toFixed(2) }];
 }
 
+// ── Adjustment / fee extraction ───────────────────────────────────────────────
+// The GRAND TOTAL of the Current Charges Detail covers the credit reports plus
+// the third-party fees baked into each line price. Positive "Adjustment" rows in
+// the ADJUSTMENTS DETAILS section (e.g. the Credco Carbon Offset Fee) are billed
+// on top of that, so they must be added for the invoice to match the Total Due.
+// Payments are credits (parenthesised, negative) and are deliberately excluded.
+
+function parseFees(lines) {
+  const startIdx = lines.findIndex(l => /ADJUSTMENTS DETAILS/i.test(l));
+  if (startIdx === -1) return [];
+
+  let endIdx = lines.findIndex((l, i) => i > startIdx && /^Totals\s*:/i.test(l));
+  if (endIdx === -1) endIdx = lines.length;
+
+  const fees = [];
+  for (let i = startIdx + 1; i < endIdx; i++) {
+    // "Adjustment 01 Jul 2026 Credco Carbon Offset Fee - Jun 26 $5.00 $0.00 $5.00"
+    const m = lines[i].match(
+      /^Adjustment\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+(.+?)\s+(\(?)\$([\d,]+\.\d{2})\)?\s+\$/
+    );
+    if (!m) continue;
+    if (m[3] === '(') continue;                         // parenthesised = credit, skip
+    fees.push({
+      date:   fmtAdjDate(m[1]),
+      desc:   m[2].trim(),
+      amount: parseFloat(m[4].replace(/,/g, '')).toFixed(2)
+    });
+  }
+  return fees;
+}
+
+function fmtAdjDate(dstr) {
+  // "01 Jul 2026" → "07/01/2026"; falls back to the raw string if unrecognised.
+  const m = dstr.match(/(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{4})/);
+  if (!m) return dstr;
+  const mi = MONTH_NAMES.findIndex(n => n.toLowerCase().startsWith(m[2].toLowerCase()));
+  if (mi === -1) return dstr;
+  return `${String(mi + 1).padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`;
+}
+
 // ── Preview table ─────────────────────────────────────────────────────────────
 
-function renderPreview(records, month) {
+function renderPreview(records, fees, month) {
   document.getElementById('tmcrfMonthLabel').textContent  = month || '(month not detected)';
-  document.getElementById('tmcrfCountLabel').textContent  = `${records.length} line item${records.length !== 1 ? 's' : ''}`;
+  const itemCount = records.length + fees.length;
+  document.getElementById('tmcrfCountLabel').textContent  = `${itemCount} line item${itemCount !== 1 ? 's' : ''}`;
 
-  const total = records.reduce((s, r) => s + parseFloat(r.amount), 0);
+  const total = records.reduce((s, r) => s + parseFloat(r.amount), 0)
+              + fees.reduce((s, f) => s + parseFloat(f.amount), 0);
   document.getElementById('tmcrfTotal').textContent = `$${total.toFixed(2)}`;
 
-  document.getElementById('tmcrfPreviewBody').innerHTML = records.map(r => `<tr>
+  const recRows = records.map(r => `<tr>
     <td>${esc(r.rxNum)}</td>
     <td>${esc(r.date)}</td>
     <td>${esc(r.firstName)}</td>
@@ -184,14 +233,24 @@ function renderPreview(records, month) {
     <td>${esc(r.type)}</td>
     <td style="text-align:right;">$${esc(r.amount)}</td>
   </tr>`).join('');
+
+  const feeRows = fees.map(f => `<tr>
+    <td></td>
+    <td>${esc(f.date)}</td>
+    <td colspan="3">${esc(f.desc)}</td>
+    <td style="text-align:right;">$${esc(f.amount)}</td>
+  </tr>`).join('');
+
+  document.getElementById('tmcrfPreviewBody').innerHTML = recRows + feeRows;
 }
 
 // ── Invoice print ─────────────────────────────────────────────────────────────
 
-function printInvoice(records, month) {
-  const total     = records.reduce((s, r) => s + parseFloat(r.amount), 0);
+function printInvoice(records, fees, month) {
+  const total     = records.reduce((s, r) => s + parseFloat(r.amount), 0)
+                  + fees.reduce((s, f) => s + parseFloat(f.amount), 0);
   const MIN_ROWS  = 30;
-  const blankRows = Math.max(0, MIN_ROWS - records.length);
+  const blankRows = Math.max(0, MIN_ROWS - records.length - fees.length);
   const logoUrl   = `${window.location.origin}/img/logo.png`;
 
   const dataRows = records.map(r => `
@@ -202,6 +261,14 @@ function printInvoice(records, month) {
       <td>${esc(r.lastName)}</td>
       <td>${esc(r.type)}</td>
       <td>$${esc(r.amount)}</td>
+    </tr>`).join('');
+
+  const feeRows = fees.map(f => `
+    <tr>
+      <td></td>
+      <td>${esc(f.date)}</td>
+      <td colspan="3">${esc(f.desc)}</td>
+      <td>$${esc(f.amount)}</td>
     </tr>`).join('');
 
   const emptyRows = `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`.repeat(blankRows);
@@ -239,6 +306,10 @@ function printInvoice(records, month) {
   .sig-label { font-size: 9.5pt; margin-top: 3px; }
   .date-line { margin-top: 0.18in; font-size: 9.5pt; }
   .footnote { margin-top: 0.15in; font-size: 8.5pt; color: #444; }
+  .grant-tag {
+    margin-top: 0.3in; text-align: center;
+    font-size: 20pt; font-weight: bold; letter-spacing: 0.5px;
+  }
   .print-btn {
     display: block; margin: 0.25in auto 0; padding: 8px 24px;
     font-size: 11pt; cursor: pointer; background: #1a5276; color: #fff;
@@ -277,6 +348,7 @@ function printInvoice(records, month) {
   </thead>
   <tbody>
     ${dataRows.replace(/<tr>/g, '<tr class="data-row">')}
+    ${feeRows.replace(/<tr>/g, '<tr class="data-row">')}
     ${emptyRows.replace(/<tr>/g, '<tr class="blank-row">')}
     <tr class="total-row">
       <td colspan="5" style="text-align:right;">Total</td>
@@ -294,6 +366,8 @@ function printInvoice(records, month) {
 </div>
 
 <p class="footnote">* Single / Couple</p>
+
+<p class="grant-tag">HUD FY25 Grant</p>
 
 <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
 </body>
