@@ -289,6 +289,50 @@
       </div>
     </div>
 
+    <!-- AMI Income Limits Chart -->
+    <div class="card" style="max-width:940px;margin-top:1.25rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+        <div class="card-title" style="margin:0;">HUD AMI Income Limits</div>
+        <button id="toggleAmiChartBtn" class="btn btn-secondary btn-sm">Show Chart</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-top:0.5rem;margin-bottom:0;">
+        Income limits used to auto-calculate AMI % from client financial data. Update annually when HUD publishes new limits for each county.
+      </p>
+      <div id="amiChartWrap" class="hidden" style="margin-top:1.25rem;">
+        <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+          <label for="amiCountySel" style="font-size:0.875rem;font-weight:600;">County:</label>
+          <select id="amiCountySel" style="font-size:0.875rem;padding:0.35rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="Allegheny">Allegheny</option>
+            <option value="Beaver">Beaver</option>
+            <option value="Lawrence">Lawrence</option>
+            <option value="Mercer">Mercer</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="amiChartTable" style="border-collapse:collapse;font-size:0.8125rem;width:100%;min-width:660px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);white-space:nowrap;">AMI %</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">1 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">2 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">3 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">4 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">5 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">6 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">7 Person</th>
+                <th style="text-align:right;padding:0.45rem 0.6rem;border-bottom:2px solid var(--border);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">8 Person</th>
+              </tr>
+            </thead>
+            <tbody id="amiChartBody"></tbody>
+          </table>
+        </div>
+        <p id="amiLimitsMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.75rem;"></p>
+        <div class="form-actions" style="margin-top:1rem;">
+          <button id="saveAmiLimitsBtn" class="btn btn-primary">Save Limits</button>
+        </div>
+      </div>
+    </div>
+
     <!-- HIG Weights -->
     <div class="card" style="max-width:640px;margin-top:1.25rem;">
       <div class="card-title">HIG Waitlist Priority Weights</div>

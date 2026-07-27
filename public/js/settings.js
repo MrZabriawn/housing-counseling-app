@@ -82,6 +82,17 @@ requireED(async (user, profile) => {
   // Legacy counseling log
   document.getElementById('loadLegacyLogBtn').addEventListener('click', loadLegacyCounselingLog);
   document.getElementById('legacyLogSearch').addEventListener('input', filterLegacyLog);
+
+  // AMI Income Limits chart
+  await loadAmiLimits();
+  document.getElementById('toggleAmiChartBtn').addEventListener('click', () => {
+    const wrap = document.getElementById('amiChartWrap');
+    const btn  = document.getElementById('toggleAmiChartBtn');
+    const hidden = wrap.classList.toggle('hidden');
+    btn.textContent = hidden ? 'Show Chart' : 'Hide Chart';
+  });
+  document.getElementById('amiCountySel').addEventListener('change', e => renderAmiTable(e.target.value));
+  document.getElementById('saveAmiLimitsBtn').addEventListener('click', saveAmiLimits);
 });
 
 // ── Staff & Roles ─────────────────────────────────────────────────────────────
@@ -593,12 +604,14 @@ async function applyTitleCaseToClients() {
 
 // ── AMI Normalization ─────────────────────────────────────────────────────────
 
-const CANONICAL_AMI = new Set(['Extremely Low', 'Very Low', 'Low', 'Moderate', 'Non Low-Moderate']);
+const CANONICAL_AMI = new Set(['Extremely Low Income', 'Very Low Income', 'Low Income', 'Non Low-Moderate']);
 
 function resolveAmi(val) {
   if (val == null || val === '') return null;
-  if (CANONICAL_AMI.has(val)) return null; // already correct
-  // Try numeric / amiCategory first
+  // Numeric values are the new canonical format — already correct
+  if (typeof val === 'number' || (typeof val === 'string' && !isNaN(Number(val)) && Number(val) > 0)) return null;
+  if (CANONICAL_AMI.has(val)) return null; // already correct label
+  // Try amiCategory (handles legacy strings)
   const cat = amiCategory(val);
   if (CANONICAL_AMI.has(cat)) return cat;
   // Try the import map (handles ranges like "51-80%")
@@ -1632,6 +1645,69 @@ async function applyAutoLinks() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Apply Links';
+  }
+}
+
+// ── AMI Income Limits Chart ───────────────────────────────────────────────────
+
+const AMI_TIERS    = ['30', '50', '60', '80', '100', '120'];
+const AMI_COUNTIES = ['Allegheny', 'Beaver', 'Lawrence', 'Mercer'];
+
+let _amiLimitsData = {};
+
+async function loadAmiLimits() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'amiLimits'));
+    _amiLimitsData = snap.exists() ? (snap.data().counties || {}) : {};
+  } catch (_) {
+    _amiLimitsData = {};
+  }
+  renderAmiTable(document.getElementById('amiCountySel').value);
+}
+
+function renderAmiTable(county) {
+  const tbody    = document.getElementById('amiChartBody');
+  const countyData = _amiLimitsData[county] || {};
+  const rowTdStyle = 'style="padding:0.4rem 0.6rem;border-bottom:1px solid var(--border);"';
+  const labelTdStyle = 'style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap;"';
+  const inpStyle = 'style="width:82px;text-align:right;font-size:0.8125rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--input-bg,#fff);"';
+
+  tbody.innerHTML = AMI_TIERS.map(tier => {
+    const vals = countyData[tier] || Array(8).fill('');
+    const inputs = vals.map((v, i) =>
+      `<td ${rowTdStyle}><input type="number" min="0" step="1" ${inpStyle}
+         id="ami_${tier}_${i}" value="${v || ''}" placeholder="0"></td>`
+    ).join('');
+    return `<tr><td ${labelTdStyle}>${tier}%</td>${inputs}</tr>`;
+  }).join('');
+}
+
+async function saveAmiLimits() {
+  const btn    = document.getElementById('saveAmiLimitsBtn');
+  const msgEl  = document.getElementById('amiLimitsMsg');
+  const county = document.getElementById('amiCountySel').value;
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  msgEl.classList.add('hidden');
+
+  const countyData = {};
+  for (const tier of AMI_TIERS) {
+    countyData[tier] = Array.from({ length: 8 }, (_, i) => {
+      const v = parseInt(document.getElementById(`ami_${tier}_${i}`)?.value || '0', 10);
+      return isNaN(v) ? 0 : v;
+    });
+  }
+
+  _amiLimitsData[county] = countyData;
+
+  try {
+    await setDoc(doc(db, 'settings', 'amiLimits'), { counties: _amiLimitsData });
+    showMsg(msgEl, `${county} County limits saved.`, true);
+  } catch (err) {
+    showMsg(msgEl, 'Save failed: ' + err.message, false);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Limits';
   }
 }
 

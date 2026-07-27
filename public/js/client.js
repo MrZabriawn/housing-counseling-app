@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js';
 import { isDemoMode, demoClientName } from './demo-mode.js';
-import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel, amiCategory } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
@@ -21,6 +21,7 @@ let _isED             = false;
 let _allUsers         = [];   // { uid, name } from users/{uid}
 let _driveFolder      = null;
 let _editingSessionId = null; // null = new session, else existing id
+let _amiLimits        = null; // counties → tier → [8 income limits]
 
 // ── Billing Type → report routing ─────────────────────────────────────────────
 // billingType is stored on the client document (not per-session) and determines
@@ -50,7 +51,7 @@ requireAuth(async (user, profile) => {
   ]);
 
   await loadClient();
-  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory()]);
+  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory(), loadAmiLimits()]);
 
   wireClientForm();
   wireSessionModal();
@@ -368,7 +369,7 @@ function wireAmiLabel(inputId, labelId) {
   if (!inp || !lbl) return;
   inp.addEventListener('input', () => {
     const v = parseFloat(inp.value);
-    lbl.textContent = isNaN(v) ? '' : amiDisplayLabel(v);
+    lbl.textContent = isNaN(v) ? '' : amiCategory(v);
   });
 }
 
@@ -379,9 +380,9 @@ function setAmiField(val) {
   const n = Number(val);
   if (val != null && val !== '' && !isNaN(n) && n > 0) {
     inp.value = n;
-    if (lbl) lbl.textContent = amiDisplayLabel(n);
+    if (lbl) lbl.textContent = amiCategory(n);
   } else if (val) {
-    if (lbl) lbl.textContent = `Legacy: ${val}`;
+    if (lbl) lbl.textContent = amiCategory(val);
   }
 }
 
@@ -2234,6 +2235,8 @@ function updateRatioSummary() {
 
   const disc = gross - housing - liabPay;
   setRatioEl('rDiscretionary', fmtMoney2(disc), disc >= 500 ? 'ok' : disc >= 0 ? 'warn' : 'bad');
+
+  updateAmiPreview(gross);
 }
 
 function updateLiquidityCalcs() {
@@ -2571,6 +2574,90 @@ function readExpFields() {
   return out;
 }
 
+async function loadAmiLimits() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'amiLimits'));
+    _amiLimits = snap.exists() ? (snap.data().counties || {}) : {};
+  } catch (_) {
+    _amiLimits = {};
+  }
+}
+
+function computeAmiFromChart() {
+  if (!_amiLimits) return null;
+  const rawCounty  = (_client?.county || '').replace(/\s*county\s*$/i, '').trim();
+  const countyKey  = Object.keys(_amiLimits).find(k => k.toLowerCase() === rawCounty.toLowerCase());
+  const countyData = countyKey ? _amiLimits[countyKey] : null;
+  if (!rawCounty || !countyData) return null;
+
+  const adults   = parseInt(document.getElementById('adultsInHousehold')?.value)   || 0;
+  const children = parseInt(document.getElementById('childrenInHousehold')?.value) || 0;
+  if (adults + children === 0) return null;
+
+  const hhSize = Math.max(1, Math.min(8, adults + children));
+  const base   = countyData['100']?.[hhSize - 1] || 0;
+  if (!base) return null;
+
+  const gross = [...document.querySelectorAll('.emp-gross')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0)
+    + [...document.querySelectorAll('.inc-amount')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+
+  if (gross <= 0) return null;
+  return Math.round((gross * 12 / base) * 100);
+}
+
+function updateAmiPreview(grossMonthly) {
+  const el   = document.getElementById('rAmiChart');
+  const note = document.getElementById('rAmiChartNote');
+  if (!el) return;
+
+  const setAmi = (text, cls, noteText) => {
+    el.textContent = text;
+    el.className   = el.className.replace(/ratio-(ok|warn|bad|neutral)/g, '').trim() + ' ' + cls;
+    if (note) note.textContent = noteText;
+  };
+
+  if (!grossMonthly || grossMonthly <= 0) {
+    setAmi('—', 'ratio-neutral', 'Enter income above');
+    return;
+  }
+  if (!_amiLimits || !Object.keys(_amiLimits).length) {
+    setAmi('—', 'ratio-neutral', 'No AMI chart in Settings');
+    return;
+  }
+
+  const rawCounty  = (_client?.county || '').replace(/\s*county\s*$/i, '').trim();
+  const countyKey  = Object.keys(_amiLimits).find(k => k.toLowerCase() === rawCounty.toLowerCase());
+  const countyData = countyKey ? _amiLimits[countyKey] : null;
+
+  if (!rawCounty || !countyData) {
+    setAmi('—', 'ratio-warn', rawCounty ? `No limits for "${rawCounty}" county` : 'County not set on intake');
+    return;
+  }
+
+  const adults   = parseInt(document.getElementById('adultsInHousehold')?.value)   || 0;
+  const children = parseInt(document.getElementById('childrenInHousehold')?.value) || 0;
+  const hhSize   = Math.max(1, Math.min(8, adults + children));
+
+  if (adults + children === 0) {
+    setAmi('—', 'ratio-warn', 'Set household size on intake tab');
+    return;
+  }
+
+  const limits100 = countyData['100'];
+  const base      = limits100 ? (limits100[hhSize - 1] || 0) : 0;
+
+  if (!base) {
+    setAmi('—', 'ratio-neutral', '100% limits not yet entered in Settings');
+    return;
+  }
+
+  const pct = Math.round((grossMonthly * 12 / base) * 100);
+  const cls = pct <= 80 ? 'ratio-ok' : pct <= 100 ? 'ratio-warn' : 'ratio-bad';
+  setAmi(pct + '%', cls, `${countyKey} Co. · ${hhSize}-person household`);
+}
+
 async function saveFinancials() {
   const btn   = document.getElementById('saveFinancialsBtn');
   const msgEl = document.getElementById('finSaveMsg');
@@ -2598,10 +2685,19 @@ async function saveFinancials() {
     };
     await updateDoc(doc(db, 'clients', clientId), data);
     Object.assign(_client, data);
-    msgEl.textContent = 'Saved.';
+
+    const calcPct = computeAmiFromChart();
+    if (calcPct !== null) {
+      await updateDoc(doc(db, 'clients', clientId), { amiPercent: calcPct });
+      _client.amiPercent = calcPct;
+      setAmiField(calcPct);
+      msgEl.textContent = `Saved. AMI updated to ${calcPct}%.`;
+    } else {
+      msgEl.textContent = 'Saved.';
+    }
     msgEl.style.color = 'var(--success, green)';
     msgEl.classList.remove('hidden');
-    setTimeout(() => msgEl.classList.add('hidden'), 2500);
+    setTimeout(() => msgEl.classList.add('hidden'), 3000);
   } catch (err) {
     msgEl.textContent = 'Save failed: ' + err.message;
     msgEl.style.color = 'var(--danger, red)';

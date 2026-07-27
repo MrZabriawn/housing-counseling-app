@@ -1,35 +1,46 @@
 export const COUNSELING_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Workshop', 'Case Management'];
 
 export const AMI_LEVELS = [
-  'Extremely Low',
-  'Low',
-  'Moderate',
-  'Non-Moderate'
+  'Extremely Low Income',
+  'Very Low Income',
+  'Low Income',
+  'Non Low-Moderate',
 ];
 
 export function amiCategory(val) {
   if (val == null || val === '') return '';
   const n = Number(val);
   if (!isNaN(n) && n > 0) {
-    if (n <= 30) return 'Extremely Low';
-    if (n <= 50) return 'Low';
-    if (n <= 80) return 'Moderate';
-    return 'Non-Moderate';
+    if (n <= 30) return 'Extremely Low Income';
+    if (n <= 50) return 'Very Low Income';
+    if (n <= 80) return 'Low Income';
+    return 'Non Low-Moderate';
   }
+  // Legacy string values stored before numeric AMI was calculated
   const s = String(val).toLowerCase().trim();
   const legacyMap = {
-    'extremely low':    'Extremely Low',
-    'very low':         'Low',
-    'low':              'Moderate',
-    'moderate':         'Non-Moderate',
-    'non low-moderate': 'Non-Moderate',
-    'non low moderate': 'Non-Moderate',
-    'non-moderate':     'Non-Moderate',
+    'extremely low':        'Extremely Low Income',
+    'extremely low income': 'Extremely Low Income',
+    'very low':             'Very Low Income',
+    'very low income':      'Very Low Income',
+    'low':                  'Very Low Income',    // old ≤50% bucket
+    'low income':           'Low Income',
+    'moderate':             'Low Income',         // old ≤80% bucket
+    'low-moderate':         'Low Income',
+    'non low-moderate':     'Non Low-Moderate',
+    'non low moderate':     'Non Low-Moderate',
+    'non-moderate':         'Non Low-Moderate',
+    'non moderate':         'Non Low-Moderate',
+    'above moderate':       'Non Low-Moderate',
   };
   return legacyMap[s] || String(val);
 }
 
+// Numeric values display as "56%"; legacy strings display as their HUD tier label
 export function amiDisplayLabel(val) {
+  if (val == null || val === '') return '—';
+  const n = Number(val);
+  if (!isNaN(n) && n > 0) return n + '%';
   return amiCategory(val);
 }
 
@@ -87,25 +98,28 @@ export function getDefaultRate(counselingType) {
   return counselingType === 'COURT' ? COURT_RATE : DEFAULT_RATE;
 }
 
-// AMI label normalization for CSV import
+// AMI label normalization for CSV import — maps common variants to HUD standard labels
 export const AMI_IMPORT_MAP = {
-  'extremely low': 'Extremely Low',
-  '<30%':          'Extremely Low',
-  '0-30%':         'Extremely Low',
-  'very low':      'Low',
-  '30-50%':        'Low',
-  '31-50%':        'Low',
-  'low income':    'Low',
-  'low':           'Moderate',
-  'low-moderate':  'Moderate',
-  'mod':           'Moderate',
-  '51-80%':        'Moderate',
-  '50-80%':        'Moderate',
-  'moderate':      'Non-Moderate',
-  'non low-moderate':    'Non-Moderate',
-  'non low moderate':    'Non-Moderate',
-  'non-moderate':        'Non-Moderate',
-  'above moderate':      'Non-Moderate',
-  '>80%':                'Non-Moderate',
-  'above 80%':           'Non-Moderate'
+  'extremely low':        'Extremely Low Income',
+  'extremely low income': 'Extremely Low Income',
+  '<30%':                 'Extremely Low Income',
+  '0-30%':                'Extremely Low Income',
+  'very low':             'Very Low Income',
+  'very low income':      'Very Low Income',
+  '30-50%':               'Very Low Income',
+  '31-50%':               'Very Low Income',
+  'low':                  'Very Low Income',
+  'low income':           'Low Income',
+  'low-moderate':         'Low Income',
+  'mod':                  'Low Income',
+  '51-80%':               'Low Income',
+  '50-80%':               'Low Income',
+  'moderate':             'Low Income',
+  'non low-moderate':     'Non Low-Moderate',
+  'non low moderate':     'Non Low-Moderate',
+  'non-moderate':         'Non Low-Moderate',
+  'non moderate':         'Non Low-Moderate',
+  'above moderate':       'Non Low-Moderate',
+  '>80%':                 'Non Low-Moderate',
+  'above 80%':            'Non Low-Moderate',
 };
