@@ -293,6 +293,10 @@ function resetForm() {
     '<div class="empty-state">Start typing to find clients.</div>';
   document.getElementById('submitError').classList.add('hidden');
 
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Log Court Appearances';
+
   renderSelected();
 
   document.getElementById('successBanner').classList.add('hidden');
