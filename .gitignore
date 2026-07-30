@@ -86,3 +86,9 @@ CMC Letter Template MC.pdf
 
 # dataconnect generated files
 .dataconnect
+
+# Generated Rx-backfill reports (contain client names/Rx — regenerate via scripts)
+scripts/old-reports-analysis.json
+scripts/rx-existence-report.json
+scripts/rx-gap-investigation.json
+scripts/rx-catalog-plan.json
