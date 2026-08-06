@@ -105,7 +105,6 @@
   <!-- CDN libraries for HUD report generation (globals required before ES module) -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -125,7 +124,6 @@
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
       <button class="reports-tab" data-tab="tab-hemap">HEMAP</button>
-      <button class="reports-tab" data-tab="tab-tmcrf">TMCRF</button>
     </div>
 
     <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
@@ -288,32 +286,19 @@
         </h3>
       </div>
       <div class="card">
-        <h3 style="font-size:0.95rem;margin-bottom:0.25rem;color:var(--primary);">
-          Court Appearance Summary
-        </h3>
-        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:1rem;">
-          Court sessions logged through the Outreach or Court Appearance tool, grouped by date and county.
-        </p>
-        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="courtReportMonth">Month</label>
-            <input type="month" id="courtReportMonth" style="max-width:160px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap;gap:0.5rem;">
+          <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="courtReportCounselor" style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Counselor</label>
+              <select id="courtReportCounselor" style="min-width:160px;font-size:0.875rem;">
+                <option value="">All Counselors</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="courtReportYear">Year</label>
-            <input type="number" id="courtReportYear" min="2000" max="2100" style="max-width:110px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="courtReportCounselor">Counselor</label>
-            <select id="courtReportCounselor" style="min-width:160px;">
-              <option value="">All Counselors</option>
-            </select>
-          </div>
-          <button id="loadCourtReportBtn" class="btn btn-secondary">Load Court Report</button>
+          <button id="loadCourtReportBtn" class="btn btn-secondary btn-sm">↺ Refresh</button>
         </div>
-        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">Month overrides Year if both are set. Leave both blank to load all time.</p>
         <div id="courtReportResult" style="font-size:0.875rem;color:var(--text-muted);">
-          Select a filter and click Load.
+          Loading…
         </div>
       </div>
 
@@ -363,8 +348,17 @@
 
       </div>
 
-      <div style="text-align:right;">
-        <button id="generateChciBtn" class="btn btn-primary" disabled>Generate Invoices</button>
+      <div style="display:flex;align-items:center;gap:1rem;justify-content:flex-end;margin-top:0.25rem;">
+        <span id="chciUploadStatus" style="font-size:0.8125rem;"></span>
+        <button id="generateChciBtn" class="btn btn-primary" disabled>Generate &amp; Save Zip</button>
+      </div>
+
+      <!-- Past report zips -->
+      <div style="margin-top:1.5rem;">
+        <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.6rem;">Past Saved Reports</p>
+        <div id="chciHistory">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+        </div>
       </div>
     </div>
 
@@ -533,63 +527,12 @@
     </div>
   </div>
 
-  <!-- ══ TMCRF tab ══════════════════════════════════════════════════════════ -->
-  <div class="reports-panel" id="tab-tmcrf">
-    <div class="card" style="max-width:900px;">
-      <div class="card-title">Credit Report Reimbursement (TMCRF)</div>
-      <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1.25rem;">
-        Upload the CoreLogic Credco monthly statement to extract charges and generate the reimbursement invoice.
-      </p>
-
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
-        <label class="btn btn-secondary" for="tmcrfFileInput" style="cursor:pointer;white-space:nowrap;">
-          Upload CoreLogic Bill (PDF)
-        </label>
-        <input type="file" id="tmcrfFileInput" accept=".pdf" class="hidden">
-        <span id="tmcrfFileName" style="font-size:0.875rem;color:var(--text-muted);">No file selected</span>
-      </div>
-
-      <p id="tmcrfError" class="error-msg hidden" style="margin-bottom:1rem;"></p>
-
-      <div id="tmcrfPreview" class="hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
-          <div>
-            <strong id="tmcrfMonthLabel"></strong>
-            <span id="tmcrfCountLabel" style="color:var(--text-muted);font-size:0.875rem;margin-left:0.6rem;"></span>
-          </div>
-          <button id="tmcrfGenerateBtn" class="btn btn-primary">Generate Invoice</button>
-        </div>
-
-        <div style="overflow-x:auto;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Rx #</th>
-                <th>Date</th>
-                <th>First Name</th>
-                <th>Last Name</th>
-                <th>Type of Report</th>
-                <th style="text-align:right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody id="tmcrfPreviewBody"></tbody>
-          </table>
-        </div>
-
-        <div style="text-align:right;font-weight:600;margin-top:0.75rem;font-size:0.95rem;">
-          Total: <span id="tmcrfTotal"></span>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
-    import { initCdbgReports } from './js/reports.js?v=9';
+    import { initCdbgReports, initCourtReport } from './js/reports.js?v=10';
     import { initChciReports } from './js/chci-reports.js';
     import { initIncompleteReport } from './js/incomplete-report.js';
     import { initHemapLog } from './js/hemap-reports.js';
-    import { initTmcrf }   from './js/tmcrf.js';
 
     function switchReportsTab(tabId) {
       document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
@@ -600,8 +543,16 @@
       if (panel) panel.classList.add('active');
     }
 
+    let _courtLoaded = false;
+
     document.querySelectorAll('.reports-tab').forEach(btn => {
-      btn.addEventListener('click', () => switchReportsTab(btn.dataset.tab));
+      btn.addEventListener('click', () => {
+        switchReportsTab(btn.dataset.tab);
+        if (btn.dataset.tab === 'tab-court' && !_courtLoaded) {
+          _courtLoaded = true;
+          initCourtReport();
+        }
+      });
     });
 
     requireAuth(async (user, profile) => {
@@ -610,12 +561,16 @@
       initChciReports();
       await initIncompleteReport(user, profile);
       await initHemapLog(user, profile);
-      initTmcrf();
 
       // Auto-switch to incomplete tab if linked from the banner
       const params = new URLSearchParams(window.location.search);
       if (params.get('tab') === 'incomplete') {
         switchReportsTab('tab-incomplete');
+      }
+      // If deep-linked directly to court tab, load it now
+      if (params.get('tab') === 'court') {
+        _courtLoaded = true;
+        initCourtReport();
       }
     });
   </script>

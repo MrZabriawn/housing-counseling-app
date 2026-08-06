@@ -50,7 +50,6 @@ export async function initHudReports(user, profile) {
   _mon  = now.getMonth() + 1;
   document.getElementById('hudMonthPicker').value =
     `${_year}-${String(_mon).padStart(2, '0')}`;
-
   document.getElementById('hudMonthPicker').addEventListener('change', (e) => {
     const [y, m] = e.target.value.split('-').map(Number);
     _year = y; _mon = m;
