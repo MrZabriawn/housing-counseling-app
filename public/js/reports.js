@@ -43,13 +43,7 @@ export async function initCdbgReports(user, profile) {
 
   await loadMonth();
 
-  // Court report — default to current month
-  const now = new Date();
-  document.getElementById('courtReportMonth').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  document.getElementById('courtReportYear').value  = now.getFullYear();
-  document.getElementById('loadCourtReportBtn').addEventListener('click', loadCourtReport);
-
-  // Court counselor filter
+  // Court counselor filter (pre-populate before tab is opened)
   try {
     const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const cSel  = document.getElementById('courtReportCounselor');

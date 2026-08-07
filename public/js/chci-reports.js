@@ -6,9 +6,9 @@ import { db, storage, auth } from './firebase-config.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import {
-  ref, uploadBytes, getDownloadURL,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+// Storage SDK is imported lazily inside generateAll() so a CDN hiccup doesn't
+// prevent the file-parsing listeners from being wired on page load.
 
 const _parsed = { f2f: null, md: null, dd: null };
 
@@ -260,8 +260,11 @@ async function generateAll() {
     // Trigger local download immediately — don't wait on upload
     triggerDownload(zipBlob, zipName);
 
-    // Upload to Firebase Storage
+    // Upload to Firebase Storage (lazy import keeps the module resilient)
     statusEl.textContent = 'Uploading…';
+    const { ref, uploadBytes, getDownloadURL } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js'
+    );
     const monthPad  = String(['January','February','March','April','May','June',
       'July','August','September','October','November','December'].indexOf(monthName) + 1).padStart(2, '0');
     const storageRef = ref(storage, `chci-reports/${year}-${monthPad}/${zipName}`);
