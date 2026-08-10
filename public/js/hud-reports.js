@@ -1,6 +1,6 @@
-import { db } from './firebase-config.js';
+import { db, storage, auth } from './firebase-config.js';
 import {
-  collection, collectionGroup, addDoc, getDocs, query, where, orderBy, serverTimestamp,
+  collection, collectionGroup, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -67,6 +67,20 @@ export async function initHudReports(user, profile) {
 
   document.getElementById('importSessionsBtn').addEventListener('click', runImport);
   document.getElementById('scanMissingRxBtn').addEventListener('click', scanMissingRx);
+
+  // Past submissions history
+  const hudBackfillEl = document.getElementById('hudBackfillZip');
+  if (hudBackfillEl) hudBackfillEl.addEventListener('change', handleHudBackfill);
+  const hudSaveBtnEl = document.getElementById('hudBackfillSaveBtn');
+  if (hudSaveBtnEl) hudSaveBtnEl.addEventListener('click', saveHudBackfill);
+  const hudHistEl = document.getElementById('hudHistory');
+  if (hudHistEl) {
+    hudHistEl.addEventListener('click', e => {
+      const btn = e.target.closest('[data-hud-del-doc]');
+      if (btn) deleteHudReport(btn.dataset.hudDelDoc, btn.dataset.hudDelUrl);
+    });
+  }
+  await loadHudHistory();
 
   // Populate counselor filter for missing-Rx scanner
   try {
@@ -975,7 +989,215 @@ async function genAll(data) {
   zip.file(`101_HUD_INV_${fileDateStr}.xlsx`, await invWb.xlsx.writeBuffer());
 
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  downloadBlob(blob, `HOI_HUD_Submission_${fileDateStr}.zip`);
+  const zipName = `HOI_HUD_Submission_${fileDateStr}.zip`;
+  downloadBlob(blob, zipName);
+
+  // Auto-save to Storage + Firestore history (best-effort — download already triggered)
+  try {
+    const msg = document.getElementById('statusMsg');
+    if (msg) { msg.textContent = 'Uploading to history…'; msg.style.color = 'var(--text-muted)'; }
+    const { ref, uploadBytes, getDownloadURL } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js'
+    );
+    const storageRef = ref(storage, `hud-submissions/${fileDateStr}/${zipName}`);
+    await uploadBytes(storageRef, blob, { contentType: 'application/zip' });
+    const downloadUrl = await getDownloadURL(storageRef);
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+    await addDoc(collection(db, 'hudSubmissions'), {
+      fileName:    zipName,
+      month:       `${MONTHS[data.mon - 1]} ${data.year}`,
+      fileDateStr,
+      downloadUrl,
+      createdAt:   serverTimestamp(),
+      createdBy:   auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+    });
+    await loadHudHistory();
+  } catch (saveErr) {
+    console.warn('HUD history save failed (download was successful):', saveErr.message);
+  }
+}
+
+// ── HUD submission history ────────────────────────────────────────────────────
+
+async function loadHudHistory() {
+  const el = document.getElementById('hudHistory');
+  if (!el) return;
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'hudSubmissions'), orderBy('createdAt', 'desc'))
+    );
+
+    if (snap.empty) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No saved submissions yet.</p>';
+      return;
+    }
+
+    const th = (t, a = '') =>
+      `<th style="border:1px solid var(--border);padding:0.3rem 0.5rem;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);white-space:nowrap;${a ? `text-align:${a};` : ''}">${t}</th>`;
+    const td = (v, extra = '') =>
+      `<td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.8125rem;${extra}">${v}</td>`;
+
+    const rows = snap.docs.map(d => {
+      const r       = d.data();
+      const date    = r.createdAt?.toDate?.() ?? new Date();
+      const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const by      = r.createdBy || '';
+      const badge   = r.backfilled
+        ? '<span style="font-size:0.68rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;padding:0 4px;margin-left:4px;font-weight:700;">Backfill</span>'
+        : '';
+      return `<tr>
+        ${td(dateStr)}
+        ${td(escHtml(r.month || '') + badge)}
+        ${td(escHtml(by), 'color:var(--text-muted);')}
+        ${td(`<a href="${r.downloadUrl}" target="_blank" rel="noopener"
+                style="color:var(--primary);font-weight:600;text-decoration:none;">↓ Download</a>`)}
+        ${td(`<button data-hud-del-doc="${d.id}" data-hud-del-url="${encodeURIComponent(r.downloadUrl || '')}"
+                style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1rem;padding:0.1rem 0.3rem;line-height:1;"
+                title="Delete">×</button>`)}
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#f8f9fb;">
+          ${th('Saved')}${th('Month')}${th('By')}${th('')}${th('')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  } catch (err) {
+    el.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Could not load history: ${escHtml(err.message)}</p>`;
+  }
+}
+
+async function deleteHudReport(docId, encodedUrl) {
+  if (!confirm('Delete this submission from history? The file will also be removed from storage.')) return;
+
+  try {
+    // Best-effort Storage delete
+    try {
+      const downloadUrl = decodeURIComponent(encodedUrl);
+      const { ref: sRef, deleteObject } = await import(
+        'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js'
+      );
+      const u         = new URL(downloadUrl);
+      const pathMatch = u.pathname.match(/\/o\/(.+)$/);
+      if (pathMatch) {
+        const storagePath = decodeURIComponent(pathMatch[1]);
+        await deleteObject(sRef(storage, storagePath));
+      }
+    } catch (_) {}
+
+    await deleteDoc(doc(db, 'hudSubmissions', docId));
+    await loadHudHistory();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+// ── HUD backfill — upload a past submission ZIP ───────────────────────────────
+
+let _hudBackfillBlob = null;
+
+async function handleHudBackfill(e) {
+  const files = [...e.target.files];
+  if (!files.length) return;
+
+  const fileNameEl = document.getElementById('hudBackfillFileName');
+  const statusEl   = document.getElementById('hudBackfillStatus');
+  fileNameEl.textContent = files[0].name;
+  statusEl.textContent   = 'Reading…';
+  statusEl.style.color   = 'var(--text-muted)';
+
+  document.getElementById('hudBackfillMonth').value = '';
+  _hudBackfillBlob = null;
+
+  try {
+    _hudBackfillBlob = files[0];
+
+    // Try to parse month/year from filename: expects MMDDYYYY anywhere in name
+    const match = files[0].name.match(/(\d{2})(\d{2})(\d{4})/);
+    if (match) {
+      const mon  = parseInt(match[1], 10);
+      const year = match[3];
+      if (mon >= 1 && mon <= 12)
+        document.getElementById('hudBackfillMonth').value = `${year}-${match[1]}`;
+    }
+
+    document.getElementById('hudBackfillForm').style.display = 'block';
+    statusEl.textContent = 'Verify the month below, then save.';
+    statusEl.style.color = 'var(--primary)';
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.style.color = 'var(--danger)';
+    document.getElementById('hudBackfillForm').style.display = 'block';
+  }
+}
+
+async function saveHudBackfill() {
+  if (!_hudBackfillBlob) return;
+
+  const btn      = document.getElementById('hudBackfillSaveBtn');
+  const statusEl = document.getElementById('hudBackfillStatus');
+  const monthVal = document.getElementById('hudBackfillMonth').value; // "2025-01"
+
+  if (!monthVal) {
+    statusEl.textContent = 'Please select a month.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  btn.disabled         = true;
+  btn.textContent      = 'Uploading…';
+  statusEl.textContent = '';
+
+  try {
+    const [yearStr, monthPad] = monthVal.split('-');
+    const year      = parseInt(yearStr, 10);
+    const mon       = parseInt(monthPad, 10);
+    const MONTHS    = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+    const monthName = MONTHS[mon - 1];
+    const fds       = fileDate(year, mon);
+    const zipName   = `HOI_HUD_Submission_${fds}.zip`;
+
+    const { ref, uploadBytes, getDownloadURL } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js'
+    );
+    const storageRef  = ref(storage, `hud-submissions/${fds}/${zipName}`);
+    await uploadBytes(storageRef, _hudBackfillBlob, { contentType: 'application/zip' });
+    const downloadUrl = await getDownloadURL(storageRef);
+
+    await addDoc(collection(db, 'hudSubmissions'), {
+      fileName:    zipName,
+      month:       `${monthName} ${yearStr}`,
+      fileDateStr: fds,
+      downloadUrl,
+      createdAt:   serverTimestamp(),
+      createdBy:   auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+      backfilled:  true,
+    });
+
+    statusEl.textContent = '✓ Added to history';
+    statusEl.style.color = 'var(--primary)';
+
+    // Reset
+    _hudBackfillBlob = null;
+    document.getElementById('hudBackfillZip').value            = '';
+    document.getElementById('hudBackfillFileName').textContent = 'No file selected';
+    document.getElementById('hudBackfillForm').style.display   = 'none';
+
+    await loadHudHistory();
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'Failed: ' + err.message;
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save to History';
+  }
 }
 
 // ── Session Import ────────────────────────────────────────────────────────────

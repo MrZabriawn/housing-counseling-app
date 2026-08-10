@@ -50,8 +50,9 @@ requireAuth(async (user, profile) => {
     loadAllUsers(),
   ]);
 
+  await loadAmiLimits(); // must resolve before loadClient so the AMI tile renders correctly on first paint
   await loadClient();
-  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory(), loadAmiLimits()]);
+  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory()]);
 
   wireClientForm();
   wireSessionModal();
@@ -740,6 +741,7 @@ function wireClientForm() {
   document.getElementById('addEmpRowBtn').addEventListener('click', addEmpRow);
   document.getElementById('addIncomeRowBtn').addEventListener('click', addIncomeRow);
   document.getElementById('addLiabilityRowBtn').addEventListener('click', addLiabilityRow);
+  document.getElementById('addAssetRowBtn').addEventListener('click', addAssetRow);
 
   // Expense sheet auto-totals + ratio updates
   document.getElementById('tab-financials').addEventListener('input', e => {
@@ -751,7 +753,7 @@ function wireClientForm() {
     if (e.target.classList.contains('emp-gross') || e.target.classList.contains('inc-amount')) {
       updateRatioSummary(); updateLiquidityCalcs();
     }
-    if (e.target.id === 'finLiquidAssets' || e.target.id === 'finMonthlySavings') updateLiquidityCalcs();
+    if (e.target.id === 'finMonthlySavings') updateLiquidityCalcs();
     if (e.target.classList.contains('credit-score-input')) updateMiddleScore();
     if (e.target.id === 'finDerogatoryCount') updateDerogatoryDisplay();
     if (e.target.id === 'finMonthsSinceLate') updateLastLateDisplay();
@@ -2240,7 +2242,8 @@ function updateRatioSummary() {
 }
 
 function updateLiquidityCalcs() {
-  const liquid   = parseFloat(document.getElementById('finLiquidAssets')?.value  || '0') || 0;
+  const liquid   = [...document.querySelectorAll('.asset-balance')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
   const savings  = parseFloat(document.getElementById('finMonthlySavings')?.value || '0') || 0;
   const housing  = HOUSING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
   const living   = LIVING_EXP_IDS.reduce((s, id) => s + numVal(id), 0);
@@ -2431,6 +2434,15 @@ function makeEmpRow(r = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" class="emp-who" value="${escAttr(r.who || '')}"></td>
+    <td><select class="emp-type">
+      <option value="">—</option>
+      <option value="W-2 Wages">W-2 Wages</option>
+      <option value="1099 / Contract">1099 / Contract</option>
+      <option value="Self-Employed">Self-Employed</option>
+      <option value="Part-Time">Part-Time</option>
+      <option value="Seasonal">Seasonal</option>
+      <option value="Commission">Commission</option>
+    </select></td>
     <td><input type="text" class="emp-employer" value="${escAttr(r.employer || '')}"></td>
     <td><input type="text" class="emp-start" value="${escAttr(r.startDate || '')}" placeholder="MM/YY"></td>
     <td><input type="text" class="emp-end" value="${escAttr(r.endDate || '')}" placeholder="MM/YY or Current"></td>
@@ -2439,6 +2451,7 @@ function makeEmpRow(r = {}) {
     <td><input type="number" class="emp-gross" value="${r.grossMonthly || ''}" min="0" step="0.01"></td>
     <td><input type="number" class="emp-net" value="${r.netMonthly || ''}" min="0" step="0.01"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.emp-type').value = r.employmentType || '';
   tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateRatioSummary(); updateLiquidityCalcs(); });
   return tr;
 }
@@ -2450,6 +2463,7 @@ function addEmpRow() {
 function readEmpRows() {
   return [...document.querySelectorAll('#empBody tr')].map(row => ({
     who:              row.querySelector('.emp-who')?.value.trim()       || '',
+    employmentType:   row.querySelector('.emp-type')?.value            || '',
     employer:         row.querySelector('.emp-employer')?.value.trim()  || '',
     startDate:        row.querySelector('.emp-start')?.value.trim()     || '',
     endDate:          row.querySelector('.emp-end')?.value.trim()       || '',
@@ -2472,10 +2486,27 @@ function makeIncomeRow(r = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" class="inc-who" value="${escAttr(r.who || '')}"></td>
+    <td><select class="inc-type">
+      <option value="">—</option>
+      <option value="SSI">SSI</option>
+      <option value="SSDI">SSDI</option>
+      <option value="Social Security">Social Security (Retirement)</option>
+      <option value="Child Support">Child Support</option>
+      <option value="Alimony">Alimony</option>
+      <option value="Pension">Pension</option>
+      <option value="Interest / Dividends">Interest / Dividends</option>
+      <option value="Rental Income">Rental Income</option>
+      <option value="Cash Assistance">Cash Assistance / TANF</option>
+      <option value="Unemployment">Unemployment</option>
+      <option value="Workers Comp">Workers Comp</option>
+      <option value="VA Benefits">VA Benefits</option>
+      <option value="Other">Other</option>
+    </select></td>
     <td><input type="text" class="inc-source" value="${escAttr(r.source || '')}"></td>
     <td><input type="number" class="inc-amount" value="${r.monthlyAmount || ''}" min="0" step="0.01"></td>
     <td><input type="text" class="inc-desc" value="${escAttr(r.description || '')}"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.inc-type').value = r.incomeType || '';
   tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateRatioSummary(); updateLiquidityCalcs(); });
   return tr;
 }
@@ -2487,6 +2518,7 @@ function addIncomeRow() {
 function readIncomeRows() {
   return [...document.querySelectorAll('#incomeBody tr')].map(row => ({
     who:           row.querySelector('.inc-who')?.value.trim()    || '',
+    incomeType:    row.querySelector('.inc-type')?.value          || '',
     source:        row.querySelector('.inc-source')?.value.trim() || '',
     monthlyAmount: parseFloat(row.querySelector('.inc-amount')?.value || '0') || 0,
     description:   row.querySelector('.inc-desc')?.value.trim()   || '',
@@ -2505,11 +2537,25 @@ function renderLiabilityTable(rows) {
 function makeLiabilityRow(r = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
+    <td><select class="liab-type">
+      <option value="">—</option>
+      <option value="Credit Card">Credit Card</option>
+      <option value="Auto Loan">Auto Loan</option>
+      <option value="Student Loan">Student Loan</option>
+      <option value="Mortgage">Mortgage</option>
+      <option value="Home Equity / HELOC">Home Equity / HELOC</option>
+      <option value="Personal Loan">Personal Loan</option>
+      <option value="Medical">Medical</option>
+      <option value="IRS / Tax Debt">IRS / Tax Debt</option>
+      <option value="Child Support / Alimony">Child Support / Alimony</option>
+      <option value="Other">Other</option>
+    </select></td>
     <td><input type="text" class="liab-name" value="${escAttr(r.accountName || '')}"></td>
     <td><input type="number" class="liability-payment" value="${r.monthlyPayment || ''}" min="0" step="0.01"></td>
     <td><input type="number" class="liability-balance" value="${r.balance || ''}" min="0" step="0.01"></td>
     <td><input type="number" class="liability-limit" value="${r.creditLimit || ''}" min="0" step="0.01" placeholder="Revolving only"></td>
     <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.liab-type').value = r.debtType || '';
   tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateLiabilityTotals(); });
   tr.querySelector('.liability-payment').addEventListener('input', updateLiabilityTotals);
   tr.querySelector('.liability-balance').addEventListener('input', updateLiabilityTotals);
@@ -2526,11 +2572,70 @@ function addLiabilityRow() {
 
 function readLiabilityRows() {
   return [...document.querySelectorAll('#liabilityBody tr')].map(row => ({
+    debtType:       row.querySelector('.liab-type')?.value                 || '',
     accountName:    row.querySelector('.liab-name')?.value.trim()           || '',
     monthlyPayment: parseFloat(row.querySelector('.liability-payment')?.value || '0') || 0,
     balance:        parseFloat(row.querySelector('.liability-balance')?.value  || '0') || 0,
     creditLimit:    parseFloat(row.querySelector('.liability-limit')?.value    || '0') || 0,
   })).filter(r => r.accountName || r.monthlyPayment || r.balance);
+}
+
+// ── Asset rows ────────────────────────────────────────────────────────────────
+
+function renderAssetTable(rows) {
+  const tbody = document.getElementById('assetBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  (rows && rows.length ? rows : [{}]).forEach(r => tbody.appendChild(makeAssetRow(r)));
+  updateAssetTotal();
+}
+
+function makeAssetRow(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="asset-type">
+      <option value="">—</option>
+      <option value="Checking">Checking</option>
+      <option value="Savings">Savings</option>
+      <option value="Money Market">Money Market</option>
+      <option value="CD / Certificate">CD / Certificate</option>
+      <option value="401(k) / 403(b)">401(k) / 403(b)</option>
+      <option value="IRA / Roth IRA">IRA / Roth IRA</option>
+      <option value="Pension">Pension</option>
+      <option value="Stocks / Investments">Stocks / Investments</option>
+      <option value="Cash">Cash</option>
+      <option value="Gift (Down Payment)">Gift (Down Payment)</option>
+      <option value="Other">Other</option>
+    </select></td>
+    <td><input type="text" class="asset-institution" value="${escAttr(r.institution || '')}"></td>
+    <td><input type="number" class="asset-balance" value="${r.balance || ''}" min="0" step="0.01"></td>
+    <td><button type="button" class="del-btn" title="Remove row">&times;</button></td>`;
+  tr.querySelector('.asset-type').value = r.assetType || '';
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); updateAssetTotal(); updateLiquidityCalcs(); });
+  tr.querySelector('.asset-balance').addEventListener('input', () => { updateAssetTotal(); updateLiquidityCalcs(); });
+  return tr;
+}
+
+function addAssetRow() {
+  const tbody = document.getElementById('assetBody');
+  if (!tbody) return;
+  tbody.appendChild(makeAssetRow());
+  updateAssetTotal();
+}
+
+function readAssetRows() {
+  return [...document.querySelectorAll('#assetBody tr')].map(row => ({
+    assetType:   row.querySelector('.asset-type')?.value          || '',
+    institution: row.querySelector('.asset-institution')?.value.trim() || '',
+    balance:     parseFloat(row.querySelector('.asset-balance')?.value || '0') || 0,
+  })).filter(r => r.assetType || r.institution || r.balance);
+}
+
+function updateAssetTotal() {
+  const total = [...document.querySelectorAll('.asset-balance')]
+    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const el = document.getElementById('assetBalanceTotal');
+  if (el) el.textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ── Load / save financials ────────────────────────────────────────────────────
@@ -2539,6 +2644,16 @@ function loadFinancials(c) {
   renderEmpTable(c.employmentHistory);
   renderIncomeTable(c.otherIncome);
   renderLiabilityTable(c.monthlyLiabilities);
+
+  // Asset table — backward compat: if no assetRows but old finLiquidAssets exists,
+  // seed one Checking/Savings row so the total carries forward
+  if (c.assetRows && c.assetRows.length) {
+    renderAssetTable(c.assetRows);
+  } else if (c.finLiquidAssets) {
+    renderAssetTable([{ assetType: 'Checking', institution: '', balance: c.finLiquidAssets }]);
+  } else {
+    renderAssetTable([]);
+  }
 
   HOUSING_EXP_IDS.forEach(id => {
     const el = document.getElementById(id);
@@ -2550,7 +2665,7 @@ function loadFinancials(c) {
   });
 
   // Liquidity & credit health fields (null-safe — null values leave inputs blank)
-  ['finLiquidAssets','finMonthlySavings',
+  ['finMonthlySavings',
    'finScoreEq','finScoreEqDate','finScoreEx','finScoreExDate','finScoreTu','finScoreTuDate',
    'finDerogatoryCount','finMonthsSinceLate'].forEach(id => {
     const el = document.getElementById(id);
@@ -2671,7 +2786,8 @@ async function saveFinancials() {
       otherIncome:        readIncomeRows(),
       monthlyLiabilities: readLiabilityRows(),
       ...readExpFields(),
-      finLiquidAssets:    parseFloat(document.getElementById('finLiquidAssets')?.value)   || 0,
+      assetRows:          readAssetRows(),
+      finLiquidAssets:    readAssetRows().reduce((s, r) => s + r.balance, 0), // kept for backward compat / ratio calcs
       finMonthlySavings:  parseFloat(document.getElementById('finMonthlySavings')?.value) || 0,
       finScoreEq:         parseFloat(document.getElementById('finScoreEq')?.value)   || null,
       finScoreEqDate:     document.getElementById('finScoreEqDate')?.value            || '',

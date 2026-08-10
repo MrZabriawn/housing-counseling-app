@@ -353,6 +353,41 @@
         <button id="generateChciBtn" class="btn btn-primary" disabled>Generate &amp; Save Zip</button>
       </div>
 
+      <!-- Upload past ZIP -->
+      <div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1.25rem;">
+        <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.6rem;">Upload Past Invoice ZIP</p>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin:0 0 0.75rem;">Select any mix of ZIP archives and loose Excel files — they'll all be read and bundled into one ZIP in history. Month and amounts are parsed from the invoice contents.</p>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <label class="btn btn-secondary btn-sm" for="chciBackfillZip" style="cursor:pointer;white-space:nowrap;">Choose Files</label>
+          <input type="file" id="chciBackfillZip" accept=".zip,.xlsx,.xls" multiple style="display:none;">
+          <span id="chciBackfillFileName" style="font-size:0.8125rem;color:var(--text-muted);">No files selected</span>
+        </div>
+        <div id="chciBackfillForm" style="display:none;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;margin-bottom:0.75rem;">
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Month</label>
+              <input type="month" id="chciBackfillMonth" style="font-size:0.875rem;width:100%;">
+            </div>
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">F2F Amount ($)</label>
+              <input type="number" id="chciBackfillF2F" min="0" step="1" placeholder="0" style="font-size:0.875rem;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:0.35rem 0.5rem;">
+            </div>
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">M&amp;D Amount ($)</label>
+              <input type="number" id="chciBackfillMD" min="0" step="1" placeholder="0" style="font-size:0.875rem;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:0.35rem 0.5rem;">
+            </div>
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">D&amp;D Amount ($)</label>
+              <input type="number" id="chciBackfillDD" min="0" step="1" placeholder="0" style="font-size:0.875rem;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:0.35rem 0.5rem;">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <button id="chciBackfillSaveBtn" class="btn btn-primary btn-sm">Save to History</button>
+            <span id="chciBackfillStatus" style="font-size:0.8125rem;"></span>
+          </div>
+        </div>
+      </div>
+
       <!-- Past report zips -->
       <div style="margin-top:1.5rem;">
         <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.6rem;">Past Saved Reports</p>
@@ -530,7 +565,7 @@
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports, initCourtReport } from './js/reports.js?v=11';
-    import { initChciReports } from './js/chci-reports.js?v=2';
+    import { initChciReports } from './js/chci-reports.js?v=3';
     import { initIncompleteReport } from './js/incomplete-report.js';
     import { initHemapLog } from './js/hemap-reports.js';
 
