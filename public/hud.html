@@ -9,6 +9,7 @@
   <!-- CDN libraries for HUD report generation -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
     /* ── Top-level tab bar ───────────────────────────────────────────────────── */
@@ -232,9 +233,11 @@
         <p id="statusMsg" class="hidden"></p>
 
         <div class="report-section">
-          <div class="report-section-title">Client Activity Log</div>
+          <div class="report-section-title">Client Activity Log · Training Activity Log · Invoice</div>
           <div class="btn-group">
             <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
           </div>
         </div>
 
@@ -264,11 +267,39 @@
 
         <hr class="divider">
 
+        <!-- TMCRF — Credit Report Reimbursement -->
         <div class="report-section">
-          <div class="report-section-title">Training Activity Log &amp; Invoice</div>
-          <div class="btn-group">
-            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
-            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+          <div class="report-section-title">Credit Report Reimbursement (TMCRF)</div>
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+            <label class="btn btn-secondary btn-sm" for="tmcrfFileInput" style="cursor:pointer;white-space:nowrap;">
+              Upload CoreLogic Bill (PDF)
+            </label>
+            <input type="file" id="tmcrfFileInput" accept=".pdf" class="hidden">
+            <span id="tmcrfFileName" style="font-size:0.875rem;color:var(--text-muted);">No file selected</span>
+          </div>
+          <p id="tmcrfError" class="error-msg hidden"></p>
+          <div id="tmcrfPreview" class="hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.5rem;">
+              <div>
+                <strong id="tmcrfMonthLabel"></strong>
+                <span id="tmcrfCountLabel" style="color:var(--text-muted);font-size:0.875rem;margin-left:0.6rem;"></span>
+              </div>
+              <button id="tmcrfGenerateBtn" class="btn btn-primary btn-sm">Generate Invoice</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Rx #</th><th>Date</th><th>First Name</th><th>Last Name</th>
+                    <th>Type of Report</th><th style="text-align:right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="tmcrfPreviewBody"></tbody>
+              </table>
+            </div>
+            <div style="text-align:right;font-weight:600;margin-top:0.6rem;font-size:0.95rem;">
+              Total: <span id="tmcrfTotal"></span>
+            </div>
           </div>
         </div>
 
@@ -279,6 +310,40 @@
           <div class="btn-group">
             <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent);">Generate All → ZIP</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Upload Past HUD Submission -->
+      <div class="card" style="margin-top:1.25rem;max-width:860px;">
+        <div class="card-title">Upload Past HUD Submission</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Upload a past <code>HOI_HUD_Submission_*.zip</code> file to add it to the submission history below.
+          The month is read from the filename automatically.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <label class="btn btn-secondary btn-sm" for="hudBackfillZip" style="cursor:pointer;white-space:nowrap;">Choose ZIP</label>
+          <input type="file" id="hudBackfillZip" accept=".zip" style="display:none;">
+          <span id="hudBackfillFileName" style="font-size:0.8125rem;color:var(--text-muted);">No file selected</span>
+        </div>
+        <div id="hudBackfillForm" style="display:none;">
+          <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:0.75rem;">
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Reporting Month</label>
+              <input type="month" id="hudBackfillMonth" style="font-size:0.875rem;">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <button id="hudBackfillSaveBtn" class="btn btn-primary btn-sm">Save to History</button>
+            <span id="hudBackfillStatus" style="font-size:0.8125rem;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Past HUD Submissions history -->
+      <div class="card" style="margin-top:1.25rem;max-width:860px;">
+        <div class="card-title">Past HUD Submissions</div>
+        <div id="hudHistory">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
         </div>
       </div>
 
@@ -360,7 +425,8 @@
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initHudTime }    from './js/hud-time.js';
-    import { initHudReports } from './js/hud-reports.js';
+    import { initHudReports } from './js/hud-reports.js?v=2';
+    import { initTmcrf }      from './js/tmcrf.js';
 
     const params     = new URLSearchParams(window.location.search);
     const startPanel = params.get('tab') === 'reports' ? 'panel-reports' : 'panel-time';
@@ -386,6 +452,7 @@
           if (btn.dataset.panel === 'panel-reports' && !_hudReportsInited) {
             if (profile.role === 'executive_director') {
               await initHudReports(user, profile);
+              initTmcrf();
               _hudReportsInited = true;
             }
           }
@@ -398,6 +465,7 @@
       // If ED and starting on reports tab, init immediately
       if (startPanel === 'panel-reports' && profile.role === 'executive_director') {
         await initHudReports(user, profile);
+        initTmcrf();
         _hudReportsInited = true;
       }
 

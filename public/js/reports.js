@@ -43,13 +43,7 @@ export async function initCdbgReports(user, profile) {
 
   await loadMonth();
 
-  // Court report — default to current month
-  const now = new Date();
-  document.getElementById('courtReportMonth').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  document.getElementById('courtReportYear').value  = now.getFullYear();
-  document.getElementById('loadCourtReportBtn').addEventListener('click', loadCourtReport);
-
-  // Court counselor filter
+  // Court counselor filter (pre-populate before tab is opened)
   try {
     const cSnap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
     const cSel  = document.getElementById('courtReportCounselor');
@@ -196,7 +190,8 @@ function renderPreviews(unique) {
   renderInvoiceTable(reportData.sessionRows);
 }
 
-const CDBG_AMI_LEVELS = ['Extremely Low', 'Low', 'Moderate', 'Non-Moderate'];
+// Must match the values amiCategory() / amiCdbgCategory() actually returns
+const CDBG_AMI_LEVELS = AMI_LEVELS; // ['Extremely Low Income', 'Very Low Income', 'Low Income', 'Non Low-Moderate']
 
 function countCdbgAmi(rows) {
   const counts = {};
@@ -622,109 +617,165 @@ function amiLabel(level) {
 
 // ── Court Appearance Report ───────────────────────────────────────────────────
 
-async function loadCourtReport() {
-  const monthVal  = document.getElementById('courtReportMonth').value; // "YYYY-MM" or ""
-  const year      = parseInt(document.getElementById('courtReportYear').value, 10);
-  const counselor = document.getElementById('courtReportCounselor').value;
+// Raw sessions cached after first load so counselor filter is client-side only.
+let _courtSessions = null;
+
+export function initCourtReport() {
+  document.getElementById('loadCourtReportBtn').addEventListener('click', async () => {
+    _courtSessions = null; // force refresh on explicit Refresh click
+    await renderCourtReport();
+  });
+  document.getElementById('courtReportCounselor').addEventListener('change', () => renderCourtReport());
+  renderCourtReport();
+}
+
+async function renderCourtReport() {
   const resultEl  = document.getElementById('courtReportResult');
+  const counselor = document.getElementById('courtReportCounselor').value;
+  const refreshBtn = document.getElementById('loadCourtReportBtn');
 
-  // Month takes priority over year; if neither, load all time
-  let startDate, endDate, rangeLabel;
-  if (monthVal) {
-    const [yr, mo] = monthVal.split('-').map(Number);
-    startDate  = new Date(`${yr}-${String(mo).padStart(2,'0')}-01T00:00:00`);
-    endDate    = new Date(yr, mo, 0, 23, 59, 59); // last day of month
-    rangeLabel = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  } else if (year && !isNaN(year)) {
-    startDate  = new Date(`${year}-01-01T00:00:00`);
-    endDate    = new Date(`${year}-12-31T23:59:59`);
-    rangeLabel = String(year);
-  } else {
-    startDate  = null;
-    endDate    = null;
-    rangeLabel = 'all time';
-  }
-
-  resultEl.textContent = 'Loading…';
-  document.getElementById('loadCourtReportBtn').disabled = true;
-
-  try {
-    const snap = await getDocs(collectionGroup(db, 'sessions'));
-
-    let sessions = snap.docs
-      .map(d => ({ id: d.id, clientId: d.ref.parent.parent.id, ...d.data() }))
-      .filter(s => {
-        if (!(s.caseStatus || '').startsWith('Court')) return false;
-        if (startDate || endDate) {
-          const d = s.date?.toDate ? s.date.toDate() : (s.date ? new Date(s.date) : null);
-          if (!d) return false;
-          if (startDate && d < startDate) return false;
-          if (endDate   && d > endDate)   return false;
-        }
-        return true;
-      });
-
-    if (counselor) sessions = sessions.filter(s => s.counselor === counselor);
-
-    if (!sessions.length) {
-      resultEl.innerHTML = `<span style="color:var(--text-muted);">No court appearances found for ${counselor ? counselor + ' in ' : ''}${rangeLabel}.</span>`;
+  if (!_courtSessions) {
+    resultEl.innerHTML = '<span style="color:var(--text-muted);">Loading…</span>';
+    refreshBtn.disabled = true;
+    try {
+      const snap    = await getDocs(collectionGroup(db, 'sessions'));
+      _courtSessions = snap.docs
+        .map(d => ({ id: d.id, clientId: d.ref.parent.parent.id, ...d.data() }))
+        .filter(s => (s.caseStatus || '').startsWith('Court'));
+    } catch (err) {
+      resultEl.innerHTML = `<span style="color:var(--danger);">Failed to load: ${esc(err.message)}</span>`;
+      refreshBtn.disabled = false;
       return;
     }
-
-    const groups = {};
-    for (const s of sessions) {
-      const dateMs  = s.date?.toDate ? s.date.toDate() : new Date(s.date);
-      const dateStr = dateMs.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-      const county  = (s.caseStatus || '').replace(/^Court\s*[—-]\s*/i, '').trim() || 'Unknown County';
-      const key     = `${dateMs.toISOString().split('T')[0]}|${county}`;
-
-      if (!groups[key]) groups[key] = { dateStr, dateMs, county, counselors: new Set(), clients: [] };
-      const g = groups[key];
-      if (s.counselor) g.counselors.add(s.counselor);
-      const name = (s.clientName || '').trim();
-      const cid  = s.clientId || '';
-      if ((name || cid) && !g.clients.find(c => c.clientId === cid && c.name === name)) {
-        g.clients.push({ name, clientId: cid, notes: s.notes || '' });
-      }
-    }
-
-    const sorted       = Object.values(groups).sort((a, b) => b.dateMs - a.dateMs);
-    const totalDates   = sorted.length;
-    const totalClients = sorted.reduce((s, g) => s + g.clients.length, 0);
-    const filterNote   = counselor ? ` · Counselor: ${esc(counselor)}` : '';
-
-    resultEl.innerHTML = `
-      <div style="margin-bottom:0.75rem;font-size:0.8125rem;color:var(--text-muted);">
-        <strong style="color:var(--text);">${totalDates}</strong> court date${totalDates !== 1 ? 's' : ''} &nbsp;·&nbsp;
-        <strong style="color:var(--text);">${totalClients}</strong> total client appearances &nbsp;·&nbsp; ${esc(rangeLabel)}${filterNote}
-      </div>
-      <table style="font-size:0.875rem;">
-        <thead>
-          <tr>
-            <th>Court Date</th><th>County</th>
-            <th style="text-align:right;"># Clients</th>
-            <th>Counselor(s)</th><th>Clients</th><th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${sorted.map(g => `
-            <tr>
-              <td style="white-space:nowrap;">${esc(g.dateStr)}</td>
-              <td>${esc(g.county)}</td>
-              <td style="text-align:right;font-weight:600;">${g.clients.length}</td>
-              <td>${esc([...g.counselors].join(', ') || '—')}</td>
-              <td style="font-size:0.8rem;">${g.clients.map(c => esc(isDemoMode() ? demoClientName(c.clientId) : titleCase(c.name))).join(', ') || '—'}</td>
-              <td style="font-size:0.78rem;color:var(--text-muted);">${
-                g.clients.some(c => c.notes) ? g.clients.filter(c => c.notes).map(c => esc(c.notes)).join('; ') : '—'
-              }</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>`;
-  } catch (err) {
-    resultEl.innerHTML = `<span style="color:var(--danger);">Failed to load: ${esc(err.message)}</span>`;
-  } finally {
-    document.getElementById('loadCourtReportBtn').disabled = false;
+    refreshBtn.disabled = false;
   }
+
+  const sessions = counselor
+    ? _courtSessions.filter(s => s.counselor === counselor)
+    : _courtSessions;
+
+  if (!sessions.length) {
+    resultEl.innerHTML = '<span style="color:var(--text-muted);">No court appearances found.</span>';
+    return;
+  }
+
+  // ── Group: month → date+county → clients ──────────────────────────────────
+  const byMonth = {}; // { 'YYYY-MM': { label, firstMs, dates: { key: group } } }
+
+  for (const s of sessions) {
+    const dateMs   = s.date?.toDate ? s.date.toDate() : new Date(s.date);
+    const monthKey = dateMs.toISOString().substring(0, 7);
+    const county   = (s.caseStatus || '').replace(/^Court\s*[—-]\s*/i, '').trim() || 'Unknown County';
+    const dateKey  = `${dateMs.toISOString().split('T')[0]}|${county}`;
+
+    if (!byMonth[monthKey]) {
+      byMonth[monthKey] = {
+        label:   dateMs.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+        firstMs: dateMs,
+        dates:   {},
+      };
+    }
+    const month = byMonth[monthKey];
+
+    if (!month.dates[dateKey]) {
+      month.dates[dateKey] = {
+        dateStr:   dateMs.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }),
+        dateMs,
+        county,
+        counselors: new Set(),
+        clients:    [],
+      };
+    }
+    const g = month.dates[dateKey];
+    if (s.counselor) g.counselors.add(s.counselor);
+
+    const name = (s.clientName || '').trim();
+    const cid  = s.clientId || '';
+    if (!g.clients.find(c => c.clientId === cid && c.name === name)) {
+      g.clients.push({
+        name,
+        clientId: cid,
+        rxNumber: s.rxNumber || '',
+        notes:    s.notes    || '',
+      });
+    }
+  }
+
+  // ── Render accordion (months newest-first, dates oldest-first within month) ──
+  const months = Object.entries(byMonth).sort((a, b) => b[0].localeCompare(a[0]));
+
+  resultEl.innerHTML = months.map(([monthKey, month]) => {
+    const dates        = Object.values(month.dates).sort((a, b) => a.dateMs - b.dateMs);
+    const totalClients = dates.reduce((n, g) => n + g.clients.length, 0);
+    const totalDates   = dates.length;
+
+    const bodyHtml = dates.map(g => {
+      const counselorStr = [...g.counselors].join(', ') || '—';
+      const rows = g.clients.map(c => {
+        const name = esc(isDemoMode() ? demoClientName(c.clientId) : titleCase(c.name));
+        return `
+          <tr>
+            <td style="border:1px solid var(--border);padding:0.3rem 0.55rem;font-weight:600;white-space:nowrap;">
+              ${c.clientId
+                ? `<a href="client.html?id=${esc(c.clientId)}" style="color:inherit;text-decoration:none;" target="_blank">${name}</a>`
+                : name}
+            </td>
+            <td style="border:1px solid var(--border);padding:0.3rem 0.55rem;color:var(--text-muted);white-space:nowrap;">${esc(c.rxNumber || '—')}</td>
+            <td style="border:1px solid var(--border);padding:0.3rem 0.55rem;font-size:0.8rem;color:var(--text-muted);">${esc(c.notes || '—')}</td>
+          </tr>`;
+      }).join('');
+
+      return `
+        <div style="margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;
+                      border-bottom:2px solid var(--border);padding-bottom:0.3rem;margin-bottom:0.45rem;">
+            <span style="font-size:0.875rem;font-weight:700;">${esc(g.county)}</span>
+            <span style="font-size:0.8rem;color:var(--text-muted);">${esc(g.dateStr)} &nbsp;·&nbsp; ${esc(counselorStr)}</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
+              <thead>
+                <tr style="background:#f8f9fb;">
+                  <th style="border:1px solid var(--border);padding:0.28rem 0.55rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);text-align:left;">Client</th>
+                  <th style="border:1px solid var(--border);padding:0.28rem 0.55rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);text-align:left;">Rx #</th>
+                  <th style="border:1px solid var(--border);padding:0.28rem 0.55rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);text-align:left;">Notes</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.55rem;overflow:hidden;">
+        <button class="court-toggle"
+          style="width:100%;display:flex;justify-content:space-between;align-items:center;
+                 padding:0.6rem 0.9rem;background:var(--surface,#f8f9fb);border:none;
+                 cursor:pointer;font-size:0.875rem;text-align:left;gap:1rem;">
+          <span style="font-weight:600;">${esc(month.label)}</span>
+          <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted);white-space:nowrap;">
+            ${totalDates} date${totalDates !== 1 ? 's' : ''} &nbsp;·&nbsp; ${totalClients} client${totalClients !== 1 ? 's' : ''}
+            &nbsp;<span class="court-caret">▶</span>
+          </span>
+        </button>
+        <div class="court-body" style="display:none;padding:0.75rem 0.9rem 0.15rem;">
+          ${bodyHtml}
+        </div>
+      </div>`;
+  }).join('');
+
+  // Wire expand / collapse
+  resultEl.querySelectorAll('.court-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const body  = btn.nextElementSibling;
+      const caret = btn.querySelector('.court-caret');
+      const open  = body.style.display !== 'none';
+      body.style.display   = open ? 'none' : 'block';
+      caret.textContent    = open ? '▶' : '▼';
+      btn.style.background = open ? 'var(--surface,#f8f9fb)' : 'var(--primary-light,#e8f0fe)';
+    });
+  });
 }
 
 function esc(str) {

@@ -60,7 +60,7 @@
       white-space: nowrap;
     }
     .fin-table td { padding: 0.3rem 0.4rem; border-bottom: 1px solid #f0f1f3; vertical-align: middle; }
-    .fin-table input[type="text"], .fin-table input[type="number"] {
+    .fin-table input[type="text"], .fin-table input[type="number"], .fin-table select {
       width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
       padding: 0.25rem 0.4rem; font-size: 0.8rem; background: #fff;
     }
@@ -523,6 +523,7 @@
             <thead>
               <tr>
                 <th style="min-width:110px;">Applicant / Co-App</th>
+                <th style="min-width:120px;">Emp. Type</th>
                 <th style="min-width:180px;">Employer &amp; Address</th>
                 <th style="min-width:80px;">Start</th>
                 <th style="min-width:80px;">End / Current</th>
@@ -552,7 +553,8 @@
             <thead>
               <tr>
                 <th style="min-width:130px;">Applicant / Co-App</th>
-                <th style="min-width:160px;">Source</th>
+                <th style="min-width:150px;">Type</th>
+                <th style="min-width:160px;">Source / Payer</th>
                 <th style="min-width:120px;">Monthly Amount ($)</th>
                 <th>Description</th>
                 <th style="width:32px;"></th>
@@ -648,7 +650,8 @@
           <table class="fin-table">
             <thead>
               <tr>
-                <th>Account Name</th>
+                <th style="min-width:130px;">Type</th>
+                <th>Account / Creditor</th>
                 <th style="min-width:130px;">Monthly Payment ($)</th>
                 <th style="min-width:130px;">Balance ($)</th>
                 <th style="min-width:130px;">Credit Limit ($)</th>
@@ -658,6 +661,7 @@
             <tbody id="liabilityBody"></tbody>
             <tfoot>
               <tr class="fin-total-row">
+                <td></td>
                 <td>Totals</td>
                 <td id="liabilityPaymentTotal">$0.00</td>
                 <td id="liabilityBalanceTotal">$0.00</td>
@@ -674,13 +678,35 @@
 
       <!-- Liquidity & Reserves -->
       <div class="card" style="margin-bottom:1.25rem;">
-        <div class="card-title">Liquidity &amp; Reserves</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.25rem;">
-          <div class="form-group" style="margin:0;">
-            <label for="finLiquidAssets">Liquid Assets ($)</label>
-            <input type="number" id="finLiquidAssets" min="0" step="1" placeholder="Checking, savings, etc.">
-          </div>
-          <div class="form-group" style="margin:0;">
+        <div class="card-title">Assets &amp; Liquidity</div>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin:-0.25rem 0 0.75rem;">Checking, savings, retirement accounts, investments, and other assets.</p>
+
+        <div style="overflow-x:auto;margin-bottom:0.5rem;">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th style="min-width:160px;">Type</th>
+                <th style="min-width:180px;">Institution / Description</th>
+                <th style="min-width:130px;">Balance ($)</th>
+                <th style="width:32px;"></th>
+              </tr>
+            </thead>
+            <tbody id="assetBody"></tbody>
+            <tfoot>
+              <tr class="fin-total-row">
+                <td colspan="2">Total Assets</td>
+                <td id="assetBalanceTotal">$0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div style="margin-bottom:1.25rem;">
+          <button type="button" id="addAssetRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+        </div>
+
+        <div style="margin-bottom:1.25rem;">
+          <div class="form-group" style="margin:0;max-width:220px;">
             <label for="finMonthlySavings">Monthly Savings ($)</label>
             <input type="number" id="finMonthlySavings" min="0" step="1" placeholder="Amount saved per month">
           </div>
@@ -689,12 +715,12 @@
           <div class="ratio-item">
             <div class="ratio-label">Months of Reserves</div>
             <div class="ratio-val ratio-neutral" id="rMonthsReserves">—</div>
-            <div class="ratio-note">Liquid assets ÷ total expenses · 3–6 mo ideal</div>
+            <div class="ratio-note">Total assets ÷ total expenses · 3–6 mo ideal</div>
           </div>
           <div class="ratio-item">
             <div class="ratio-label">Emergency Fund</div>
             <div class="ratio-val ratio-neutral" id="rEmergencyFund">—</div>
-            <div class="ratio-note">Liquid assets ÷ gross income · 3 mo target</div>
+            <div class="ratio-note">Total assets ÷ gross income · 3 mo target</div>
           </div>
           <div class="ratio-item">
             <div class="ratio-label">Savings Rate</div>

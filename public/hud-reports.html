@@ -32,6 +32,7 @@
   <!-- CDN libraries loaded as globals before the module -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -69,9 +70,11 @@
       <p id="statusMsg" class="hidden"></p>
 
       <div class="report-section">
-        <div class="report-section-title">Client Activity Log</div>
+        <div class="report-section-title">Client Activity Log · Training Activity Log · Invoice</div>
         <div class="btn-group">
           <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+          <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+          <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
         </div>
       </div>
 
@@ -101,11 +104,39 @@
 
       <hr class="divider">
 
+      <!-- TMCRF — Credit Report Reimbursement -->
       <div class="report-section">
-        <div class="report-section-title">Training Activity Log &amp; Invoice</div>
-        <div class="btn-group">
-          <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
-          <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+        <div class="report-section-title">Credit Report Reimbursement (TMCRF)</div>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+          <label class="btn btn-secondary btn-sm" for="tmcrfFileInput" style="cursor:pointer;white-space:nowrap;">
+            Upload CoreLogic Bill (PDF)
+          </label>
+          <input type="file" id="tmcrfFileInput" accept=".pdf" class="hidden">
+          <span id="tmcrfFileName" style="font-size:0.875rem;color:var(--text-muted);">No file selected</span>
+        </div>
+        <p id="tmcrfError" class="error-msg hidden"></p>
+        <div id="tmcrfPreview" class="hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.5rem;">
+            <div>
+              <strong id="tmcrfMonthLabel"></strong>
+              <span id="tmcrfCountLabel" style="color:var(--text-muted);font-size:0.875rem;margin-left:0.6rem;"></span>
+            </div>
+            <button id="tmcrfGenerateBtn" class="btn btn-primary btn-sm">Generate Invoice</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rx #</th><th>Date</th><th>First Name</th><th>Last Name</th>
+                  <th>Type of Report</th><th style="text-align:right;">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="tmcrfPreviewBody"></tbody>
+            </table>
+          </div>
+          <div style="text-align:right;font-weight:600;margin-top:0.6rem;font-size:0.95rem;">
+            Total: <span id="tmcrfTotal"></span>
+          </div>
         </div>
       </div>
 
@@ -120,6 +151,15 @@
     </div>
   </main>
 
-  <script type="module" src="js/hud-reports.js"></script>
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    import { initHudReports }        from './js/hud-reports.js';
+    import { initTmcrf }             from './js/tmcrf.js';
+    requireAuth(async (user, profile) => {
+      setupNav(profile, 'reports');
+      await initHudReports(user, profile);
+      initTmcrf();
+    });
+  </script>
 </body>
 </html>
