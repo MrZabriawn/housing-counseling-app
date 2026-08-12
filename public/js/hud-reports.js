@@ -180,7 +180,7 @@ function buildParDetailHtml(sessions, hudEvents, clientMap) {
   const sessRows = [...sessions]
     .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
     .map(s => {
-      const nm  = (clientMap[s.clientId] || {}).name || s.clientId;
+      const nm  = (clientMap[s.clientId] || {}).clientName || s.clientName || s.clientId;
       const hrs = (parseFloat(s.hours) || 0).toFixed(2);
       const tp  = s.hudType === 'case_management' ? 'Case Mgmt' : 'Counseling';
       return `<tr>
@@ -218,7 +218,7 @@ function buildCmlDetailHtml(sessions, clientMap) {
   const rows = [...sessions]
     .sort((a, b) => (a.date||'') < (b.date||'') ? -1 : 1)
     .map(s => {
-      const nm  = (clientMap[s.clientId] || {}).name || s.clientId;
+      const nm  = (clientMap[s.clientId] || {}).clientName || s.clientName || s.clientId;
       const hrs = (parseFloat(s.hours) || 0).toFixed(2);
       return `<tr>
         <td ${DT}>${fmtDate(s.dateObj)}</td>
