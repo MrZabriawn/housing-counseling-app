@@ -429,3 +429,70 @@ tr.row-duplicate td:first-child::before { content: "⚠ "; color: #f57f17; }
 .align-center    { align-items: center; }
 .justify-between { justify-content: space-between; }
 .metadata-row    { font-size: 0.8rem; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Responsive breakpoints — tablet / mobile
+   Layout-only; no content or behavior changes. The primary nav collapses into
+   a hamburger menu below tablet width; wide tables keep scrolling horizontally
+   inside their existing wrappers.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Hamburger toggle (injected by setupNav) — hidden on desktop */
+.nav-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Tablet and below: collapse the primary nav into a dropdown menu ── */
+@media (max-width: 1024px) {
+  .nav { gap: 0.75rem; }
+  .nav-toggle { display: inline-flex; align-items: center; }
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 58px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 0.1rem;
+    background: var(--nav-bar);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.25);
+    padding: 0.4rem;
+    max-height: calc(100vh - 58px);
+    overflow-y: auto;
+    z-index: 99;
+  }
+  .nav.nav-open .nav-links { display: flex; }
+  .nav-links a { padding: 0.65rem 0.9rem; font-size: 0.95rem; }
+  .page { padding: 1.25rem; }
+}
+
+/* ── Landscape phone / small tablet ── */
+@media (max-width: 768px) {
+  .nav { padding: 0 1rem; }
+  .page { padding: 1rem; }
+  .filter-bar { padding: 0.85rem 1rem; }
+  table { font-size: 0.8rem; }
+  thead th, tbody td { padding: 0.45rem 0.55rem; }
+  .report-header-fields { grid-template-columns: 1fr; }
+}
+
+/* ── Portrait phone ── */
+@media (max-width: 600px) {
+  .nav-user span { display: none; }   /* keep the logout button; drop the name to save room */
+  .page { padding: 0.85rem; }
+  .page-header-text h2 { font-size: 1.1rem; }
+  .modal-box { padding: 1.25rem; }
+  .stat-card .stat-value { font-size: 1.4rem; }
+  .form-actions { flex-direction: column; align-items: stretch; }
+  .form-actions .btn { width: 100%; }
+}

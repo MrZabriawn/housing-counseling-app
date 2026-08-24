@@ -172,6 +172,23 @@
           <span style="font-weight:600;font-size:0.9rem;">Call Log</span>
           <button id="logCallBtn" class="btn btn-primary btn-sm">+ Log a Call</button>
         </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;padding:0.55rem 1.25rem;border-bottom:1px solid var(--border);">
+          <input id="callSearch" type="search" placeholder="Search name, phone, outcome, notes…"
+                 style="flex:1 1 200px;min-width:160px;font-size:0.85rem;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);">
+          <select id="callCounselorFilter" title="Filter by counselor"
+                  style="font-size:0.85rem;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">All counselors</option>
+          </select>
+          <select id="callTypeFilter" title="Filter by call type"
+                  style="font-size:0.85rem;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">All types</option>
+            <option value="client">Client</option>
+            <option value="prospect">Prospect</option>
+          </select>
+          <button id="callMineBtn" type="button" class="btn btn-secondary btn-sm">My calls</button>
+          <button id="callFilterClear" type="button" class="btn btn-secondary btn-sm">Clear</button>
+          <span id="callFilterCount" style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;margin-left:auto;"></span>
+        </div>
         <div style="overflow-x:auto;">
           <table>
             <thead>

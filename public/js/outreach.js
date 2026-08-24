@@ -121,6 +121,22 @@ requireAuth(async (user, profile) => {
   document.getElementById('callClientSearch').addEventListener('input', renderCallClientSearch);
   document.getElementById('callClientClear').addEventListener('click', clearCallClientSelection);
 
+  // Call log search / filter
+  document.getElementById('callSearch').addEventListener('input', applyCallFilters);
+  document.getElementById('callCounselorFilter').addEventListener('change', applyCallFilters);
+  document.getElementById('callTypeFilter').addEventListener('change', applyCallFilters);
+  document.getElementById('callFilterClear').addEventListener('click', () => {
+    document.getElementById('callSearch').value = '';
+    document.getElementById('callCounselorFilter').value = '';
+    document.getElementById('callTypeFilter').value = '';
+    applyCallFilters();
+  });
+  document.getElementById('callMineBtn').addEventListener('click', () => {
+    const me = (window._currentCounselor || '').trim();
+    document.getElementById('callCounselorFilter').value = me;
+    applyCallFilters();
+  });
+
   // TAL Hours modal
   document.getElementById('openTalBtn').addEventListener('click', openTalModal);
   document.getElementById('talCancelBtn').addEventListener('click', closeTalModal);
@@ -451,13 +467,54 @@ async function loadCalls() {
   } catch (_) {
     _allCalls = [];
   }
-  renderCallLog(_allCalls);
+  populateCallCounselorFilter();
+  applyCallFilters();
+}
+
+// Populate the counselor filter with the distinct counselors seen in the log
+// (plus the logged-in user, so "My calls" works even with none logged yet).
+function populateCallCounselorFilter() {
+  const sel = document.getElementById('callCounselorFilter');
+  if (!sel) return;
+  const prev  = sel.value;
+  const names = new Set(_allCalls.map(c => (c.counselor || '').trim()).filter(Boolean));
+  const me    = (window._currentCounselor || '').trim();
+  if (me) names.add(me);
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">All counselors</option>' +
+    sorted.map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('');
+  if (prev && sorted.includes(prev)) sel.value = prev;   // preserve selection across reloads
+}
+
+// Filter the cached calls by counselor, type, and free-text search, then render.
+function applyCallFilters() {
+  const q  = (document.getElementById('callSearch').value || '').trim().toLowerCase();
+  const cf = document.getElementById('callCounselorFilter').value;
+  const tf = document.getElementById('callTypeFilter').value;
+
+  let filtered = _allCalls;
+  if (cf) filtered = filtered.filter(c => (c.counselor || '') === cf);
+  if (tf) filtered = filtered.filter(c => (c.type || 'client') === tf);
+  if (q)  filtered = filtered.filter(c =>
+    [c.contactName, c.phone, c.counselor, c.outcome, c.notes, c.linkedClientName]
+      .map(x => (x == null ? '' : String(x)).toLowerCase()).join(' ').includes(q));
+
+  renderCallLog(filtered);
+
+  const countEl = document.getElementById('callFilterCount');
+  if (countEl) {
+    const total = _allCalls.length;
+    countEl.textContent = (cf || tf || q)
+      ? `${filtered.length} of ${total}`
+      : `${total} call${total !== 1 ? 's' : ''}`;
+  }
 }
 
 function renderCallLog(calls) {
   const tbody = document.getElementById('callLogBody');
   if (!calls.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">No calls logged yet.</td></tr>';
+    const msg = _allCalls.length ? 'No calls match your search.' : 'No calls logged yet.';
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">${msg}</td></tr>`;
     return;
   }
 

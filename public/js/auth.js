@@ -86,7 +86,23 @@ export function setupNav(profile, activePage) {
       <div class="nav-user">
         <span id="navUserName"></span>
         <button id="logoutBtn" class="btn-logout">Logout</button>
-      </div>`;
+      </div>
+      <button id="navToggle" class="nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false">&#9776;</button>`;
+  }
+
+  // Mobile hamburger: toggle the collapsed nav menu, and close it on link tap
+  const navToggle = document.getElementById('navToggle');
+  if (nav && navToggle) {
+    navToggle.addEventListener('click', () => {
+      const open = nav.classList.toggle('nav-open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    nav.querySelectorAll('.nav-links a').forEach(a => {
+      a.addEventListener('click', () => {
+        nav.classList.remove('nav-open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
   }
 
   const nameEl = document.getElementById('navUserName');
