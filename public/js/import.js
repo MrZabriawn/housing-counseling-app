@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAdmin, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAdmin, setupNav } from './auth.js?v=2';
 import { AMI_IMPORT_MAP, RE_CODES } from './data.js';
 import {
   collection, getDocs, query, addDoc, updateDoc, doc, serverTimestamp

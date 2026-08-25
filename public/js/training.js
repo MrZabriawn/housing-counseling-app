@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import {
   collection, doc, getDoc, setDoc, getDocs, query, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';

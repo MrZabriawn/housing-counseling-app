@@ -1,4 +1,4 @@
-/**
+﻿/**
  * hig-waitlist.js — "Repair Ready" page
  *
  * Manages the higWaitlist Firestore collection: POST clients on the home
@@ -25,7 +25,7 @@
  */
 
 import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { amiDisplayLabel, AWARD_TYPES } from './data.js';
 import { openDrivePicker, openDriveFolderPicker } from './picker.js';
 import {

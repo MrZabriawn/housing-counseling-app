@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel } from './data.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp

@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav, isAdmin } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { isDemoMode } from './demo-mode.js';
 import { MONTHS, AMI_LEVELS, RE_CODES, COUNSELING_TYPES, amiCategory } from './data.js';
 import {

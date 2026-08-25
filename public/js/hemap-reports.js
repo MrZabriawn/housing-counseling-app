@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { isAdmin } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { isAdmin } from './auth.js?v=2';
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc,
   query, orderBy, serverTimestamp,

@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { MONTHS, amiCategory } from './data.js';
 import {
   collection, collectionGroup, getDocs, query, orderBy, where

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * court-appearance.js — Batch foreclosure court session logger / editor
  *
  * One court session per month per county is enforced. Selecting a county + date
@@ -16,7 +16,7 @@
  */
 
 import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import {
   collection, collectionGroup, getDocs, doc, addDoc, updateDoc, deleteDoc,
   query, orderBy, where, serverTimestamp,

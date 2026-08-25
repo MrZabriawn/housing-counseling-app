@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav, isAdmin } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { COUNSELING_TYPES, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate, amiDisplayLabel } from './data.js';
 
 // Inject a stored value as an option if it doesn't match any existing option

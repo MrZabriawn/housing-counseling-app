@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workshops — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* ── Workshop selector bar ─────────────────────────────────── */
+    .ws-bar { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+    .ws-bar select { min-width:240px; }
+    .ws-bar .ws-status { font-size:0.78rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:999px; }
+    .ws-status.open  { background:#dcfce7; color:#166534; }
+    .ws-status.closed { background:#f1f5f9; color:var(--text-muted); }
+
+    /* ── Seat summary cards ─────────────────────────────────────── */
+    .seat-cards { display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+    .seat-card {
+      flex:1; min-width:160px; background:#fff; border:1px solid var(--border);
+      border-radius:var(--radius); padding:0.85rem 1rem;
+    }
+    .seat-card-name { font-size:0.78rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem; }
+    .seat-card-count { font-size:1.5rem; font-weight:800; color:var(--text); line-height:1; }
+    .seat-card-sub { font-size:0.78rem; color:var(--text-muted); margin-top:0.15rem; }
+    .seat-card.full .seat-card-count { color:var(--danger,#dc2626); }
+
+    /* ── Tabs ───────────────────────────────────────────────────── */
+    .ws-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:1.25rem; }
+    .ws-tab { padding:0.55rem 1.25rem; font-size:0.875rem; font-weight:600; cursor:pointer; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--text-muted); transition:color 0.12s,border-color 0.12s; }
+    .ws-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .ws-panel { display:none; }
+    .ws-panel.active { display:block; }
+
+    /* ── Registrant table ───────────────────────────────────────── */
+    .reg-table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+    .reg-table th { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; padding:0.5rem 0.6rem; border-bottom:2px solid var(--border); background:#f8f9fb; white-space:nowrap; }
+    .reg-table td { padding:0.45rem 0.6rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .reg-table tr:hover td { background:#f8f9fb; }
+    .raffle-chip { display:inline-block; background:#fef3c7; color:#92400e; font-size:0.68rem; font-weight:700; padding:0.1rem 0.4rem; border-radius:999px; }
+    .mortgage-chip { display:inline-block; background:#e0e7ff; color:#3730a3; font-size:0.68rem; font-weight:700; padding:0.1rem 0.4rem; border-radius:999px; }
+
+    /* ── Raffle runner ──────────────────────────────────────────── */
+    .raffle-panel { background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; margin-bottom:1rem; }
+    .raffle-panel h3 { font-size:0.9rem; font-weight:700; margin-bottom:0.9rem; }
+    .raffle-controls { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .raffle-result {
+      background:#f8f9fb; border:1px solid var(--border); border-radius:var(--radius);
+      padding:1.5rem; text-align:center; min-height:90px;
+      display:flex; align-items:center; justify-content:center; flex-direction:column; gap:0.4rem;
+    }
+    .raffle-winner-name { font-size:1.5rem; font-weight:800; color:var(--primary); }
+    .raffle-winner-meta { font-size:0.825rem; color:var(--text-muted); }
+    .raffle-empty { color:var(--text-muted); font-size:0.875rem; }
+
+    /* ── New workshop form ──────────────────────────────────────── */
+    .nw-form { max-width:560px; }
+    .nw-section { margin-bottom:1.25rem; }
+    .nw-section-title { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:0.65rem; padding-bottom:0.4rem; border-bottom:1px solid var(--border); }
+    .toggle-row { display:flex; align-items:center; gap:0.6rem; font-size:0.875rem; cursor:pointer; margin-bottom:0.5rem; }
+    .toggle-row input[type="checkbox"] { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; }
+
+    /* Location builder */
+    .loc-builder { display:flex; flex-direction:column; gap:0.5rem; }
+    .loc-row { display:grid; grid-template-columns:1fr 80px 28px; gap:0.4rem; align-items:center; }
+    .loc-row input { width:100%; }
+    .btn-loc-del { background:none; border:none; cursor:pointer; color:var(--danger,#dc2626); font-size:1.1rem; padding:0.15rem; border-radius:4px; }
+    .btn-loc-del:hover { background:#fee2e2; }
+    .btn-loc-add { display:flex; align-items:center; gap:0.3rem; font-size:0.8rem; color:var(--primary); border:none; background:none; cursor:pointer; padding:0.15rem 0; font-weight:600; margin-top:0.25rem; }
+    .btn-loc-add:hover { text-decoration:underline; }
+
+    /* Share link */
+    .share-row { display:flex; gap:0.5rem; align-items:center; }
+    .share-link-input { flex:1; font-size:0.825rem; background:#f8f9fb; cursor:default; }
+    .btn-copy { font-size:0.8rem; white-space:nowrap; }
+
+    /* Empty / loading states */
+    .empty-state { text-align:center; padding:2.5rem 1rem; color:var(--text-muted); font-size:0.875rem; }
+    .empty-state .empty-icon { font-size:2.5rem; margin-bottom:0.5rem; }
+
+    .filter-bar { display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1rem; }
+    .filter-bar .form-group { margin:0; }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Workshops</h2>
+        <p>Manage public workshop registrations and events.</p>
+      </div>
+    </div>
+
+    <!-- Workshop selector -->
+    <div class="ws-bar">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;">Workshop</label>
+        <select id="workshopSelect">
+          <option value="">— Select a workshop —</option>
+        </select>
+      </div>
+      <span id="wsStatusChip" class="ws-status" style="display:none;"></span>
+      <button id="toggleActiveBtn" class="btn btn-sm" style="display:none;"></button>
+    </div>
+
+    <!-- Seat summary -->
+    <div id="seatCards" class="seat-cards" style="display:none;"></div>
+
+    <!-- Share link -->
+    <div id="shareLinkRow" class="card" style="display:none; margin-bottom:1rem; padding:0.85rem 1rem;">
+      <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.4rem;">Registration link</div>
+      <div class="share-row">
+        <input type="text" id="shareLinkInput" class="share-link-input" readonly>
+        <button id="copyLinkBtn" class="btn btn-sm btn-secondary btn-copy">Copy link</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="ws-tabs" id="wsTabs" style="display:none;">
+      <button class="ws-tab active" data-tab="registrants">Registrants</button>
+      <button class="ws-tab" data-tab="raffle" id="raffleTabBtn" style="display:none;">🎟️ Raffle</button>
+      <button class="ws-tab" data-tab="new">+ New Workshop</button>
+    </div>
+
+    <!-- Show tabs always for New Workshop -->
+    <div class="ws-tabs" id="wsTabsNew" style="display:none;">
+      <button class="ws-tab active" data-tab="new">+ New Workshop</button>
+    </div>
+
+    <!-- Registrants panel -->
+    <div id="panelRegistrants" class="ws-panel active" style="display:none;">
+      <div class="filter-bar">
+        <div class="form-group">
+          <label>Location</label>
+          <select id="filterLocation">
+            <option value="">All locations</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Search</label>
+          <input type="text" id="searchReg" placeholder="Name, email, city…" style="min-width:200px;">
+        </div>
+        <div class="form-group" id="raffleFilterWrap" style="display:none;">
+          <label>Raffle only</label>
+          <select id="filterRaffle">
+            <option value="">All</option>
+            <option value="1">Raffle entries only</option>
+          </select>
+        </div>
+        <button id="exportCsvBtn" class="btn btn-sm btn-secondary" style="margin-top:auto;">⬇ Export CSV</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="reg-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>City</th>
+              <th>Location</th>
+              <th id="mortgageTh" style="display:none;">Mortgage?</th>
+              <th id="raffleTh" style="display:none;">Raffle</th>
+              <th>Registered</th>
+            </tr>
+          </thead>
+          <tbody id="regTableBody"></tbody>
+        </table>
+      </div>
+      <div id="regCount" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.6rem;"></div>
+    </div>
+
+    <!-- Raffle panel -->
+    <div id="panelRaffle" class="ws-panel" style="display:none;">
+      <div class="raffle-panel">
+        <h3>🎟️ Draw a winner</h3>
+        <div class="raffle-controls">
+          <div class="form-group" style="margin:0;">
+            <label>Location</label>
+            <select id="raffleLocation">
+              <option value="">All locations</option>
+            </select>
+          </div>
+          <button id="drawWinnerBtn" class="btn btn-primary" style="margin-top:auto;">Draw Winner</button>
+        </div>
+        <div class="raffle-result" id="raffleResult">
+          <span class="raffle-empty">Click "Draw Winner" to randomly select a winner from raffle entries.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- New workshop panel -->
+    <div id="panelNew" class="ws-panel" style="display:none;">
+      <div class="card">
+        <div class="card-header" style="font-size:1rem;font-weight:700;margin-bottom:1.25rem;">Create a new workshop</div>
+        <form class="nw-form" id="newWsForm" novalidate>
+          <div class="nw-section">
+            <div class="nw-section-title">Basic info</div>
+            <div class="form-group">
+              <label>Title <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="nwTitle" placeholder="e.g. HOME School — Home Owners Maintenance Education" required>
+            </div>
+            <div class="form-group">
+              <label>Subtitle / description</label>
+              <input type="text" id="nwSubtitle" placeholder="e.g. A free educational workshop for homeowners">
+            </div>
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <div class="form-group" style="margin:0;">
+                <label>Date <span style="color:var(--danger)">*</span></label>
+                <input type="datetime-local" id="nwDate" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="nw-section">
+            <div class="nw-section-title">Locations &amp; capacity</div>
+            <div class="loc-builder" id="locBuilder"></div>
+            <button type="button" class="btn-loc-add" id="addLocBtn">+ Add location</button>
+          </div>
+
+          <div class="nw-section">
+            <div class="nw-section-title">Options</div>
+            <label class="toggle-row">
+              <input type="checkbox" id="nwHasRaffle"> Include prize raffle
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="nwAskMortgage"> Ask about mortgage status
+            </label>
+          </div>
+
+          <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.5rem;">
+            <button type="submit" class="btn btn-primary" id="createWsBtn">Create workshop</button>
+            <span id="nwStatus" style="font-size:0.875rem;color:var(--text-muted);"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Always show the New Workshop option even when no workshop selected -->
+  <script type="module" src="js/workshop-admin.js?v=1"></script>
+</body>
+</html>

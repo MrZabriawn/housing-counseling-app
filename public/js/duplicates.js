@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
 import {
   findReasons, pairKey, confidenceColor, confidenceLabel, confRank,

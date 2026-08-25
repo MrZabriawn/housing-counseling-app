@@ -13,6 +13,16 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Public workshop registration — anyone can read workshop config and
+    // submit a registration. Staff-only operations (update, delete) still
+    // require sign-in via the catch-all rule below.
+    match /workshops/{docId} {
+      allow read: if true;
+    }
+    match /workshopRegistrations/{docId} {
+      allow create: if true;
+    }
+
     // All authenticated users (signed-in @housingopps.org accounts) can read
     // and write any collection. The security boundary is Google login — only
     // staff with an org account can reach this app.

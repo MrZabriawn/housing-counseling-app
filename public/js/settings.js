@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireED, setupNav } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireED, setupNav } from './auth.js?v=2';
 import { amiCategory, AMI_IMPORT_MAP } from './data.js';
 import {
   findReasons, pairKey, confidenceColor, confidenceLabel, confRank,

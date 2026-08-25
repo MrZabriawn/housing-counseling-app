@@ -1,5 +1,5 @@
-import { db } from './firebase-config.js';
-import { requireAuth, setupNav, isAdmin } from './auth.js';
+﻿import { db } from './firebase-config.js';
+import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel, amiCategory } from './data.js';
 import { openDrivePicker } from './picker.js';
@@ -1316,23 +1316,25 @@ async function refreshClientDenormalized() {
   _client.totalOutcomeValue = totalOutcomeValue;
 }
 
-// ── Program Lists (Buyer Ready / Repair Ready) ───────────────────────────────
+// ── Program Lists (Buyer Ready / Rent Ready / Repair Ready) ──────────────────
 //
 // The "Program Lists" card at the bottom of the profile shows whether this
-// client is enrolled on the Buyer Ready (ccaList) or Repair Ready (higWaitlist)
-// list. Each slot shows either a "View on {List}" link or an "+ Add to {List}"
-// button, depending on whether a linked record exists.
+// client is enrolled on the Buyer Ready (ccaList), Rent Ready (rentList), or
+// Repair Ready (higWaitlist) list. Each slot shows either a "View on {List}"
+// link or an "+ Add to {List}" button, depending on whether a linked record exists.
 //
 // The link is established by storing clientId as a foreign key on the list doc.
 // limit(1) is used because each client should appear on each list at most once.
 
 async function loadListMembership() {
   try {
-    const [ccaSnap, higSnap] = await Promise.all([
+    const [ccaSnap, rentSnap, higSnap] = await Promise.all([
       getDocs(query(collection(db, 'ccaList'),    where('clientId', '==', clientId), limit(1))),
+      getDocs(query(collection(db, 'rentList'),   where('clientId', '==', clientId), limit(1))),
       getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId), limit(1))),
     ]);
     renderListSlot('buyerReadySlot',  ccaSnap.empty  ? null : ccaSnap.docs[0].id,  'Buyer Ready',  'buyer-ready');
+    renderListSlot('rentReadySlot',   rentSnap.empty ? null : rentSnap.docs[0].id, 'Rent Ready',   'rent-ready');
     renderListSlot('homeRepairsSlot', higSnap.empty  ? null : higSnap.docs[0].id,  'Home Repairs', 'repair-ready');
   } catch (_) {}
 }
@@ -1373,6 +1375,9 @@ async function addToList(slotId, label, page) {
     if (page === 'buyer-ready') {
       Object.assign(base, { counselor: _client.counselor || '', closingDate: null, ccaAmount: 0 });
       await addDoc(collection(db, 'ccaList'), base);
+    } else if (page === 'rent-ready') {
+      Object.assign(base, { counselor: _client.counselor || '', rentRangeMin: 0, rentRangeMax: 0, bedrooms: '', areasOfInterest: [], targetMoveInDate: null });
+      await addDoc(collection(db, 'rentList'), base);
     } else {
       Object.assign(base, { scopeOfWork: '', estimatedBudget: 0, estimatedDays: 0 });
       await addDoc(collection(db, 'higWaitlist'), base);
@@ -1403,16 +1408,19 @@ async function syncClientToLists(data) {
       careTeam:            data.careTeam             || [],
       updatedAt:           serverTimestamp(),
     };
-    const higBase = { ...ccaBase };
+    const rentBase = { ...ccaBase }; // rentList also tracks counselor
+    const higBase  = { ...ccaBase };
     delete higBase.counselor; // hig records don't track counselor
 
-    const [ccaSnap, higSnap] = await Promise.all([
+    const [ccaSnap, rentSnap, higSnap] = await Promise.all([
       getDocs(query(collection(db, 'ccaList'),    where('clientId', '==', clientId))),
+      getDocs(query(collection(db, 'rentList'),   where('clientId', '==', clientId))),
       getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId))),
     ]);
     await Promise.all([
-      ...ccaSnap.docs.map(d => updateDoc(doc(db, 'ccaList',    d.id), ccaBase)),
-      ...higSnap.docs.map(d => updateDoc(doc(db, 'higWaitlist', d.id), higBase)),
+      ...ccaSnap.docs.map(d  => updateDoc(doc(db, 'ccaList',    d.id),  ccaBase)),
+      ...rentSnap.docs.map(d => updateDoc(doc(db, 'rentList',   d.id),  rentBase)),
+      ...higSnap.docs.map(d  => updateDoc(doc(db, 'higWaitlist', d.id), higBase)),
     ]);
   } catch (_) {}
 }

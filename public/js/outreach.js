@@ -1,4 +1,4 @@
-/**
+﻿/**
  * outreach.js — Outreach page: CMC batch letters + phone call log
  *
  * Two independent features on one page:
@@ -24,7 +24,7 @@
  */
 
 import { db } from './firebase-config.js';
-import { requireAuth, setupNav } from './auth.js';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES } from './data.js';
 import {

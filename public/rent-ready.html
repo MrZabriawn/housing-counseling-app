@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rent Ready — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .client-selector-list { max-height:360px; overflow-y:auto; margin-top:0.75rem; border:1px solid var(--border); border-radius:var(--radius); }
+    .client-selector-item { display:flex; justify-content:space-between; align-items:center; padding:0.6rem 0.85rem; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.875rem; transition:background 0.1s; }
+    .client-selector-item:last-child { border-bottom:none; }
+    .client-selector-item:hover { background:var(--primary-light,#e8f0fe); }
+    .client-selector-item .cs-name { font-weight:600; }
+    .client-selector-item .cs-meta { font-size:0.78rem; color:var(--text-muted); }
+
+    /* Tag/chip input */
+    .chip-input-wrap { display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center; border:1px solid var(--border); border-radius:var(--radius); padding:0.35rem 0.5rem; min-height:2.25rem; cursor:text; background:#fff; }
+    .chip-input-wrap input { border:none; outline:none; flex:1; min-width:120px; font-size:0.875rem; background:transparent; padding:0.1rem 0; }
+    .chip { display:inline-flex; align-items:center; gap:0.25rem; background:var(--primary-light,#e8f0fe); color:var(--primary,#1a56db); font-size:0.78rem; font-weight:600; padding:0.15rem 0.5rem; border-radius:999px; }
+    .chip .chip-del { cursor:pointer; font-size:1rem; line-height:1; opacity:0.6; }
+    .chip .chip-del:hover { opacity:1; }
+
+    /* Area tags in table cells */
+    .area-tag { display:inline-block; background:var(--primary-light,#e8f0fe); color:var(--primary,#1a56db); font-size:0.7rem; font-weight:600; padding:0.1rem 0.4rem; border-radius:999px; margin:0.1rem; }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Rent Ready</h2>
+        <p>Clients looking to rent — waitlist, intake tracking, and placement.</p>
+      </div>
+      <button id="addClientBtn" class="btn btn-primary btn-sm">+ Add Client</button>
+    </div>
+
+    <div class="filter-bar">
+      <div class="form-group">
+        <label>Status</label>
+        <select id="filterStatus">
+          <option value="">All Active</option>
+          <option value="waitlisted">Waitlisted</option>
+          <option value="placed">Placed</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Search</label>
+        <input type="text" id="filterSearch" placeholder="Client, counselor, or area…">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:0.2rem;">
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.8125rem;font-weight:600;color:var(--text-muted);">
+          <input type="checkbox" id="showInactive"> Show Inactive/Placed
+        </label>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Counselor</th>
+            <th>Status</th>
+            <th>Rent Range (mo.)</th>
+            <th>Areas of Interest</th>
+            <th>Bedrooms</th>
+            <th>Target Move-in</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rrBody">
+          <tr><td colspan="8" class="text-muted" style="padding:2rem;text-align:center;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Edit Modal -->
+  <div id="rrEditModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3 id="rrEditTitle">Edit Entry</h3>
+
+      <!-- Linked client bar -->
+      <div id="rrLinkedBar" class="hidden" style="margin-bottom:0.75rem;font-size:0.8125rem;background:var(--primary-light,#e8f0fe);padding:0.45rem 0.75rem;border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;">
+        <a id="rrClientAnchor" href="#" style="font-weight:600;">View Full Client Profile →</a>
+        <button id="rrResyncBtn" type="button" class="btn btn-secondary btn-sm">Re-sync from client</button>
+      </div>
+
+      <!-- Link search (shown when not linked) -->
+      <div id="rrLinkSection" class="hidden" style="margin-bottom:1rem;border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;">
+        <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.5rem;">Link to Client Profile</p>
+        <input type="text" id="rrLinkSearch" placeholder="Search by name, counselor, or Rx…" autocomplete="off" style="width:100%;margin-bottom:0.4rem;">
+        <div id="rrLinkResults" style="border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;font-size:0.875rem;"></div>
+      </div>
+
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="editRentMin">Rent Range — Min ($/mo.)</label>
+          <input type="number" id="editRentMin" min="0" step="50" placeholder="e.g. 700">
+        </div>
+        <div class="form-group">
+          <label for="editRentMax">Rent Range — Max ($/mo.)</label>
+          <input type="number" id="editRentMax" min="0" step="50" placeholder="e.g. 1100">
+        </div>
+        <div class="form-group">
+          <label for="editBedrooms">Bedrooms</label>
+          <select id="editBedrooms">
+            <option value="">—</option>
+            <option value="Studio">Studio</option>
+            <option value="1">1 bedroom</option>
+            <option value="2">2 bedrooms</option>
+            <option value="3">3 bedrooms</option>
+            <option value="4">4 bedrooms</option>
+            <option value="5+">5+ bedrooms</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editMoveInDate">Target Move-in Date</label>
+          <input type="date" id="editMoveInDate">
+        </div>
+        <div class="form-group full-width">
+          <label>Areas of Interest <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">(type a word and press Enter)</span></label>
+          <div class="chip-input-wrap" id="areaChipsWrap">
+            <div id="areaChips" style="display:contents;"></div>
+            <input type="text" id="areaChipInput" placeholder="e.g. aliquippa">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="editRrStatus">Status</label>
+          <select id="editRrStatus">
+            <option value="waitlisted">Waitlisted</option>
+            <option value="placed">Placed</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <!-- Placed closure section -->
+        <div id="placedSection" class="form-group full-width hidden" style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;background:#f8f9fb;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">Placement Details</p>
+          <div class="form-grid" style="margin:0;">
+            <div class="form-group full-width">
+              <label for="editPropertyAddress">Property Address</label>
+              <input type="text" id="editPropertyAddress" placeholder="Street, City, ZIP">
+            </div>
+            <div class="form-group">
+              <label for="editPlacedMoveInDate">Move-in Date</label>
+              <input type="date" id="editPlacedMoveInDate">
+            </div>
+            <div class="form-group">
+              <label for="editMonthlyRent">Monthly Rent Agreed ($)</label>
+              <input type="number" id="editMonthlyRent" min="0" step="10">
+            </div>
+          </div>
+        </div>
+
+        <!-- Inactive closure section -->
+        <div id="inactiveSection" class="form-group full-width hidden" style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;background:#f8f9fb;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">Reason for Inactivity</p>
+          <div class="form-group" style="margin:0;">
+            <label for="editInactiveReason">Reason</label>
+            <select id="editInactiveReason">
+              <option value="Could Not Secure">Could Not Secure</option>
+              <option value="Withdrew">Withdrew</option>
+              <option value="Circumstances Changed">Circumstances Changed</option>
+              <option value="Referred Elsewhere">Referred Elsewhere</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="editRrNotes">Notes</label>
+          <textarea id="editRrNotes" rows="3"></textarea>
+        </div>
+      </div>
+      <p id="rrEditError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="rrEditSave" class="btn btn-primary">Save</button>
+        <button id="rrEditCancel" class="btn btn-secondary">Cancel</button>
+        <button id="rrRemoveBtn" class="btn btn-secondary" style="margin-left:auto;color:var(--danger,#dc2626);">Remove from List</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Selector Modal -->
+  <div id="clientSelectorModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <h3>Add Client to Rent Ready</h3>
+      <p style="font-size:0.8125rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">Showing active clients not already on this list.</p>
+      <input type="text" id="clientSelectorSearch" placeholder="Search by name or counselor…" style="width:100%;">
+      <div id="clientSelectorList" class="client-selector-list">
+        <div style="padding:1.5rem;text-align:center;color:var(--text-muted);">Loading…</div>
+      </div>
+      <div class="form-actions">
+        <button id="clientSelectorClose" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/rent-ready.js"></script>
+</body>
+</html>
