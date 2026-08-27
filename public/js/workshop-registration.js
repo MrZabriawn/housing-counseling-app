@@ -88,11 +88,42 @@ function showStatus(icon, title, body) {
 }
 
 function renderHero(data) {
-  qs('#heroTitle').textContent = data.title || 'Workshop';
+  const title = data.title || 'Workshop';
+  qs('#heroTitle').textContent = title;
   qs('#heroSubtitle').textContent = data.subtitle || '';
   if (data.date) {
     qs('#heroMeta').innerHTML = `<span>📅 ${formatDate(data.date)}</span>`;
   }
+
+  // Update page title and OG tags dynamically (helps browser share sheet;
+  // does not affect Facebook/LinkedIn crawlers which see the static defaults)
+  document.title = `${title} — Registration`;
+  _setMeta('og:title', title);
+  _setMeta('twitter:title', title);
+  if (data.subtitle) {
+    _setMeta('og:description', data.subtitle);
+    _setMeta('twitter:description', data.subtitle);
+  }
+
+  // Use shareImageUrl (admin-pasted public URL) for OG image if available,
+  // otherwise fall back to the uploaded banner (Storage URL also works for OG).
+  const ogImage = data.shareImageUrl || data.bannerImageUrl;
+  if (ogImage) {
+    _setMeta('og:image', ogImage);
+    _setMeta('twitter:image', ogImage);
+  }
+
+  if (data.bannerImageUrl) {
+    const img = qs('#heroBanner');
+    img.src = data.bannerImageUrl;
+    img.alt = title;
+    img.style.display = '';
+  }
+}
+
+function _setMeta(property, content) {
+  const el = document.querySelector(`meta[property="${property}"], meta[name="${property}"]`);
+  if (el) el.setAttribute('content', content);
 }
 
 function renderLocations(locs) {

@@ -38,6 +38,7 @@ let _allClients   = [];       // lazy-loaded client list for the call modal sear
 let _callType     = 'client'; // current call modal type: 'client' | 'prospect'
 let _selectedClientId   = null; // clientId chosen in the call modal client search
 let _selectedClientName = null; // display name for the chosen client
+let _webhookMap   = {};         // counselorDocId → chatWebhookUrl (populated on load)
 let _convertCallId      = null; // outreachCall ID being converted to a client
 
 // TAL Hours modal state
@@ -202,6 +203,24 @@ async function loadCounselorOptions() {
           s.appendChild(o);
         });
       });
+
+    // Assign To dropdown (all active counselors) + webhook map
+    const assignSel = document.getElementById('callAssignTo');
+    active.forEach(d => {
+      const data = d.data();
+      // Populate webhook lookup map (keyed by counselor doc id)
+      if (data.chatWebhookUrl) _webhookMap[d.id] = data.chatWebhookUrl;
+      // Assign To dropdown
+      const ao = document.createElement('option');
+      ao.value        = d.id;
+      ao.dataset.name = data.name || '';
+      ao.textContent  = data.name || d.id;
+      assignSel.appendChild(ao);
+    });
+    assignSel.addEventListener('change', () => {
+      const notifyRow = document.getElementById('callNotifyRow');
+      notifyRow.style.display = assignSel.value ? 'flex' : 'none';
+    });
 
     // TAL dropdown: all active staff (counselors AND non-counselors with staff #)
     active.forEach(d => {
@@ -574,6 +593,9 @@ function openCallModal() {
   document.getElementById('callClientResults').innerHTML =
     '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>';
   document.getElementById('callModalError').classList.add('hidden');
+  document.getElementById('callAssignTo').value        = '';
+  document.getElementById('callNotifyRow').style.display = 'none';
+  document.getElementById('callNotifyCheck').checked   = true;
   clearCallClientSelection();
   setCallType('client');
 
@@ -686,6 +708,15 @@ async function saveCall() {
     if (!contactName) { showCallError('Please enter a prospect name.'); return; }
   }
 
+  // Assign to / notify
+  const assignSel         = document.getElementById('callAssignTo');
+  const assignedToCounselorId = assignSel.value || null;
+  const assignedToName    = assignedToCounselorId
+    ? (assignSel.options[assignSel.selectedIndex]?.dataset?.name || '')
+    : '';
+  const sendNotify = assignedToCounselorId &&
+    document.getElementById('callNotifyCheck').checked;
+
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving…';
 
@@ -699,9 +730,31 @@ async function saveCall() {
       phone,
       outcome,
       notes,
+      assignedToCounselorId: assignedToCounselorId || null,
+      assignedToName:        assignedToName || null,
       createdAt:      serverTimestamp(),
       updatedAt:      serverTimestamp(),
     });
+
+    // Fire Google Chat webhook non-blocking — failure never prevents the save
+    if (sendNotify) {
+      const webhookUrl = _webhookMap[assignedToCounselorId];
+      if (webhookUrl) {
+        const dateFmt = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const lines   = [
+          `📞 Call logged for *${assignedToName}*`,
+          `From: ${contactName}${phone ? ' · ' + phone : ''}`,
+          outcome ? `Outcome: ${outcome}` : null,
+          notes   ? notes                : null,
+          `Logged by: ${counselor} · ${dateFmt}`,
+        ].filter(Boolean).join('\n');
+        fetch(webhookUrl, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ text: lines }),
+        }).catch(() => {/* silent — Firestore record already saved */});
+      }
+    }
 
     closeCallModal();
     await loadCalls();

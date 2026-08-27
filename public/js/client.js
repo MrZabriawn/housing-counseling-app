@@ -1085,6 +1085,7 @@ function populateRxDropdown(selectedRxNumber = '', selectedGuarantor = '') {
 
   const activeRx = _rxDocs.filter(r => r.active !== false);
   sel.innerHTML = '<option value="">— None —</option>' +
+    `<option value="00000" data-guarantor="" ${selectedRxNumber === '00000' ? 'selected' : ''}>00000 — Intake (pre-Rx)</option>` +
     activeRx.map(r =>
       `<option value="${escAttr(r.rxNumber)}" data-guarantor="${escAttr(r.guarantor || '')}"
         ${r.rxNumber === selectedRxNumber && (r.guarantor || '') === selectedGuarantor ? 'selected' : ''}>

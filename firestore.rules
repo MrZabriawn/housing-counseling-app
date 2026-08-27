@@ -14,10 +14,16 @@ service cloud.firestore {
     }
 
     // Public workshop registration — anyone can read workshop config and
-    // submit a registration. Staff-only operations (update, delete) still
-    // require sign-in via the catch-all rule below.
+    // submit a registration. Staff-only operations (delete, title/date edits)
+    // still require sign-in via the catch-all rule below.
     match /workshops/{docId} {
       allow read: if true;
+      // Public registrants need to increment the seat count inside a
+      // transaction. Restrict public updates to the `locations` field only —
+      // they cannot change title, active status, dates, or anything else.
+      allow update: if request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasOnly(['locations']);
     }
     match /workshopRegistrations/{docId} {
       allow create: if true;

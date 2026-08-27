@@ -106,6 +106,18 @@
       </div>
     </div>
 
+    <!-- Call Notifications (Google Chat) -->
+    <div class="card" style="max-width:760px;margin-top:1.25rem;">
+      <div class="card-title">Call Notifications — Google Chat</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        When a call is logged and assigned to a staff member, the app can post a message directly to their Google Chat space.
+        Each person needs to create an <strong>Incoming Webhook</strong> in their Google Chat space and paste the URL here.
+        <a href="https://developers.google.com/workspace/chat/quickstart/incoming-webhook-interactive-chat-app" target="_blank" rel="noopener noreferrer" style="color:var(--primary);">How to create a webhook →</a>
+      </p>
+      <div id="webhookList"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
+      <p id="webhookMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;color:var(--danger);"></p>
+    </div>
+
     <!-- Counselor Name Remapping -->
     <div class="card" style="max-width:640px;margin-top:1.25rem;">
       <div class="card-title">Normalize Counselor Names</div>

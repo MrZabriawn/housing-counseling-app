@@ -184,6 +184,10 @@ body {
 }
 .form-group input[readonly] { background: var(--bg); color: var(--text-muted); }
 .form-group textarea { resize: vertical; min-height: 80px; }
+/* Remove number-input spinners app-wide — type the value instead */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .form-group.full-width { grid-column: 1 / -1; }
 .checkbox-row { display: flex; align-items: center; gap: 0.5rem; padding-top: 1.4rem; }
 .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }

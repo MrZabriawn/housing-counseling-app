@@ -356,6 +356,18 @@
           <label for="callNotes">Notes</label>
           <textarea id="callNotes" rows="3" placeholder="Brief summary of the call…"></textarea>
         </div>
+
+        <!-- Assign to / Google Chat notification -->
+        <div class="form-group">
+          <label for="callAssignTo">Assign to</label>
+          <select id="callAssignTo">
+            <option value="">— None —</option>
+          </select>
+        </div>
+        <div class="form-group" id="callNotifyRow" style="display:none;align-items:center;gap:0.5rem;padding-top:1.6rem;">
+          <input type="checkbox" id="callNotifyCheck" checked style="width:15px;height:15px;cursor:pointer;">
+          <label for="callNotifyCheck" style="font-size:0.875rem;font-weight:500;cursor:pointer;margin:0;">Send Google Chat notification</label>
+        </div>
       </div>
 
       <p id="callModalError" class="error-msg hidden"></p>

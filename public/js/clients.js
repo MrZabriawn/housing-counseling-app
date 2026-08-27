@@ -864,7 +864,10 @@ function showIncompleteBanner() {
       const issues = [];
       if (!c.amiPercent)               issues.push('AMI');
       if (!c.reCode)                   issues.push('R/E');
-      if (!c.rxNumbers?.length)        issues.push('Rx/Guarantor');
+      // Check sessions rather than the stale c.rxNumbers field — rxNumbers live
+      // in the subcollection and on individual session docs, not on the client doc.
+      const hasRx = _allSessions.some(s => s.clientId === c.id && (s.rxNumber || '').trim());
+      if (!hasRx)                      issues.push('Rx/Guarantor');
       if (issues.length) acc.push({ ...c, issues });
       return acc;
     }, []);

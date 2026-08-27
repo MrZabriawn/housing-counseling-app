@@ -116,10 +116,41 @@
       </div>
     </div>
 
+    <!-- Banner image + social share image -->
+    <div id="bannerCard" class="card" style="display:none; margin-bottom:1rem; padding:0.85rem 1rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;flex-wrap:wrap;">
+
+        <!-- Uploaded banner (shows full-size on registration page) -->
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.65rem;">Banner image <span style="font-weight:400;text-transform:none;letter-spacing:0;">(shows on registration page)</span></div>
+          <div style="display:flex;align-items:flex-start;gap:0.75rem;flex-wrap:wrap;">
+            <img id="bannerPreview" src="" alt="Workshop banner" style="display:none;max-height:80px;max-width:180px;border-radius:6px;border:1px solid var(--border);object-fit:cover;">
+            <div>
+              <label class="btn btn-sm btn-secondary" for="bannerUploadInput" style="cursor:pointer;display:inline-block;">📷 Upload image</label>
+              <input type="file" id="bannerUploadInput" accept="image/*" style="display:none;">
+              <div id="bannerStatus" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Share image URL (used for Facebook/LinkedIn link preview) -->
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.65rem;">Social share image URL <span style="font-weight:400;text-transform:none;letter-spacing:0;">(Facebook / LinkedIn preview)</span></div>
+          <p style="font-size:0.775rem;color:var(--text-muted);margin-bottom:0.5rem;">Paste a direct public image link — your event flyer hosted on Google Drive, Canva, Dropbox, etc. Facebook and LinkedIn use this when someone shares your registration link.</p>
+          <div style="display:flex;gap:0.5rem;">
+            <input type="url" id="shareImageUrl" placeholder="https://…" style="flex:1;font-size:0.8rem;">
+            <button id="saveShareImageBtn" class="btn btn-sm btn-secondary">Save</button>
+          </div>
+          <div id="shareImageStatus" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tabs -->
     <div class="ws-tabs" id="wsTabs" style="display:none;">
       <button class="ws-tab active" data-tab="registrants">Registrants</button>
       <button class="ws-tab" data-tab="raffle" id="raffleTabBtn" style="display:none;">🎟️ Raffle</button>
+      <button class="ws-tab" data-tab="sessions">📋 Sessions</button>
       <button class="ws-tab" data-tab="new">+ New Workshop</button>
     </div>
 
@@ -186,6 +217,39 @@
         <div class="raffle-result" id="raffleResult">
           <span class="raffle-empty">Click "Draw Winner" to randomly select a winner from raffle entries.</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Sessions bridge panel -->
+    <div id="panelSessions" class="ws-panel" style="display:none;">
+
+      <!-- Session settings -->
+      <div class="card" style="margin-bottom:1rem;padding:0.85rem 1rem;">
+        <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Session settings — applied to all records below</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="margin:0;">
+            <label for="sessionsDate">Session Date *</label>
+            <input type="date" id="sessionsDate">
+          </div>
+          <div class="form-group" style="min-width:180px;margin:0;">
+            <label for="sessionsCounselor">Counselor *</label>
+            <select id="sessionsCounselor"><option value="">— Select —</option></select>
+          </div>
+          <div class="form-group" style="flex:0 0 110px;margin:0;">
+            <label for="sessionsHours">Hours</label>
+            <input type="number" id="sessionsHours" value="1" min="0.25" step="0.25" style="width:100%;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Match table -->
+      <div id="sessionMatchTable" style="margin-bottom:1rem;">
+        <p style="color:var(--text-muted);font-size:0.875rem;">Click the Sessions tab to load registrants.</p>
+      </div>
+
+      <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+        <button id="createSessionsBtn" class="btn btn-primary">Create Session Records</button>
+        <span id="sessionsStatus" style="font-size:0.875rem;color:var(--text-muted);"></span>
       </div>
     </div>
 

@@ -17,6 +17,7 @@ requireED(async (user, profile) => {
 
   await loadPendingUsers();
   await loadStaff();
+  await loadWebhookSettings();
   await loadRemapTable();
   await loadWeights();
   await loadRates();
@@ -399,6 +400,52 @@ async function saveEditCounselor() {
   } finally {
     saveBtn.disabled    = false;
     saveBtn.textContent = 'Save';
+  }
+}
+
+// ── Call Notifications (Google Chat Webhooks) ─────────────────────────────────
+
+async function loadWebhookSettings() {
+  const container = document.getElementById('webhookList');
+  const msgEl     = document.getElementById('webhookMsg');
+  try {
+    const snap   = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+    const active = snap.docs.filter(d => d.data().active !== false);
+    if (!active.length) {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No active staff found.</p>';
+      return;
+    }
+    container.innerHTML = active.map(d => {
+      const data = d.data();
+      return `<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:0.55rem;flex-wrap:wrap;">
+        <span style="flex:0 0 160px;font-size:0.875rem;font-weight:600;">${escHtml(data.name || '')}</span>
+        <input type="url" class="webhook-url-input" data-counselor-id="${escAttr(d.id)}"
+          placeholder="https://chat.googleapis.com/v1/spaces/…"
+          value="${escAttr(data.chatWebhookUrl || '')}"
+          style="flex:1;min-width:280px;font-size:0.8rem;">
+        <button class="btn btn-sm btn-secondary webhook-save-btn" data-counselor-id="${escAttr(d.id)}">Save</button>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.webhook-save-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id  = btn.dataset.counselorId;
+        const inp = container.querySelector(`.webhook-url-input[data-counselor-id="${id}"]`);
+        const url = (inp.value || '').trim();
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await updateDoc(doc(db, 'counselors', id), { chatWebhookUrl: url });
+          btn.textContent = '✓ Saved';
+          setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
+        } catch (err) {
+          btn.textContent = 'Save'; btn.disabled = false;
+          msgEl.textContent = 'Save failed: ' + err.message;
+          msgEl.classList.remove('hidden');
+        }
+      });
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
   }
 }
 
