@@ -33,6 +33,7 @@ export async function initCdbgReports(user, profile) {
   monthSel.addEventListener('change', loadMonth);
   document.getElementById('reportYear').addEventListener('change', loadMonth);
   document.getElementById('reportCounselor').addEventListener('change', loadMonth);
+  document.getElementById('excludeZeroHours').addEventListener('change', loadMonth);
 
   document.getElementById('printCdbgBtn').addEventListener('click', () => {
     if (isDemoMode()) return;
@@ -42,6 +43,84 @@ export async function initCdbgReports(user, profile) {
   });
 
   await loadMonth();
+
+  // ── Save client detail changes (address fields) ───────────────────────────
+  document.getElementById('saveClientDetailsBtn').addEventListener('click', async () => {
+    const btn    = document.getElementById('saveClientDetailsBtn');
+    const msg    = document.getElementById('saveClientDetailsMsg');
+    const inputs = document.querySelectorAll('#clientDetailBody [data-addr-client]');
+    if (!inputs.length) return;
+
+    // Collect by clientId
+    const byClient = {};
+    inputs.forEach(inp => {
+      const id    = inp.dataset.addrClient;
+      const field = inp.dataset.addrField;
+      if (!byClient[id]) byClient[id] = {};
+      byClient[id][field] = inp.value.trim();
+    });
+
+    btn.disabled = true; btn.textContent = 'Saving…'; msg.textContent = '';
+    let saved = 0, failed = 0;
+    await Promise.all(Object.entries(byClient).map(async ([clientId, fields]) => {
+      try {
+        await updateDoc(doc(db, 'clients', clientId), fields);
+        saved++;
+      } catch (_) { failed++; }
+    }));
+    btn.disabled = false; btn.textContent = 'Save Changes';
+    msg.textContent = failed
+      ? `${saved} saved, ${failed} failed`
+      : `✓ ${saved} client${saved !== 1 ? 's' : ''} saved`;
+    msg.style.color = failed ? 'var(--danger)' : '#16a34a';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  });
+
+  // ── Save all invoice hours at once ───────────────────────────────────────
+  document.getElementById('saveAllHoursBtn').addEventListener('click', async () => {
+    const btn    = document.getElementById('saveAllHoursBtn');
+    const msg    = document.getElementById('saveAllHoursMsg');
+    const inputs = document.querySelectorAll('#invoiceTableBody [data-hours-client]');
+    if (!inputs.length) return;
+
+    btn.disabled = true; btn.textContent = 'Saving…'; msg.textContent = '';
+    let saved = 0, failed = 0;
+    await Promise.all(Array.from(inputs).map(async inp => {
+      const clientId  = inp.dataset.hoursClient;
+      const sessionId = inp.dataset.hoursSession;
+      const rate      = parseFloat(inp.dataset.rate) || 0;
+      const hours     = parseFloat(inp.value) || 0;
+      try {
+        await updateDoc(doc(db, 'clients', clientId, 'sessions', sessionId), { hours });
+        // Update amount cell live
+        const el = document.getElementById('invoiceTableBody');
+        const amountSpan = el?.querySelector(`[data-amount-for="${sessionId}"]`);
+        if (amountSpan) amountSpan.innerHTML = `$${(hours * rate).toFixed(2)}`;
+        if (hours > 0) {
+          const row = inp.closest('tr');
+          if (row) { row.style.background = ''; inp.style.border = '1px solid var(--border)'; }
+        }
+        saved++;
+      } catch (_) { failed++; }
+    }));
+
+    // Recalculate grand totals
+    let gh = 0, ga = 0;
+    document.querySelectorAll('#invoiceTableBody [data-hours-client]').forEach(inp => {
+      const h = parseFloat(inp.value) || 0;
+      const r = parseFloat(inp.dataset.rate) || 0;
+      gh += h; ga += h * r;
+    });
+    const ghEl = document.getElementById('invoiceGrandHours');
+    const gaEl = document.getElementById('invoiceGrandAmount');
+    if (ghEl) ghEl.textContent = gh;
+    if (gaEl) gaEl.textContent = `$${ga.toFixed(2)}`;
+
+    btn.disabled = false; btn.textContent = 'Save All Hours';
+    msg.textContent = failed ? `${saved} saved, ${failed} failed` : `✓ ${saved} session${saved !== 1 ? 's' : ''} saved`;
+    msg.style.color = failed ? 'var(--danger)' : '#16a34a';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  });
 
   // Court counselor filter (pre-populate before tab is opened)
   try {
@@ -130,6 +209,12 @@ async function loadMonth() {
     });
   });
 
+  // Drop 0-hour sessions if the checkbox is checked
+  if (document.getElementById('excludeZeroHours')?.checked) {
+    const before = sessionRows.length;
+    sessionRows.splice(0, sessionRows.length, ...sessionRows.filter(r => r.hours > 0));
+  }
+
   // Legacy counselingLog entries filtered to the selected month/year
   let logRows = logSnap.docs.map(d => ({ _clientId: null, id: d.id, ...d.data() }));
   logRows = logRows.filter(r => {
@@ -188,6 +273,12 @@ function renderPreviews(unique) {
   renderR2Preview(unique);
   renderClientDetail(reportData.rows, unique);
   renderInvoiceTable(reportData.sessionRows);
+
+  // Show save buttons now that data is rendered
+  const cdBtn  = document.getElementById('saveClientDetailsBtn');
+  const invBtn = document.getElementById('saveAllHoursBtn');
+  if (cdBtn)  cdBtn.style.display  = unique.length ? '' : 'none';
+  if (invBtn) invBtn.style.display = reportData.sessionRows.length ? '' : 'none';
 }
 
 // Must match the values amiCategory() / amiCdbgCategory() actually returns
@@ -381,10 +472,27 @@ function renderClientDetail(allRows, unique) {
             ? `<button data-legacy-id="${esc(r.id)}" title="Delete this legacy log entry" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1rem;padding:0 4px;line-height:1;">&#10005;</button>`
             : '';
 
+          const addrMissing = !r.streetAddress;
+          const addrCell = r._clientId
+            ? `<div style="display:flex;flex-direction:column;gap:2px;min-width:160px;">
+                <input type="text" data-addr-client="${esc(r._clientId)}" data-addr-field="streetAddress"
+                  value="${esc(r.streetAddress || '')}" placeholder="Street address"
+                  style="font-size:0.75rem;border:1px solid ${addrMissing ? 'var(--danger)' : 'var(--border)'};border-radius:3px;padding:2px 4px;background:${addrMissing ? '#fff5f5' : 'transparent'};width:100%;">
+                <div style="display:flex;gap:3px;">
+                  <input type="text" data-addr-client="${esc(r._clientId)}" data-addr-field="city"
+                    value="${esc(r.city || '')}" placeholder="City"
+                    style="font-size:0.75rem;border:1px solid var(--border);border-radius:3px;padding:2px 4px;background:transparent;flex:1;min-width:0;">
+                  <input type="text" data-addr-client="${esc(r._clientId)}" data-addr-field="zipCode"
+                    value="${esc(r.zipCode || '')}" placeholder="Zip"
+                    style="font-size:0.75rem;border:1px solid var(--border);border-radius:3px;padding:2px 4px;background:transparent;width:56px;">
+                </div>
+              </div>`
+            : (() => { const s = r.streetAddress || ''; const c = r.city || ''; const z = r.zipCode || ''; if (!s && !c && !z) return '<span style="color:var(--danger);font-weight:700;">No Address</span>'; const line2 = [c, z].filter(Boolean).join(' '); return line2 ? `${esc(titleCase(s))}<br>${esc(titleCase(c))} ${esc(z)}` : esc(titleCase(s)); })();
+
           return `<tr>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;text-align:right;color:var(--text-muted);">${i + 1}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-weight:600;">${esc(isDemoMode() ? demoClientName(r._clientId) : (r.clientName || '—'))}</td>
-            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;white-space:nowrap;${!r.streetAddress ? 'background:#fff5f5;color:var(--danger);font-weight:700;' : ''}">${(() => { const s = r.streetAddress || ''; const c = r.city || ''; const z = r.zipCode || ''; if (!s && !c && !z) return 'No Address'; const line2 = [c, z].filter(Boolean).join(' '); return line2 ? `${esc(titleCase(s))}<br>${esc(titleCase(c))} ${esc(z)}` : esc(titleCase(s)); })()}</td>
+            <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${addrCell}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;">${esc(r.counselor || '—')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.775rem;">${entry.sessions.join(', ')}</td>
             <td style="border:1px solid var(--border);padding:0.28rem 0.5rem;font-size:0.75rem;font-weight:700;color:${srcColor};">${src}</td>

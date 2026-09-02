@@ -89,6 +89,9 @@
     <!-- Incomplete files banner -->
     <div id="incompleteBanner" class="hidden" style="background:#fff8e1;border-left:4px solid #f59e0b;border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.8125rem;"></div>
 
+    <!-- Stale clients banner -->
+    <div id="staleBanner" class="hidden" style="background:#fff7ed;border-left:4px solid #f97316;border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.8125rem;"></div>
+
     <!-- Filters -->
     <form id="filterForm" class="filter-bar">
       <div class="form-group">
@@ -267,6 +270,58 @@
     </div><!-- /metrics-panel -->
 
   </main>
+
+  <!-- Follow-up Modal -->
+  <div id="followUpModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:480px;">
+      <h3 style="margin-bottom:0.15rem;">Log Follow-up</h3>
+      <div style="font-size:1rem;font-weight:600;color:var(--primary);margin-bottom:0.75rem;" id="followUpClientName"></div>
+      <!-- Client context summary -->
+      <div id="followUpSummary" style="background:var(--bg,#f8f9fb);border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:0.6rem 0.8rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text-muted);display:grid;grid-template-columns:1fr 1fr;gap:0.25rem 1rem;"></div>
+      <div class="form-grid" style="margin-top:0;">
+        <div class="form-group full-width">
+          <label for="followUpDate">Date *</label>
+          <input type="date" id="followUpDate">
+        </div>
+        <div class="form-group full-width">
+          <label for="followUpNotes">Notes</label>
+          <textarea id="followUpNotes" rows="3" placeholder="Brief follow-up notes…"></textarea>
+        </div>
+      </div>
+      <p id="followUpError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="followUpSaveBtn" class="btn btn-primary">Save</button>
+        <button id="followUpCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Close Modal -->
+  <div id="quickCloseModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:440px;">
+      <h3>Close File — <span id="quickCloseClientName"></span></h3>
+      <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.25rem;">Marks the client closed. Full closure details (award type, CCA) can be added from their profile.</p>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="form-group full-width">
+          <label for="quickCloseDate">Closure Date *</label>
+          <input type="date" id="quickCloseDate">
+        </div>
+        <div class="form-group full-width">
+          <label for="quickCloseOutcome">Outcome Notes</label>
+          <input type="text" id="quickCloseOutcome" placeholder="e.g. Client purchased home, case resolved…">
+        </div>
+        <div class="form-group full-width">
+          <label for="quickCloseValue">Outcome Value ($)</label>
+          <input type="number" id="quickCloseValue" min="0" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <p id="quickCloseError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="quickCloseSaveBtn" class="btn btn-danger">Close File</button>
+        <button id="quickCloseCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Case Management Modal -->
   <div id="cmModal" class="modal-overlay hidden">

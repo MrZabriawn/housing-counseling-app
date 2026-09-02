@@ -158,6 +158,10 @@
             <input type="text" id="reportPerson">
           </div>
         </div>
+        <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.5rem;">
+          <input type="checkbox" id="excludeZeroHours" checked style="width:15px;height:15px;cursor:pointer;">
+          <label for="excludeZeroHours" style="font-size:0.8125rem;font-weight:500;cursor:pointer;margin:0;">Exclude 0-hour sessions</label>
+        </div>
         <p id="reportStatus" style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;min-height:1.2em;"></p>
       </div>
 
@@ -259,16 +263,24 @@
 
         <!-- Client detail list for audit / discrepancy investigation -->
         <div id="clientDetailSection" class="no-print" style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem;">
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">
-            Client Detail — All Sessions Included
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;flex:1;">
+              Client Detail — All Sessions Included
+            </div>
+            <button id="saveClientDetailsBtn" class="btn btn-primary btn-sm" style="display:none;">Save Changes</button>
+            <span id="saveClientDetailsMsg" style="font-size:0.8rem;color:var(--text-muted);"></span>
           </div>
           <div id="clientDetailBody" style="overflow-x:auto;"></div>
         </div>
 
         <!-- Invoice calculator — hours × rate per session -->
         <div id="invoiceSection" class="no-print" style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem;">
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.04em;">
-            Invoice Calculator — Hours × Rate
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;flex:1;">
+              Invoice Calculator — Hours × Rate
+            </div>
+            <button id="saveAllHoursBtn" class="btn btn-primary btn-sm" style="display:none;">Save All Hours</button>
+            <span id="saveAllHoursMsg" style="font-size:0.8rem;color:var(--text-muted);"></span>
           </div>
           <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;">Sessions with hours logged, grouped by counselor. Rate from Settings → Billing Rates.</p>
           <div id="invoiceTableBody" style="overflow-x:auto;"></div>

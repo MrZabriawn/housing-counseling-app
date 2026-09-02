@@ -23,6 +23,10 @@ let _metricsRendered   = false; // true after first visit to Metrics tab
 let _rxGuarantorMap    = new Map(); // rxNumber string → guarantor string
 let _matchingSessions  = null;  // null = client view; array = session view (date filter active)
 
+// Stale client modal state
+let _followUpClientId  = null;
+let _quickCloseClientId = null;
+
 // Session Admin tab state
 let _adminSessions = [];
 let _adminFiltered = [];
@@ -52,6 +56,17 @@ requireAuth(async (user, profile) => {
   restoreFilters();
   await loadClients();
   showIncompleteBanner();
+  showStaleBanner();
+
+  // Follow-up modal
+  document.getElementById('followUpCancelBtn').addEventListener('click', () => document.getElementById('followUpModal').classList.add('hidden'));
+  document.getElementById('followUpModal').addEventListener('click', e => { if (e.target === document.getElementById('followUpModal')) document.getElementById('followUpModal').classList.add('hidden'); });
+  document.getElementById('followUpSaveBtn').addEventListener('click', saveFollowUp);
+
+  // Quick close modal
+  document.getElementById('quickCloseCancelBtn').addEventListener('click', () => document.getElementById('quickCloseModal').classList.add('hidden'));
+  document.getElementById('quickCloseModal').addEventListener('click', e => { if (e.target === document.getElementById('quickCloseModal')) document.getElementById('quickCloseModal').classList.add('hidden'); });
+  document.getElementById('quickCloseSaveBtn').addEventListener('click', saveQuickClose);
 
   document.getElementById('filterForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -173,7 +188,11 @@ function saveFilters() {
 function restoreFilters() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(SS) || 'null');
-    if (!saved) return;
+    if (!saved) {
+      // No saved state — default to showing only active clients
+      document.getElementById('fStatus').value = 'active';
+      return;
+    }
     document.getElementById('fName').value      = saved.name      || '';
     document.getElementById('fType').value      = saved.type      || '';
     document.getElementById('fAmi').value       = saved.ami       || '';
@@ -467,12 +486,27 @@ function renderTable(clients) {
       ? `<span title="Confidential" style="font-size:0.7rem;font-weight:700;color:#b45309;margin-left:0.3rem;">&#128274;</span>`
       : '';
 
+    // Staleness badge — only for the logged-in counselor's own active clients
+    let staleBadge = '';
+    if (_profile && (c.counselor === (_profile.name || '')) && (c.status || 'active') === 'active') {
+      const lastTs = c.lastSessionDate || c.firstSessionDate;
+      const lastD  = lastTs?.toDate ? lastTs.toDate() : (lastTs ? new Date(lastTs) : null);
+      if (lastD) {
+        const daysSince = Math.floor((Date.now() - lastD.getTime()) / 86400000);
+        if (daysSince >= 120) {
+          staleBadge = `<span title="${daysSince} days since last contact" style="background:#fed7aa;color:#9a3412;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.68rem;font-weight:700;margin-left:0.35rem;white-space:nowrap;">⚠ ${daysSince}d</span>`;
+        } else if (daysSince >= 60) {
+          staleBadge = `<span title="${daysSince} days since last contact" style="background:#fef9c3;color:#854d0e;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.68rem;font-weight:700;margin-left:0.35rem;white-space:nowrap;">↻ ${daysSince}d</span>`;
+        }
+      }
+    }
+
     const displayName = isDemoMode() ? demoClientName(c.id) : (c.clientName || '—');
     const driveCell = c.driveFolderUrl
       ? `<a href="${c.driveFolderUrl}" target="_blank" rel="noopener" title="Open Drive Folder" style="color:#4285f4;font-size:1.1rem;text-decoration:none;">📁</a>`
       : `<span style="color:var(--border,#dee2e6);" title="No Drive folder linked">—</span>`;
     return `<tr class="clickable-row" data-id="${c.id}" style="cursor:pointer;">
-      <td>${displayName}${tierBadge}</td>
+      <td>${displayName}${tierBadge}${staleBadge}</td>
       <td>${typeBadge}</td>
       <td>${c.counselor || '—'}</td>
       <td>${amiDisplayLabel(c.amiPercent) || '—'}</td>
@@ -909,6 +943,215 @@ function showIncompleteBanner() {
     sessionStorage.setItem(storageKey, '1');
     banner.classList.add('hidden');
   });
+}
+
+// ── Stale client banner ───────────────────────────────────────────────────────
+function showStaleBanner() {
+  const banner = document.getElementById('staleBanner');
+  if (!banner || !_user || !_profile) return;
+
+  const storageKey = `staleHidden-${_user.uid}`;
+  if (sessionStorage.getItem(storageKey)) return;
+
+  const myName   = _profile.name || '';
+  const toDateTs = ts => ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+  const now      = Date.now();
+
+  const stale = allClients
+    .filter(c => c.counselor === myName && (c.status || 'active') === 'active')
+    .map(c => {
+      const lastTs   = c.lastSessionDate || c.firstSessionDate;
+      const lastD    = toDateTs(lastTs);
+      const daysSince = lastD ? Math.floor((now - lastD.getTime()) / 86400000) : null;
+      return { ...c, daysSince };
+    })
+    .filter(c => c.daysSince !== null && c.daysSince >= 60)
+    .sort((a, b) => b.daysSince - a.daysSince);
+
+  if (!stale.length) return;
+
+  const critical  = stale.filter(c => c.daysSince >= 120);
+  const followUp  = stale.filter(c => c.daysSince < 120);
+
+  const renderRow = c => {
+    const clientName = isDemoMode() ? demoClientName(c.id) : (c.clientName || '—');
+    const tier = c.daysSince >= 120 ? 'critical' : 'followup';
+    const color = tier === 'critical' ? '#9a3412' : '#854d0e';
+    const bg    = tier === 'critical' ? '#fee2e2' : '#fefce8';
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.2rem 0;border-bottom:1px solid rgba(0,0,0,0.06);flex-wrap:wrap;">
+      <a href="client.html?id=${escAttr(c.id)}" style="font-weight:600;font-size:0.8125rem;color:var(--primary);">${escHtml(clientName)}</a>
+      <span style="background:${bg};color:${color};padding:0.1rem 0.4rem;border-radius:10px;font-size:0.7rem;font-weight:700;">${c.daysSince}d ago</span>
+      <button onclick="openFollowUpModal('${escAttr(c.id)}','${escAttr(clientName)}')"
+        style="background:none;border:1px solid #d1d5db;border-radius:5px;padding:0.1rem 0.5rem;font-size:0.72rem;cursor:pointer;color:#374151;">Log Follow-up</button>
+      <button onclick="openQuickCloseModal('${escAttr(c.id)}','${escAttr(clientName)}')"
+        style="background:none;border:1px solid #d1d5db;border-radius:5px;padding:0.1rem 0.5rem;font-size:0.72rem;cursor:pointer;color:#374151;">Close File</button>
+    </div>`;
+  };
+
+  const shown = stale.slice(0, 5);
+  const extra = stale.length - 5;
+  const moreHtml = extra > 0 ? `<div style="margin-top:0.35rem;font-size:0.78rem;color:var(--text-muted);">…and ${extra} more</div>` : '';
+
+  const heading = critical.length
+    ? `${critical.length} client${critical.length !== 1 ? 's' : ''} haven't had contact in 120+ days`
+    : `${followUp.length} client${followUp.length !== 1 ? 's' : ''} may need a follow-up (60+ days)`;
+
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.8125rem;margin-bottom:0.4rem;color:#9a3412;">
+          ${escHtml(heading)}
+        </div>
+        ${shown.map(renderRow).join('')}
+        ${moreHtml}
+      </div>
+      <button id="dismissStaleBtn" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.25rem;padding:0;line-height:1;flex-shrink:0;" title="Dismiss">&times;</button>
+    </div>`;
+
+  banner.classList.remove('hidden');
+  document.getElementById('dismissStaleBtn').addEventListener('click', () => {
+    sessionStorage.setItem(storageKey, '1');
+    banner.classList.add('hidden');
+  });
+}
+
+// ── Follow-up quick modal ─────────────────────────────────────────────────────
+window.openFollowUpModal = function(id, name) {
+  _followUpClientId = id;
+  const modal = document.getElementById('followUpModal');
+  modal.querySelector('#followUpClientName').textContent = isDemoMode() ? demoClientName(id) : name;
+
+  // Populate client context summary
+  const c = allClients.find(cl => cl.id === id) || {};
+  const toDateTs = ts => ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+  const lastD    = toDateTs(c.lastSessionDate || c.firstSessionDate);
+  const daysSince = lastD ? Math.floor((Date.now() - lastD.getTime()) / 86400000) : null;
+  const lastDateStr = lastD ? lastD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+  // Most recent session from _allSessions for this client
+  const clientSessions = _allSessions
+    .filter(s => s.clientId === id)
+    .sort((a, b) => {
+      const da = toDateTs(a.date) || new Date(0);
+      const db2 = toDateTs(b.date) || new Date(0);
+      return db2 - da;
+    });
+  const lastSess = clientSessions[0];
+  const lastSessType = lastSess?.caseStatus || lastSess?.counselingType || '—';
+  const lastSessHours = lastSess?.hours != null ? `${lastSess.hours}h` : '';
+
+  const row = (label, val) =>
+    `<span style="font-weight:600;color:var(--text,#374151);">${label}</span><span>${val}</span>`;
+
+  modal.querySelector('#followUpSummary').innerHTML = [
+    row('Counselor',    escHtml(c.counselor || '—')),
+    row('Type',         escHtml(c.counselingType || '—')),
+    row('Last contact', `${escHtml(lastDateStr)}${daysSince !== null ? ` <span style="color:#9a3412;font-weight:700;">(${daysSince}d ago)</span>` : ''}`),
+    row('Sessions',     `${c.sessionCount || 0}${lastSessType !== '—' ? ` · last: ${escHtml(lastSessType)}${lastSessHours ? ' ' + lastSessHours : ''}` : ''}`),
+  ].join('');
+
+  // default date to today
+  const today = new Date().toISOString().slice(0,10);
+  modal.querySelector('#followUpDate').value = today;
+  modal.querySelector('#followUpNotes').value = '';
+  modal.querySelector('#followUpError').textContent = '';
+  modal.querySelector('#followUpError').classList.add('hidden');
+  modal.classList.remove('hidden');
+};
+
+async function saveFollowUp() {
+  if (!_followUpClientId) return;
+  const modal   = document.getElementById('followUpModal');
+  const dateVal = modal.querySelector('#followUpDate').value.trim();
+  const notes   = modal.querySelector('#followUpNotes').value.trim();
+  const errEl   = modal.querySelector('#followUpError');
+  const saveBtn = modal.querySelector('#followUpSaveBtn');
+
+  if (!dateVal) { errEl.textContent = 'Date is required.'; errEl.classList.remove('hidden'); return; }
+
+  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+  try {
+    const clientRef  = doc(db, 'clients', _followUpClientId);
+    const sessionsRef = collection(db, 'clients', _followUpClientId, 'sessions');
+
+    // Create a follow-up session record
+    await addDoc(sessionsRef, {
+      date:         dateVal,
+      counselor:    _profile.name || '',
+      hours:        0,
+      caseStatus:   'Follow-up',
+      notes:        notes || '',
+      createdAt:    serverTimestamp(),
+    });
+
+    // Update lastSessionDate + increment sessionCount on client doc
+    const clientDoc = allClients.find(c => c.id === _followUpClientId);
+    const newCount  = ((clientDoc?.sessionCount) || 0) + 1;
+    await updateDoc(clientRef, {
+      lastSessionDate: dateVal,
+      sessionCount:    newCount,
+    });
+
+    modal.classList.add('hidden');
+    _followUpClientId = null;
+    // Reload so banner + badges refresh
+    await loadClients();
+    showIncompleteBanner();
+    showStaleBanner();
+  } catch (err) {
+    errEl.textContent = 'Save failed: ' + err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    saveBtn.disabled = false; saveBtn.textContent = 'Save';
+  }
+}
+
+// ── Quick close modal ─────────────────────────────────────────────────────────
+window.openQuickCloseModal = function(id, name) {
+  _quickCloseClientId = id;
+  const modal = document.getElementById('quickCloseModal');
+  modal.querySelector('#quickCloseClientName').textContent = name;
+  const today = new Date().toISOString().slice(0,10);
+  modal.querySelector('#quickCloseDate').value = today;
+  modal.querySelector('#quickCloseOutcome').value = '';
+  modal.querySelector('#quickCloseValue').value = '';
+  modal.querySelector('#quickCloseError').textContent = '';
+  modal.querySelector('#quickCloseError').classList.add('hidden');
+  modal.classList.remove('hidden');
+};
+
+async function saveQuickClose() {
+  if (!_quickCloseClientId) return;
+  const modal      = document.getElementById('quickCloseModal');
+  const dateVal    = modal.querySelector('#quickCloseDate').value.trim();
+  const outcome    = modal.querySelector('#quickCloseOutcome').value.trim();
+  const value      = modal.querySelector('#quickCloseValue').value.trim();
+  const errEl      = modal.querySelector('#quickCloseError');
+  const closeBtn   = modal.querySelector('#quickCloseSaveBtn');
+
+  if (!dateVal) { errEl.textContent = 'Date is required.'; errEl.classList.remove('hidden'); return; }
+
+  closeBtn.disabled = true; closeBtn.textContent = 'Closing…';
+  try {
+    const clientRef = doc(db, 'clients', _quickCloseClientId);
+    await updateDoc(clientRef, {
+      status:              'closed',
+      closureDate:         dateVal,
+      closureOutcome:      outcome || '',
+      closureOutcomeValue: value || '',
+    });
+
+    modal.classList.add('hidden');
+    _quickCloseClientId = null;
+    await loadClients();
+    showIncompleteBanner();
+    showStaleBanner();
+  } catch (err) {
+    errEl.textContent = 'Close failed: ' + err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    closeBtn.disabled = false; closeBtn.textContent = 'Close File';
+  }
 }
 
 // ── Page tab switching ────────────────────────────────────────────────────────
