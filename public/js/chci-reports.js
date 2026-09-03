@@ -10,7 +10,8 @@ import {
 // Storage SDK is imported lazily inside generateAll() so a CDN hiccup doesn't
 // prevent the file-parsing listeners from being wired on page load.
 
-const _parsed = { f2f: null, md: null, dd: null };
+const _parsed    = { f2f: null, md: null, dd: null };
+const _rawFiles  = { f2f: null, md: null, dd: null }; // { name, buf } of original uploaded reports
 
 export function initChciReports() {
   document.getElementById('f2fUpload').addEventListener('change', e => handleUpload('f2f', e));
@@ -43,6 +44,8 @@ async function handleUpload(type, e) {
 
   try {
     const buf = await file.arrayBuffer();
+    _rawFiles[type] = { name: file.name, buf };   // keep original for zip
+
     const wb  = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
     const ws = wb.worksheets[0];
@@ -257,6 +260,10 @@ async function generateAll() {
       amounts[cfg.key] = totalAmt;
       monthName = mn;
       year      = yr;
+
+      // Also include the original Rx Office report that was uploaded
+      const raw = _rawFiles[cfg.key];
+      if (raw) zip.file(raw.name, raw.buf);
     }
 
     // Build the zip filename — e.g. "CHCI Invoice - D&D $480 M&D $240 - January 2025.zip"
