@@ -222,6 +222,32 @@
     <div id="metrics-panel" class="page-panel">
       <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:960px;">
 
+        <!-- Metrics time frame bar -->
+        <div id="metricsFilterBar" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:0.6rem;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:0.65rem 0.85rem;">
+          <div class="form-group" style="margin:0;min-width:90px;">
+            <label style="font-size:0.75rem;">Year</label>
+            <select id="mxYear" style="height:2rem;font-size:0.8125rem;">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;min-width:110px;">
+            <label style="font-size:0.75rem;">Month</label>
+            <select id="mxMonth" style="height:2rem;font-size:0.8125rem;">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;">From</label>
+            <input type="date" id="mxDateStart" style="height:2rem;font-size:0.8125rem;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.75rem;">To</label>
+            <input type="date" id="mxDateEnd" style="height:2rem;font-size:0.8125rem;">
+          </div>
+          <button type="button" id="mxClearBtn" class="btn btn-secondary btn-sm" style="height:2rem;align-self:flex-end;">Clear</button>
+          <span id="mxRangeLabel" style="align-self:flex-end;font-size:0.75rem;color:var(--text-muted);padding-bottom:0.2rem;"></span>
+        </div>
+
         <details class="mx-section" id="mxOverview" open>
           <summary>Overview</summary>
           <div class="mx-body" id="mxOverviewBody"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>

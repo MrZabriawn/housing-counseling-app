@@ -135,12 +135,39 @@ function populateFilters() {
   appendOptions('fHudType',  BILLING_TYPES);
   appendOptions('fGuarantor', RX_GUARANTORS);
 
-  const yearSel  = document.getElementById('fYear');
   const thisYear = new Date().getFullYear();
+  const yearSel  = document.getElementById('fYear');
   for (let y = thisYear; y >= 2020; y--) {
     const o = document.createElement('option');
     o.value = y; o.textContent = y;
     yearSel.appendChild(o);
+  }
+
+  // Metrics time frame bar — year + month dropdowns
+  appendOptions('mxMonth', MONTHS);
+  const mxYearSel = document.getElementById('mxYear');
+  if (mxYearSel) {
+    for (let y = thisYear; y >= 2020; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      mxYearSel.appendChild(o);
+    }
+  }
+
+  // Wire metrics controls → re-render
+  ['mxYear', 'mxMonth', 'mxDateStart', 'mxDateEnd'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { if (_metricsRendered) renderMetrics(); });
+  });
+  const mxClear = document.getElementById('mxClearBtn');
+  if (mxClear) {
+    mxClear.addEventListener('click', () => {
+      ['mxYear','mxMonth','mxDateStart','mxDateEnd'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      if (_metricsRendered) renderMetrics();
+    });
   }
 }
 
@@ -1194,8 +1221,41 @@ function getActiveDateRange() {
   return { start, end };
 }
 
+/** Date range derived from the Metrics panel's own time-frame bar. */
+function getMetricsDateRange() {
+  const startVal = (document.getElementById('mxDateStart') || {}).value || '';
+  const endVal   = (document.getElementById('mxDateEnd')   || {}).value || '';
+  const monthVal = (document.getElementById('mxMonth')     || {}).value || '';
+  const yearVal  = parseInt((document.getElementById('mxYear') || {}).value || '0', 10) || 0;
+
+  let start = startVal ? new Date(startVal + 'T00:00:00') : null;
+  let end   = endVal   ? new Date(endVal   + 'T23:59:59') : null;
+
+  if (!start && !end && monthVal) {
+    const y    = yearVal || new Date().getFullYear();
+    const mIdx = MONTHS.indexOf(monthVal);
+    start = new Date(y, mIdx, 1, 0, 0, 0);
+    end   = new Date(y, mIdx + 1, 0, 23, 59, 59);
+  } else if (!start && !end && yearVal) {
+    start = new Date(yearVal, 0, 1, 0, 0, 0);
+    end   = new Date(yearVal, 11, 31, 23, 59, 59);
+  }
+
+  // Update the range label
+  const lbl = document.getElementById('mxRangeLabel');
+  if (lbl) {
+    if (start && end) {
+      const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      lbl.textContent = `${fmt(start)} – ${fmt(end)}`;
+    } else {
+      lbl.textContent = 'All time';
+    }
+  }
+  return { start, end };
+}
+
 function getMetricSessions() {
-  const { start, end } = getActiveDateRange();
+  const { start, end } = getMetricsDateRange();
   const ids = new Set(_filteredClients.map(c => c.id));
   return _allSessions.filter(s => {
     if (!ids.has(s.clientId)) return false;
@@ -1231,7 +1291,7 @@ function renderMetrics() {
   const clients  = _filteredClients;
   const sessions = getMetricSessions();
   const total    = clients.length;
-  const { start, end } = getActiveDateRange();
+  const { start, end } = getMetricsDateRange();
   const hasPeriod = !!(start || end);
 
   // ── Overview ─────────────────────────────────────────────────────────────
