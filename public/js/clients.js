@@ -1294,6 +1294,13 @@ function renderMetrics() {
   const { start, end } = getMetricsDateRange();
   const hasPeriod = !!(start || end);
 
+  // When a period is active, scope client-based metrics to clients who had
+  // at least one session in that window (so R&E, types, AMI, etc. reflect
+  // the selected time frame, not all time).
+  const periodClientIds = hasPeriod ? new Set(sessions.map(s => s.clientId)) : null;
+  const pClients = hasPeriod ? clients.filter(c => periodClientIds.has(c.id)) : clients;
+  const pTotal   = pClients.length;
+
   // ── Overview ─────────────────────────────────────────────────────────────
   // Always use the full unfiltered set for active/closed so they reflect the
   // true caseload even when the "Active" status filter is applied.
@@ -1307,6 +1314,7 @@ function renderMetrics() {
   }`;
 
   if (hasPeriod) {
+    overviewHtml += mxStat('Clients w/ Sessions', pTotal);
     const newIntakes = clients.filter(c => {
       if (!c.intakeDate) return false;
       const d = new Date(c.intakeDate);
@@ -1329,8 +1337,8 @@ function renderMetrics() {
   // ── Sessions & Hours ─────────────────────────────────────────────────────
   const totalSessions = sessions.length;
   const totalHours    = sessions.reduce((s, r) => s + (Number(r.hours) || 0), 0);
-  const avgSessions   = total > 0 ? (totalSessions / total).toFixed(1) : '—';
-  const avgHours      = total > 0 ? (totalHours / total).toFixed(1) : '—';
+  const avgSessions   = pTotal > 0 ? (totalSessions / pTotal).toFixed(1) : '—';
+  const avgHours      = pTotal > 0 ? (totalHours    / pTotal).toFixed(1) : '—';
   const fmtH = h => h % 1 === 0 ? h.toLocaleString() : h.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   document.getElementById('mxSessionsBody').innerHTML =
@@ -1343,25 +1351,25 @@ function renderMetrics() {
 
   // ── By Counseling Type ───────────────────────────────────────────────────
   const typeCounts = {};
-  clients.forEach(c => { const k = c.counselingType || '(none)'; typeCounts[k] = (typeCounts[k] || 0) + 1; });
+  pClients.forEach(c => { const k = c.counselingType || '(none)'; typeCounts[k] = (typeCounts[k] || 0) + 1; });
   document.getElementById('mxTypesBody').innerHTML =
-    mxBarTable(Object.entries(typeCounts).sort((a, b) => b[1] - a[1]), total);
+    mxBarTable(Object.entries(typeCounts).sort((a, b) => b[1] - a[1]), pTotal);
 
   // ── AMI Distribution ─────────────────────────────────────────────────────
   const amiCounts = {};
-  clients.forEach(c => { const k = amiCategory(c.amiPercent) || '(not set)'; amiCounts[k] = (amiCounts[k] || 0) + 1; });
+  pClients.forEach(c => { const k = amiCategory(c.amiPercent) || '(not set)'; amiCounts[k] = (amiCounts[k] || 0) + 1; });
   document.getElementById('mxAmiBody').innerHTML =
-    mxBarTable(Object.entries(amiCounts).sort((a, b) => b[1] - a[1]), total);
+    mxBarTable(Object.entries(amiCounts).sort((a, b) => b[1] - a[1]), pTotal);
 
   // ── Demographics ─────────────────────────────────────────────────────────
-  const hispanic    = clients.filter(c => c.hispanic).length;
-  const femaleHd    = clients.filter(c => c.femaleHeaded).length;
-  const hasIns      = clients.filter(c => c.hasHomeownersInsurance).length;
+  const hispanic = pClients.filter(c => c.hispanic).length;
+  const femaleHd = pClients.filter(c => c.femaleHeaded).length;
+  const hasIns   = pClients.filter(c => c.hasHomeownersInsurance).length;
   document.getElementById('mxDemoBody').innerHTML =
     `<div class="mx-stat-row">${
-      mxStat('Hispanic / Latino',      `${hispanic} (${mxPct(hispanic, total)})`) +
-      mxStat('Female-Headed HH',       `${femaleHd} (${mxPct(femaleHd, total)})`) +
-      mxStat('Homeowners Insurance',   `${hasIns} (${mxPct(hasIns, total)})`)
+      mxStat('Hispanic / Latino',      `${hispanic} (${mxPct(hispanic, pTotal)})`) +
+      mxStat('Female-Headed HH',       `${femaleHd} (${mxPct(femaleHd, pTotal)})`) +
+      mxStat('Homeowners Insurance',   `${hasIns} (${mxPct(hasIns, pTotal)})`)
     }</div>`;
 
   // ── Counselor Breakdown ──────────────────────────────────────────────────
@@ -1385,12 +1393,12 @@ function renderMetrics() {
 
   // ── R&E Codes ────────────────────────────────────────────────────────────
   const reCounts = {};
-  clients.forEach(c => { const k = c.reCode || '(not set)'; reCounts[k] = (reCounts[k] || 0) + 1; });
+  pClients.forEach(c => { const k = c.reCode || '(not set)'; reCounts[k] = (reCounts[k] || 0) + 1; });
   document.getElementById('mxReBody').innerHTML =
-    mxBarTable(Object.entries(reCounts).sort((a, b) => b[1] - a[1]), total);
+    mxBarTable(Object.entries(reCounts).sort((a, b) => b[1] - a[1]), pTotal);
 
   // ── Court Activity ───────────────────────────────────────────────────────
-  const courtClients  = clients.filter(c => c.counselingType === 'COURT').length;
+  const courtClients  = pClients.filter(c => c.counselingType === 'COURT').length;
   const courtSessions = sessions.filter(s => (s.caseStatus || '').startsWith('Court')).length;
   const courtHours    = sessions
     .filter(s => (s.caseStatus || '').startsWith('Court'))
@@ -1406,13 +1414,13 @@ function renderMetrics() {
   const REQUIRED_FIELDS = ['clientName', 'counselingType', 'counselor', 'reCode', 'amiPercent', 'intakeDate'];
   let complete = 0;
   const missingFreq = {};
-  clients.forEach(c => {
+  pClients.forEach(c => {
     const missing = REQUIRED_FIELDS.filter(f => !c[f]);
     if (!missing.length) { complete++; }
     else { missing.forEach(f => { missingFreq[f] = (missingFreq[f] || 0) + 1; }); }
   });
-  const incomplete = total - complete;
-  const pct = total > 0 ? Math.round((complete / total) * 100) : 0;
+  const incomplete = pTotal - complete;
+  const pct = pTotal > 0 ? Math.round((complete / pTotal) * 100) : 0;
   const missingRows = Object.entries(missingFreq).sort((a, b) => b[1] - a[1]);
   const missingHtml = missingRows.length
     ? `<table class="mx-table" style="margin-top:0.75rem;max-width:320px;">
