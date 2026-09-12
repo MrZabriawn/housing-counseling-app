@@ -68,22 +68,49 @@ export async function logout() {
 export function setupNav(profile, activePage) {
   const nav = document.querySelector('nav.nav');
   if (nav) {
+    // Admin-only items hidden by default; revealed below when isAdmin()
     nav.innerHTML = `
       <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
       <div class="nav-links">
-        <a href="clients.html"      data-page="clients">Counseling Log</a>
-        <a href="intake.html"       data-page="intake">Intake</a>
-        <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
-        <a href="rent-ready.html"   data-page="rent-ready">Rent Ready</a>
-        <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
-        <a href="outreach.html"     data-page="outreach">Outreach</a>
-        <a href="operations.html"   data-page="operations">Operations</a>
-        <a href="hud.html"          data-page="hud">HUD</a>
-        <a href="training.html"     data-page="training">Training</a>
-        <a href="reports.html"      data-page="reports">Reports</a>
-        <a href="workshop-admin.html" data-page="workshops">Workshops</a>
-        <a href="duplicates.html"   data-page="duplicates">Duplicates</a>
-        <a href="settings.html"     data-page="settings" class="admin-only hidden">Settings</a>
+
+        <a href="clients.html" data-page="clients">Counseling Log</a>
+
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">Clients</button>
+          <div class="nav-dropdown-menu">
+            <a href="intake.html"     data-page="intake">Intake</a>
+            <a href="duplicates.html" data-page="duplicates">Duplicates</a>
+          </div>
+        </div>
+
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">Engagement</button>
+          <div class="nav-dropdown-menu">
+            <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
+            <a href="rent-ready.html"   data-page="rent-ready">Rent Ready</a>
+            <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
+            <a href="outreach.html"     data-page="outreach">Outreach</a>
+            <a href="workshop-admin.html" data-page="workshops">Workshops</a>
+          </div>
+        </div>
+
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">Reports</button>
+          <div class="nav-dropdown-menu">
+            <a href="reports.html"     data-page="reports">CDBG / CHCI</a>
+            <a href="hud.html"         data-page="hud">HUD</a>
+            <a href="operations.html"  data-page="operations">Operations</a>
+          </div>
+        </div>
+
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">Admin</button>
+          <div class="nav-dropdown-menu">
+            <a href="training.html"  data-page="training">Training</a>
+            <a href="settings.html"  data-page="settings" class="admin-only hidden">Settings</a>
+          </div>
+        </div>
+
       </div>
       <div class="nav-user">
         <span id="navUserName"></span>
@@ -131,8 +158,16 @@ export function setupNav(profile, activePage) {
   }
 
   if (activePage) {
+    // Mark the matching link active, and also highlight the parent dropdown button
     const link = document.querySelector(`.nav-links a[data-page="${activePage}"]`);
-    if (link) link.classList.add('active');
+    if (link) {
+      link.classList.add('active');
+      const parentMenu = link.closest('.nav-dropdown');
+      if (parentMenu) {
+        const btn = parentMenu.querySelector('.nav-dropdown-btn');
+        if (btn) btn.classList.add('active');
+      }
+    }
   }
 
   if (isDemoMode()) {

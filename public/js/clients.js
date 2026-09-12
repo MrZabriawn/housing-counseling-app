@@ -556,7 +556,11 @@ function renderTable(clients) {
 }
 
 function renderStats(clients) {
-  const active      = clients.filter(c => (c.status || 'active') === 'active').length;
+  // Always count active/closed from the full unfiltered set so the stat reflects
+  // the true caseload regardless of which filter is active.
+  const totalActive = allClients.filter(c => (c.status || 'active') === 'active').length;
+  const totalClosed = allClients.filter(c => c.status === 'closed').length;
+
   const households  = clients.filter(c => (c.sessionCount || 0) > 0).length;
   const sessions = clients.reduce((s, c) => s + (c.sessionCount || 0), 0);
   const dollars  = clients.reduce((s, c) => {
@@ -566,7 +570,9 @@ function renderStats(clients) {
     return s + val;
   }, 0);
 
-  document.getElementById('statClients').textContent     = active;
+  document.getElementById('statClients').textContent = totalActive;
+  const closedEl = document.getElementById('statClosed');
+  if (closedEl) closedEl.textContent = totalClosed > 0 ? `${totalClosed} closed` : '';
   document.getElementById('statHouseholds').textContent  = households;
   document.getElementById('statSessions').textContent = sessions;
   document.getElementById('statHours').textContent    =
@@ -1229,11 +1235,13 @@ function renderMetrics() {
   const hasPeriod = !!(start || end);
 
   // ── Overview ─────────────────────────────────────────────────────────────
-  const active   = clients.filter(c => (c.status || 'active') === 'active').length;
-  const closed   = clients.filter(c => c.status === 'closed').length;
+  // Always use the full unfiltered set for active/closed so they reflect the
+  // true caseload even when the "Active" status filter is applied.
+  const active   = allClients.filter(c => (c.status || 'active') === 'active').length;
+  const closed   = allClients.filter(c => c.status === 'closed').length;
 
   let overviewHtml = `<div class="mx-stat-row">${
-    mxStat('Total Clients', total) +
+    mxStat('Total Clients', allClients.length) +
     mxStat('Active', active) +
     mxStat('Closed', closed)
   }`;
@@ -1288,10 +1296,12 @@ function renderMetrics() {
   // ── Demographics ─────────────────────────────────────────────────────────
   const hispanic    = clients.filter(c => c.hispanic).length;
   const femaleHd    = clients.filter(c => c.femaleHeaded).length;
+  const hasIns      = clients.filter(c => c.hasHomeownersInsurance).length;
   document.getElementById('mxDemoBody').innerHTML =
     `<div class="mx-stat-row">${
-      mxStat('Hispanic / Latino', `${hispanic} (${mxPct(hispanic, total)})`) +
-      mxStat('Female-Headed HH', `${femaleHd} (${mxPct(femaleHd, total)})`)
+      mxStat('Hispanic / Latino',      `${hispanic} (${mxPct(hispanic, total)})`) +
+      mxStat('Female-Headed HH',       `${femaleHd} (${mxPct(femaleHd, total)})`) +
+      mxStat('Homeowners Insurance',   `${hasIns} (${mxPct(hasIns, total)})`)
     }</div>`;
 
   // ── Counselor Breakdown ──────────────────────────────────────────────────

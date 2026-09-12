@@ -69,6 +69,7 @@ node_modules/
 scripts/serviceAccount.json
 scripts/*adminsdk*.json
 scripts/.env
+public/js/app-config.js
 
 # Review generator — script, input, and output
 scripts/generate-reviews.js

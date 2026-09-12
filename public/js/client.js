@@ -469,6 +469,7 @@ function populateClientForm(c) {
   setValue('mortgage1Company', c.mortgage1Company);
   setValue('mortgage2Company', c.mortgage2Company);
   setValue('mortgage3Company', c.mortgage3Company);
+  document.getElementById('hasHomeownersInsurance').checked = !!c.hasHomeownersInsurance;
   document.getElementById('bankruptcyFiled').checked = !!c.bankruptcyFiled;
   setValue('bankruptcyAccount',     c.bankruptcyAccount);
   setValue('conciliationStampDate', c.conciliationStampDate);
@@ -528,7 +529,7 @@ function applyDemoRedactions() {
 }
 
 function updateIntakeSections(counselingType) {
-  const mortgageEnabled = counselingType === 'OUTSTANDING' || counselingType === 'COURT';
+  const mortgageEnabled = counselingType === 'OUTSTANDING' || counselingType === 'COURT' || counselingType === 'POST';
   document.getElementById('mortgageSection').classList.toggle('intake-disabled', !mortgageEnabled);
   document.getElementById('mortgageNote').classList.toggle('hidden', mortgageEnabled);
   document.getElementById('conciliationGroup').classList.toggle('hidden', counselingType !== 'COURT');
@@ -914,6 +915,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       mortgage1Company:     document.getElementById('mortgage1Company').value.trim(),
       mortgage2Company:     document.getElementById('mortgage2Company').value.trim(),
       mortgage3Company:     document.getElementById('mortgage3Company').value.trim(),
+      hasHomeownersInsurance: document.getElementById('hasHomeownersInsurance').checked,
       bankruptcyFiled:      document.getElementById('bankruptcyFiled').checked,
       bankruptcyAccount:    document.getElementById('bankruptcyAccount').value.trim(),
       conciliationStampDate: document.getElementById('conciliationStampDate').value,
@@ -3102,6 +3104,7 @@ function generateExportPdf() {
           ${pdfRow('3rd Mortgage Co.', v(c.mortgage3Company))}
         </div>
         <div>
+          <div class="prow"><span class="plbl">Homeowners Insurance</span><span class="pval"><span class="chk">${chk(c.hasHomeownersInsurance)}</span></span></div>
           <div class="prow"><span class="plbl">Bankruptcy Filed</span><span class="pval"><span class="chk">${chk(c.bankruptcyFiled)}</span></span></div>
           ${c.bankruptcyFiled ? pdfRow('Bankruptcy Acct #', v(c.bankruptcyAccount)) : ''}
           ${c.counselingType === 'COURT' ? pdfRow('Conciliation Stamp', fmtDate(c.conciliationStampDate)) : ''}

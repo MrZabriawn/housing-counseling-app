@@ -45,6 +45,28 @@
     .ops-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
     .ops-panel { display: none; }
     .ops-panel.active { display: block; }
+
+    /* ── Corrections Log ── */
+    .corr-summary-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:0.75rem; margin-bottom:1.25rem; }
+    .corr-summary-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:0.85rem 1rem; }
+    .corr-summary-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); font-weight:700; margin-bottom:0.25rem; }
+    .corr-summary-val { font-size:1.45rem; font-weight:800; color:var(--text); line-height:1.1; }
+    .corr-summary-sub { font-size:0.72rem; color:var(--text-muted); margin-top:0.15rem; }
+    .corr-badge { display:inline-block; padding:0.18rem 0.55rem; border-radius:999px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+    .corr-badge-open     { background:#fff7ed; color:#c2410c; }
+    .corr-badge-awaiting { background:#fefce8; color:#854d0e; }
+    .corr-badge-accepted { background:#f0fdf4; color:#15803d; }
+    .corr-badge-disputed { background:#fff1f2; color:#be123c; }
+    .corr-filter-bar { display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap; align-items:center; }
+    .corr-filter-bar select { padding:0.3rem 0.6rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); font-size:0.8125rem; }
+    .corr-table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+    .corr-table th { text-align:left; padding:0.4rem 0.75rem; border-bottom:2px solid var(--border); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; white-space:nowrap; background:var(--surface); }
+    .corr-table td { padding:0.45rem 0.75rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .corr-table tbody tr:last-child td { border-bottom:none; }
+    .corr-table tbody tr.corr-main-row { cursor:pointer; transition:background 0.1s; }
+    .corr-table tbody tr.corr-main-row:hover { background:rgba(0,0,0,0.03); }
+    .corr-detail-row td { background:var(--bg); padding:0.75rem 1rem 0.75rem 2rem; font-size:0.8125rem; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .corr-detail-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; margin-bottom:0.2rem; }
   </style>
 </head>
 <body>
@@ -63,6 +85,7 @@
       <button class="ops-tab" data-panel="pre">Pre-Purchase</button>
       <button class="ops-tab" data-panel="post">Post-Purchase</button>
       <button class="ops-tab" data-panel="outstanding">Outstanding</button>
+      <button class="ops-tab" data-panel="corrections">Corrections Log</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -346,23 +369,527 @@
       </div>
     </div>
 
+    <!-- CORRECTIONS LOG -->
+    <div id="panel-corrections" class="ops-panel">
+
+      <!-- Summary cards -->
+      <div class="corr-summary-grid" id="corrSummary">
+        <div class="corr-summary-card"><div class="corr-summary-label">Open</div><div class="corr-summary-val" id="csOpen">—</div><div class="corr-summary-sub">require action</div></div>
+        <div class="corr-summary-card"><div class="corr-summary-label">Avg Days to Resolve</div><div class="corr-summary-val" id="csAvgDays">—</div><div class="corr-summary-sub">accepted records</div></div>
+        <div class="corr-summary-card"><div class="corr-summary-label">Most Common Issue</div><div class="corr-summary-val" style="font-size:1rem;line-height:1.3;" id="csTopCat">—</div><div class="corr-summary-sub" id="csTopCatCount"></div></div>
+        <div class="corr-summary-card"><div class="corr-summary-label">YTD $ Changed</div><div class="corr-summary-val" id="csYtd">—</div><div class="corr-summary-sub" id="csYear"></div></div>
+      </div>
+
+      <!-- Filter + action bar -->
+      <div class="corr-filter-bar">
+        <select id="corrFilterProgram">
+          <option value="">All Programs</option>
+          <option>CDBG</option><option>CHCI</option><option>PHFA</option><option>HUD</option><option>Other</option>
+        </select>
+        <select id="corrFilterStatus">
+          <option value="">All Statuses</option>
+          <option value="Open">Open</option>
+          <option value="Corrected – Awaiting Acceptance">Awaiting Acceptance</option>
+          <option value="Accepted">Accepted</option>
+          <option value="Disputed">Disputed</option>
+        </select>
+        <select id="corrFilterYear"><option value="">All Years</option></select>
+        <button id="logCorrectionBtn" class="btn btn-primary btn-sm" style="margin-left:auto;">+ Log Correction</button>
+      </div>
+
+      <!-- Table -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="overflow-x:auto;">
+          <table class="corr-table" id="corrTable">
+            <thead>
+              <tr>
+                <th>Date Returned</th>
+                <th>Program</th>
+                <th>Invoice Period</th>
+                <th>Category</th>
+                <th style="text-align:right;">$ Changed</th>
+                <th>Status</th>
+                <th>Resolved</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="corrTbody">
+              <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--text-muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /panel-corrections -->
+
   </main>
+
+  <!-- ── Log / Edit Correction Modal ───────────────────────────────────── -->
+  <div id="corrModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:560px;">
+      <h3 id="corrModalTitle" style="margin:0 0 1.25rem;font-size:1.05rem;">Log Correction</h3>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div class="form-group">
+          <label>Date Returned <span style="color:#e65100;">*</span></label>
+          <input type="date" id="corrDateReturned">
+        </div>
+        <div class="form-group">
+          <label>Program <span style="color:#e65100;">*</span></label>
+          <select id="corrProgram">
+            <option value="">— select —</option>
+            <option>CDBG</option><option>CHCI</option><option>PHFA</option><option>HUD</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Invoice Period <span style="color:#e65100;">*</span></label>
+          <input type="text" id="corrInvoicePeriod" placeholder="e.g. March 2025">
+        </div>
+        <div class="form-group">
+          <label>Returned By</label>
+          <input type="text" id="corrReturnedBy" placeholder="Funder / contact name">
+        </div>
+        <div class="form-group">
+          <label>Category <span style="color:#e65100;">*</span></label>
+          <select id="corrCategory">
+            <option value="">— select —</option>
+            <option>Hours mismatch</option>
+            <option>Address incorrect</option>
+            <option>Missing signature</option>
+            <option>Wrong client</option>
+            <option>Rate error</option>
+            <option>Duplicate entry</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>$ Amount Changed</label>
+          <input type="number" id="corrDollar" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Correction Required <span style="color:#e65100;">*</span></label>
+          <textarea id="corrDescription" rows="3" placeholder="Describe what the funder flagged and what needs to change…" style="width:100%;resize:vertical;"></textarea>
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Notes</label>
+          <textarea id="corrNotes" rows="2" placeholder="Optional context, follow-up, related records…" style="width:100%;resize:vertical;"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="corrStatus">
+            <option value="Open">Open</option>
+            <option value="Corrected – Awaiting Acceptance">Corrected – Awaiting Acceptance</option>
+            <option value="Accepted">Accepted</option>
+            <option value="Disputed">Disputed</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="corrModalErr" style="color:#e65100;font-size:0.8125rem;margin-top:0.75rem;display:none;"></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.25rem;">
+        <button id="corrModalCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+        <button id="corrModalSaveBtn"   class="btn btn-primary btn-sm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Resolve Modal ─────────────────────────────────────────────────── -->
+  <div id="corrResolveModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:420px;">
+      <h3 style="margin:0 0 1.25rem;font-size:1.05rem;">Resolve Correction</h3>
+      <input type="hidden" id="corrResolveId">
+      <div class="form-group" style="margin-bottom:0.75rem;">
+        <label>Date Resolved <span style="color:#e65100;">*</span></label>
+        <input type="date" id="corrResolveDate">
+      </div>
+      <div class="form-group" style="margin-bottom:0.75rem;">
+        <label>Resolved By <span style="color:#e65100;">*</span></label>
+        <select id="corrResolvedBy"><option value="">— select —</option></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0.75rem;">
+        <label>Update Status To</label>
+        <select id="corrResolveStatus">
+          <option value="Corrected – Awaiting Acceptance">Corrected – Awaiting Acceptance</option>
+          <option value="Accepted">Accepted</option>
+          <option value="Disputed">Disputed</option>
+        </select>
+      </div>
+      <div id="corrResolveErr" style="color:#e65100;font-size:0.8125rem;margin-top:0.5rem;display:none;"></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.25rem;">
+        <button id="corrResolveCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+        <button id="corrResolveSaveBtn"   class="btn btn-primary btn-sm">Save</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
-    requireAuth((user, profile) => {
-      setupNav(profile, 'operations');
-    });
+    import { db } from './js/firebase-config.js';
+    import {
+      collection, getDocs, addDoc, updateDoc, doc,
+      query, orderBy, serverTimestamp, where,
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+    // ── Tab switching ──────────────────────────────────────────────────────
     document.querySelectorAll('.ops-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.ops-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.ops-panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+        if (tab.dataset.panel === 'corrections' && !_corrLoaded) loadCorrections();
       });
     });
 
+    // ── Corrections Log state ──────────────────────────────────────────────
+    let _corrections   = [];   // all records from Firestore
+    let _corrLoaded    = false;
+    let _counselors    = [];   // { id, name } for resolvedBy dropdown
+    let _corrEditId    = null; // null = new, string = editing existing
+
+    const esc = s => (s == null ? '' : String(s))
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    function fmtDate(d) {
+      if (!d) return '—';
+      const dt = d?.toDate ? d.toDate() : new Date(d);
+      return dt.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+    }
+    function isoToday() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function badgeHtml(status) {
+      const cls = {
+        'Open'                            : 'corr-badge-open',
+        'Corrected – Awaiting Acceptance' : 'corr-badge-awaiting',
+        'Accepted'                        : 'corr-badge-accepted',
+        'Disputed'                        : 'corr-badge-disputed',
+      }[status] || 'corr-badge-open';
+      return `<span class="corr-badge ${cls}">${esc(status)}</span>`;
+    }
+
+    // ── Load counselors (once) ─────────────────────────────────────────────
+    async function ensureCounselors() {
+      if (_counselors.length) return;
+      const snap = await getDocs(query(collection(db, 'counselors'), orderBy('name')));
+      _counselors = snap.docs
+        .filter(d => d.data().active !== false)
+        .map(d => ({ id: d.id, name: d.data().name || '(unnamed)' }));
+      // populate resolvedBy select
+      const sel = document.getElementById('corrResolvedBy');
+      sel.innerHTML = '<option value="">— select —</option>'
+        + _counselors.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+    }
+
+    // ── Populate year filter ───────────────────────────────────────────────
+    function populateYearFilter(records) {
+      const years = [...new Set(records.map(r => {
+        const d = r.dateReturned?.toDate ? r.dateReturned.toDate() : new Date(r.dateReturned);
+        return isNaN(d) ? null : d.getFullYear();
+      }).filter(Boolean))].sort((a,b) => b - a);
+      const sel = document.getElementById('corrFilterYear');
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">All Years</option>'
+        + years.map(y => `<option value="${y}" ${y == cur ? 'selected' : ''}>${y}</option>`).join('');
+    }
+
+    // ── Load & render ──────────────────────────────────────────────────────
+    async function loadCorrections() {
+      _corrLoaded = true;
+      try {
+        const snap = await getDocs(query(collection(db, 'correctionLog'), orderBy('dateReturned', 'desc')));
+        _corrections = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+        populateYearFilter(_corrections);
+        renderCorrections();
+      } catch (e) {
+        document.getElementById('corrTbody').innerHTML =
+          `<tr><td colspan="8" style="padding:1.5rem;text-align:center;color:#e65100;">Failed to load: ${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function applyFilters(records) {
+      const prog   = document.getElementById('corrFilterProgram').value;
+      const status = document.getElementById('corrFilterStatus').value;
+      const year   = document.getElementById('corrFilterYear').value;
+      return records.filter(r => {
+        if (prog   && r.program !== prog)     return false;
+        if (status && r.status  !== status)   return false;
+        if (year) {
+          const d = r.dateReturned?.toDate ? r.dateReturned.toDate() : new Date(r.dateReturned);
+          if (isNaN(d) || String(d.getFullYear()) !== year) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderCorrections() {
+      const filtered = applyFilters(_corrections);
+      renderCorrSummary(_corrections); // summary always uses full set
+      renderCorrTable(filtered);
+    }
+
+    // ── Summary cards ──────────────────────────────────────────────────────
+    function renderCorrSummary(records) {
+      // Open count
+      document.getElementById('csOpen').textContent =
+        records.filter(r => r.status === 'Open').length;
+
+      // Avg days to resolve (Accepted only)
+      const resolved = records.filter(r => r.status === 'Accepted' && r.dateReturned && r.dateResolved);
+      if (resolved.length) {
+        const days = resolved.map(r => {
+          const ret = r.dateReturned?.toDate ? r.dateReturned.toDate() : new Date(r.dateReturned);
+          const res = r.dateResolved?.toDate ? r.dateResolved.toDate() : new Date(r.dateResolved);
+          return Math.max(0, Math.round((res - ret) / 86400000));
+        });
+        document.getElementById('csAvgDays').textContent =
+          Math.round(days.reduce((a,b) => a+b, 0) / days.length) + 'd';
+      } else {
+        document.getElementById('csAvgDays').textContent = '—';
+      }
+
+      // Most common category
+      const catCounts = {};
+      records.forEach(r => { if (r.correctionCategory) catCounts[r.correctionCategory] = (catCounts[r.correctionCategory] || 0) + 1; });
+      const topCat = Object.entries(catCounts).sort((a,b) => b[1]-a[1])[0];
+      document.getElementById('csTopCat').textContent    = topCat ? topCat[0] : '—';
+      document.getElementById('csTopCatCount').textContent = topCat ? `${topCat[1]} occurrence${topCat[1]>1?'s':''}` : '';
+
+      // YTD dollar changed
+      const thisYear = new Date().getFullYear();
+      document.getElementById('csYear').textContent = thisYear;
+      const ytd = records
+        .filter(r => {
+          const d = r.dateReturned?.toDate ? r.dateReturned.toDate() : new Date(r.dateReturned);
+          return !isNaN(d) && d.getFullYear() === thisYear && r.dollarImpact > 0;
+        })
+        .reduce((s, r) => s + (Number(r.dollarImpact) || 0), 0);
+      document.getElementById('csYtd').textContent =
+        '$' + ytd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // ── Table render ───────────────────────────────────────────────────────
+    function renderCorrTable(records) {
+      const tbody = document.getElementById('corrTbody');
+      if (!records.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--text-muted);">No corrections match the current filters.</td></tr>';
+        return;
+      }
+
+      // Open items first, then by dateReturned desc
+      const sorted = [...records].sort((a, b) => {
+        const aOpen = a.status === 'Open' ? 0 : 1;
+        const bOpen = b.status === 'Open' ? 0 : 1;
+        if (aOpen !== bOpen) return aOpen - bOpen;
+        const ad = a.dateReturned?.toDate ? a.dateReturned.toDate() : new Date(a.dateReturned||0);
+        const bd = b.dateReturned?.toDate ? b.dateReturned.toDate() : new Date(b.dateReturned||0);
+        return bd - ad;
+      });
+
+      tbody.innerHTML = sorted.map(r => {
+        const dollarStr = r.dollarImpact > 0
+          ? '$' + Number(r.dollarImpact).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : '—';
+        const resolvedStr = r.dateResolved
+          ? `${fmtDate(r.dateResolved)}${r.resolvedBy ? '<br><span style="font-size:0.72rem;color:var(--text-muted);">'+esc(r.resolvedBy)+'</span>' : ''}`
+          : '—';
+        const canResolve = r.status === 'Open';
+        const actionBtns = canResolve
+          ? `<button class="btn btn-sm btn-secondary corr-resolve-btn" data-id="${esc(r._id)}" style="white-space:nowrap;">Resolve</button>`
+          : `<button class="btn btn-sm btn-secondary corr-edit-btn" data-id="${esc(r._id)}" style="white-space:nowrap;">Edit</button>`;
+
+        return `
+          <tr class="corr-main-row" data-id="${esc(r._id)}">
+            <td style="white-space:nowrap;">${fmtDate(r.dateReturned)}</td>
+            <td>${esc(r.program||'—')}</td>
+            <td>${esc(r.invoicePeriod||'—')}</td>
+            <td>${esc(r.correctionCategory||'—')}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">${dollarStr}</td>
+            <td>${badgeHtml(r.status)}</td>
+            <td style="font-size:0.8rem;">${resolvedStr}</td>
+            <td style="white-space:nowrap;">${actionBtns}</td>
+          </tr>
+          <tr class="corr-detail-row" id="detail-${esc(r._id)}" style="display:none;">
+            <td colspan="8">
+              ${r.correctionRequired ? `<div class="corr-detail-label">Correction Required</div><div style="margin-bottom:0.6rem;line-height:1.55;">${esc(r.correctionRequired)}</div>` : ''}
+              ${r.returnedBy        ? `<div class="corr-detail-label">Returned By</div><div style="margin-bottom:0.6rem;">${esc(r.returnedBy)}</div>` : ''}
+              ${r.notes             ? `<div class="corr-detail-label">Notes</div><div style="line-height:1.55;">${esc(r.notes)}</div>` : ''}
+              ${!r.correctionRequired && !r.returnedBy && !r.notes ? '<em>No additional detail recorded.</em>' : ''}
+            </td>
+          </tr>`;
+      }).join('');
+
+      // Row click → expand detail
+      tbody.querySelectorAll('.corr-main-row').forEach(row => {
+        row.addEventListener('click', e => {
+          if (e.target.closest('button')) return; // don't toggle on button click
+          const id = row.dataset.id;
+          const det = document.getElementById('detail-' + id);
+          if (det) det.style.display = det.style.display === 'none' ? '' : 'none';
+        });
+      });
+
+      // Resolve button
+      tbody.querySelectorAll('.corr-resolve-btn').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); openResolveModal(btn.dataset.id); });
+      });
+
+      // Edit button
+      tbody.querySelectorAll('.corr-edit-btn').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); openCorrModal(btn.dataset.id); });
+      });
+    }
+
+    // ── Log / Edit modal ───────────────────────────────────────────────────
+    async function openCorrModal(editId = null) {
+      _corrEditId = editId;
+      const modal = document.getElementById('corrModal');
+      document.getElementById('corrModalTitle').textContent = editId ? 'Edit Correction' : 'Log Correction';
+      document.getElementById('corrModalErr').style.display = 'none';
+
+      if (editId) {
+        const rec = _corrections.find(r => r._id === editId);
+        if (rec) {
+          const dt = rec.dateReturned?.toDate ? rec.dateReturned.toDate() : (rec.dateReturned ? new Date(rec.dateReturned) : null);
+          document.getElementById('corrDateReturned').value  = dt ? dt.toISOString().slice(0,10) : '';
+          document.getElementById('corrProgram').value       = rec.program || '';
+          document.getElementById('corrInvoicePeriod').value = rec.invoicePeriod || '';
+          document.getElementById('corrReturnedBy').value    = rec.returnedBy || '';
+          document.getElementById('corrCategory').value      = rec.correctionCategory || '';
+          document.getElementById('corrDollar').value        = rec.dollarImpact > 0 ? rec.dollarImpact : '';
+          document.getElementById('corrDescription').value   = rec.correctionRequired || '';
+          document.getElementById('corrNotes').value         = rec.notes || '';
+          document.getElementById('corrStatus').value        = rec.status || 'Open';
+        }
+      } else {
+        document.getElementById('corrDateReturned').value  = isoToday();
+        document.getElementById('corrProgram').value       = '';
+        document.getElementById('corrInvoicePeriod').value = '';
+        document.getElementById('corrReturnedBy').value    = '';
+        document.getElementById('corrCategory').value      = '';
+        document.getElementById('corrDollar').value        = '';
+        document.getElementById('corrDescription').value   = '';
+        document.getElementById('corrNotes').value         = '';
+        document.getElementById('corrStatus').value        = 'Open';
+      }
+      modal.classList.remove('hidden');
+    }
+
+    async function saveCorrEntry() {
+      const err = document.getElementById('corrModalErr');
+      err.style.display = 'none';
+
+      const dateRaw    = document.getElementById('corrDateReturned').value;
+      const program    = document.getElementById('corrProgram').value;
+      const period     = document.getElementById('corrInvoicePeriod').value.trim();
+      const returnedBy = document.getElementById('corrReturnedBy').value.trim();
+      const category   = document.getElementById('corrCategory').value;
+      const dollarRaw  = document.getElementById('corrDollar').value;
+      const desc       = document.getElementById('corrDescription').value.trim();
+      const notes      = document.getElementById('corrNotes').value.trim();
+      const status     = document.getElementById('corrStatus').value;
+
+      if (!dateRaw)    { err.textContent = 'Date returned is required.';         err.style.display = ''; return; }
+      if (!program)    { err.textContent = 'Program is required.';               err.style.display = ''; return; }
+      if (!period)     { err.textContent = 'Invoice period is required.';        err.style.display = ''; return; }
+      if (!category)   { err.textContent = 'Category is required.';             err.style.display = ''; return; }
+      if (!desc)       { err.textContent = 'Correction description is required.'; err.style.display = ''; return; }
+
+      const dollar = dollarRaw !== '' ? parseFloat(dollarRaw) : null;
+      const data = {
+        dateReturned:       new Date(dateRaw + 'T00:00:00'),
+        program,
+        invoicePeriod:      period,
+        returnedBy:         returnedBy || null,
+        correctionCategory: category,
+        dollarImpact:       dollar > 0 ? dollar : null,
+        correctionRequired: desc,
+        notes:              notes || null,
+        status,
+        updatedAt:          serverTimestamp(),
+      };
+
+      try {
+        if (_corrEditId) {
+          await updateDoc(doc(db, 'correctionLog', _corrEditId), data);
+        } else {
+          data.createdAt = serverTimestamp();
+          await addDoc(collection(db, 'correctionLog'), data);
+        }
+        document.getElementById('corrModal').classList.add('hidden');
+        _corrLoaded = false;
+        await loadCorrections();
+      } catch (e) {
+        err.textContent = 'Save failed: ' + e.message;
+        err.style.display = '';
+      }
+    }
+
+    // ── Resolve modal ──────────────────────────────────────────────────────
+    async function openResolveModal(id) {
+      await ensureCounselors();
+      document.getElementById('corrResolveId').value        = id;
+      document.getElementById('corrResolveDate').value      = isoToday();
+      document.getElementById('corrResolvedBy').value       = '';
+      document.getElementById('corrResolveStatus').value    = 'Corrected – Awaiting Acceptance';
+      document.getElementById('corrResolveErr').style.display = 'none';
+      document.getElementById('corrResolveModal').classList.remove('hidden');
+    }
+
+    async function saveResolve() {
+      const err = document.getElementById('corrResolveErr');
+      err.style.display = 'none';
+      const id         = document.getElementById('corrResolveId').value;
+      const dateRaw    = document.getElementById('corrResolveDate').value;
+      const resolvedBy = document.getElementById('corrResolvedBy').value;
+      const status     = document.getElementById('corrResolveStatus').value;
+
+      if (!dateRaw)    { err.textContent = 'Date resolved is required.'; err.style.display = ''; return; }
+      if (!resolvedBy) { err.textContent = 'Resolved by is required.';   err.style.display = ''; return; }
+
+      try {
+        await updateDoc(doc(db, 'correctionLog', id), {
+          dateResolved: new Date(dateRaw + 'T00:00:00'),
+          resolvedBy,
+          status,
+          updatedAt: serverTimestamp(),
+        });
+        document.getElementById('corrResolveModal').classList.add('hidden');
+        _corrLoaded = false;
+        await loadCorrections();
+      } catch (e) {
+        err.textContent = 'Save failed: ' + e.message;
+        err.style.display = '';
+      }
+    }
+
+    // ── Wire up buttons & filters ──────────────────────────────────────────
+    requireAuth((user, profile) => {
+      setupNav(profile, 'operations');
+
+      document.getElementById('logCorrectionBtn').addEventListener('click', () => openCorrModal());
+
+      document.getElementById('corrModalSaveBtn').addEventListener('click', saveCorrEntry);
+      document.getElementById('corrModalCancelBtn').addEventListener('click', () => {
+        document.getElementById('corrModal').classList.add('hidden');
+      });
+      document.getElementById('corrModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('corrModal')) document.getElementById('corrModal').classList.add('hidden');
+      });
+
+      document.getElementById('corrResolveSaveBtn').addEventListener('click', saveResolve);
+      document.getElementById('corrResolveCancelBtn').addEventListener('click', () => {
+        document.getElementById('corrResolveModal').classList.add('hidden');
+      });
+      document.getElementById('corrResolveModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('corrResolveModal')) document.getElementById('corrResolveModal').classList.add('hidden');
+      });
+
+      ['corrFilterProgram','corrFilterStatus','corrFilterYear'].forEach(id => {
+        document.getElementById(id).addEventListener('change', renderCorrections);
+      });
+    });
   </script>
 </body>
 </html>

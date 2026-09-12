@@ -193,16 +193,28 @@
             <a id="qrewJobOpenLink" href="#" target="_blank" class="btn btn-secondary btn-sm">Open in Qrew →</a>
             <button type="button" id="unlinkQrewBtn" class="btn btn-secondary btn-sm">Unlink</button>
           </div>
-          <div id="qrewLinkInputs" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
-            <div style="flex:2;min-width:170px;">
-              <label for="editQrewJobId" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job ID (doc ID)</label>
-              <input type="text" id="editQrewJobId" placeholder="e.g. 4sR2VNPH4Cbx2zleXYNX" style="font-family:monospace;font-size:0.78rem;">
+          <div id="qrewLinkInputs" style="display:flex;flex-direction:column;gap:0.6rem;">
+            <!-- Primary: create a new Qrew job directly -->
+            <div>
+              <button type="button" id="createQrewJobBtn" class="btn btn-primary btn-sm">Create Job in Qrew</button>
             </div>
-            <div style="flex:1;min-width:90px;">
-              <label for="editQrewJobCode" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job Code</label>
-              <input type="text" id="editQrewJobCode" placeholder="e.g. BAL001">
-            </div>
-            <button type="button" id="linkQrewBtn" class="btn btn-secondary btn-sm" style="align-self:flex-end;margin-bottom:1px;">Link</button>
+            <!-- Fallback: link an existing Qrew job by ID -->
+            <details style="font-size:0.8125rem;">
+              <summary style="cursor:pointer;color:var(--text-muted);user-select:none;list-style:none;display:flex;align-items:center;gap:0.3rem;">
+                <span style="font-size:0.6rem;">▶</span> Link an existing job manually
+              </summary>
+              <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.5rem;">
+                <div style="flex:2;min-width:170px;">
+                  <label for="editQrewJobId" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job ID (doc ID)</label>
+                  <input type="text" id="editQrewJobId" placeholder="e.g. 4sR2VNPH4Cbx2zleXYNX" style="font-family:monospace;font-size:0.78rem;">
+                </div>
+                <div style="flex:1;min-width:90px;">
+                  <label for="editQrewJobCode" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;display:block;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Job Code</label>
+                  <input type="text" id="editQrewJobCode" placeholder="e.g. BAL001">
+                </div>
+                <button type="button" id="linkQrewBtn" class="btn btn-secondary btn-sm" style="align-self:flex-end;margin-bottom:1px;">Link</button>
+              </div>
+            </details>
           </div>
           <div id="qrewSyncMsg" style="font-size:0.72rem;margin-top:0.35rem;min-height:1em;"></div>
         </div>

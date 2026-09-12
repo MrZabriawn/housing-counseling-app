@@ -24,7 +24,8 @@
  * "+ Add Client" filters to active POST clients not already on the list.
  */
 
-import { db } from './firebase-config.js';
+import { db }           from './firebase-config.js';
+import { QREW_API_KEY } from './app-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
 import { amiDisplayLabel, AWARD_TYPES } from './data.js';
 import { openDrivePicker, openDriveFolderPicker } from './picker.js';
@@ -35,7 +36,7 @@ import {
 // ── Qrew sync ─────────────────────────────────────────────────────────────────
 
 const QREW_SYNC_URL   = 'https://housing-workforce.web.app/api/housing-status-update';
-const QREW_API_KEY    = '_zzGwMJluTft1osRTpE9eWGMSdjHl_i8nftNuB-lz5SkdDTP';
+const QREW_CREATE_URL = 'https://housing-workforce.web.app/api/create-repair-job';
 const QREW_JOB_BASE   = 'https://housing-workforce.web.app/jobs/';
 
 const HOUSING_TO_QREW = {
@@ -56,6 +57,108 @@ async function pushStatusToQrew(qrewJobId, housingStatus) {
     return res.ok ? 'synced' : 'failed';
   } catch {
     return 'failed';
+  }
+}
+
+async function createQrewJob() {
+  const r      = _editingRecord;
+  const msgEl  = document.getElementById('qrewSyncMsg');
+  const btn    = document.getElementById('createQrewJobBtn');
+  if (!r) return;
+
+  btn.disabled      = true;
+  btn.textContent   = 'Creating…';
+  msgEl.textContent = '';
+  msgEl.style.color = '';
+
+  // Capture scope from the form (not yet saved) so the user can type it first
+  const scopeOfWork = document.getElementById('editHigScope')?.value.trim() || r.scopeOfWork || '';
+
+  // Pull richer client data from the profile doc if a clientId is linked
+  let clientProfile = {};
+  if (r.clientId) {
+    try {
+      const snap = await getDoc(doc(db, 'clients', r.clientId));
+      if (snap.exists()) clientProfile = snap.data();
+    } catch { /* non-fatal — proceed with what we have */ }
+  }
+
+  // Household size from intake fields
+  const adults   = Number(clientProfile.adultsInHousehold   || 0);
+  const children = Number(clientProfile.childrenInHousehold || 0);
+  const householdSize = adults + children || null;
+
+  // Annual household income = sum of all monthly income sources × 12
+  const empIncome  = (clientProfile.employmentHistory || []).reduce((s, e) => s + (Number(e.monthlyIncome) || 0), 0);
+  const otherInc   = (clientProfile.otherIncome       || []).reduce((s, i) => s + (Number(i.monthlyIncome) || 0), 0);
+  const hhMemberInc = (clientProfile.householdMembers || []).reduce((s, m) => s + (Number(m.monthlyIncome) || 0), 0);
+  const annualHouseholdIncome = (empIncome + otherInc + hhMemberInc) * 12 || null;
+
+  // Best phone: prefer cell, fall back to home
+  const phone = clientProfile.cellPhone || clientProfile.homePhone || '';
+
+  // Strip nulls/empty strings — Qrew treats omitted fields as unset
+  const raw = {
+    clientName:             r.clientName        || '',
+    streetAddress:          r.streetAddress     || '',
+    city:                   r.city              || '',
+    zipCode:                r.zipCode           || '',
+    phone,
+    email:                  clientProfile.email || '',
+    householdSize,
+    annualHouseholdIncome,
+    amiPercent:             r.amiPercent        || '',
+    counselingSessionCount: clientProfile.sessionCount || 0,
+    hasHomeownersInsurance: !!clientProfile.hasHomeownersInsurance,
+    counselor:              r.counselor         || '',
+    scopeOfWork,
+    driveFolderUrl:         r.driveFolderUrl    || '',
+    housingRecordId:        editingId,
+  };
+  // Drop null/empty optional fields
+  const payload = Object.fromEntries(
+    Object.entries(raw).filter(([, v]) => v !== null && v !== '' && v !== 0 || ['clientName','housingRecordId'].includes(_))
+  );
+  // Always keep required fields even if falsy
+  payload.clientName     = raw.clientName;
+  payload.housingRecordId = raw.housingRecordId;
+
+  try {
+    const res = await fetch(QREW_CREATE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': QREW_API_KEY },
+      body:    JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => String(res.status));
+      throw new Error(`Qrew returned ${res.status}: ${text}`);
+    }
+    const { jobFileId, jobCode, duplicate } = await res.json();
+
+    if (!jobFileId) throw new Error('Qrew response missing jobFileId.');
+
+    // Persist the link on the housing record
+    await updateDoc(doc(db, 'higWaitlist', editingId), {
+      qrewJobId:   jobFileId,
+      qrewJobCode: jobCode || '',
+      updatedAt:   serverTimestamp(),
+    });
+    _editingRecord = { ..._editingRecord, qrewJobId: jobFileId, qrewJobCode: jobCode || '' };
+    const idx = allRows.findIndex(x => x.id === editingId);
+    if (idx !== -1) allRows[idx] = { ...allRows[idx], qrewJobId: jobFileId, qrewJobCode: jobCode || '' };
+
+    renderQrewUI();
+    msgEl.textContent = duplicate
+      ? `Linked to existing job${jobCode ? ' — ' + jobCode : ''}.`
+      : `Job created${jobCode ? ' — ' + jobCode : ''}.`;
+    msgEl.style.color = 'var(--accent)';
+    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+  } catch (err) {
+    msgEl.textContent = 'Create failed: ' + (err.message || String(err));
+    msgEl.style.color = 'var(--danger,#dc2626)';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Create Job in Qrew';
   }
 }
 
@@ -236,6 +339,8 @@ requireAuth(async (user, profile) => {
   });
 
   // Qrew job link / unlink
+  document.getElementById('createQrewJobBtn').addEventListener('click', createQrewJob);
+
   document.getElementById('linkQrewBtn').addEventListener('click', async () => {
     const jobId   = document.getElementById('editQrewJobId').value.trim();
     const jobCode = document.getElementById('editQrewJobCode').value.trim().toUpperCase();
