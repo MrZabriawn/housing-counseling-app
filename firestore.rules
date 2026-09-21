@@ -2,15 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
+    // Staff = a verified Google account on the org domain. This check has to
+    // live HERE, not only in the login page: Firebase's Google sign-in accepts
+    // any Google account, and the project's config is public in the page
+    // source, so anyone can obtain a session and query Firestore directly,
+    // never touching login.js. Until this line existed, that meant every
+    // client record — SSNs included — was readable by any Google user.
+    function isStaff() {
+      return request.auth != null
+          && request.auth.token.email_verified == true
+          && request.auth.token.email.matches('.*@housingopps\\.org$');
     }
 
     // config/demo passcode must be readable without auth so the login page
     // can validate the funder passcode before any Firebase session exists.
     match /config/demo {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
 
     // Public workshop registration — anyone can read workshop config and
@@ -29,11 +37,10 @@ service cloud.firestore {
       allow create: if true;
     }
 
-    // All authenticated users (signed-in @housingopps.org accounts) can read
-    // and write any collection. The security boundary is Google login — only
-    // staff with an org account can reach this app.
+    // Staff can read and write any collection. The boundary is the domain
+    // check in isStaff() — being signed in to Google is not enough.
     match /{document=**} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isStaff();
     }
 
   }
