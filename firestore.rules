@@ -37,6 +37,13 @@ service cloud.firestore {
       allow create: if true;
     }
 
+    // Pre-workshop survey responses — anyone can submit (QR code public link),
+    // only signed-in staff can read.
+    match /workshopSurveyResponses/{docId} {
+      allow create: if true;
+      allow read: if isSignedIn();
+    }
+
     // Staff can read and write any collection. The boundary is the domain
     // check in isStaff() — being signed in to Google is not enough.
     match /{document=**} {

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pre-Workshop Survey</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      background: #f0f4f8;
+      color: #1a202c;
+      padding: 1.5rem 1rem 3rem;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      max-width: 540px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    .card-header {
+      background: #1a56db;
+      color: #fff;
+      padding: 1.5rem 1.5rem 1.25rem;
+    }
+    .card-header .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.75;
+      margin-bottom: 0.35rem;
+    }
+    .card-header h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin: 0 0 0.2rem;
+      line-height: 1.3;
+    }
+    .card-header .subtitle {
+      font-size: 0.8375rem;
+      opacity: 0.8;
+      margin: 0;
+    }
+
+    .card-body { padding: 1.5rem; }
+
+    .form-group { margin-bottom: 1.1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.8375rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.35rem;
+    }
+    .form-group .required-star { color: #dc2626; margin-left: 2px; }
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.9375rem;
+      font-family: inherit;
+      color: #111827;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus {
+      border-color: #1a56db;
+      box-shadow: 0 0 0 3px rgba(26,86,219,0.12);
+    }
+    .form-group textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+    .form-group .hint {
+      font-size: 0.775rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    .question-block {
+      border-top: 1px solid #f0f0f0;
+      padding-top: 1rem;
+      margin-top: 0.5rem;
+    }
+    .question-num {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #9ca3af;
+      margin-bottom: 0.2rem;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: #1a56db;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.85rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: background 0.15s;
+    }
+    .btn-submit:hover { background: #1447c2; }
+    .btn-submit:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* States */
+    #loadingState, #errorState, #successState { display: none; }
+
+    #loadingState {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: #6b7280;
+      font-size: 0.9375rem;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #1a56db;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #errorState {
+      text-align: center;
+      padding: 2.5rem 1.5rem;
+      color: #991b1b;
+      font-size: 0.9375rem;
+    }
+
+    #successState {
+      text-align: center;
+      padding: 2.5rem 1.5rem;
+    }
+    .success-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    #successState h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #111827;
+      margin: 0 0 0.5rem;
+    }
+    #successState p {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin: 0;
+    }
+
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      font-size: 0.8375rem;
+      color: #991b1b;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <!-- Loading -->
+    <div id="loadingState" class="card-body">
+      <div class="spinner"></div>
+      Loading survey…
+    </div>
+
+    <!-- Error -->
+    <div id="errorState" class="card-body">
+      <p>⚠️ Could not load this survey. The link may be invalid or the workshop may have been removed.</p>
+    </div>
+
+    <!-- Success -->
+    <div id="successState" class="card-body">
+      <div class="success-icon">✅</div>
+      <h2>Thank you!</h2>
+      <p>Your survey has been submitted. We hope you enjoy the workshop today.</p>
+    </div>
+
+    <!-- Survey form -->
+    <div id="surveyContent" style="display:none;">
+      <div class="card-header">
+        <div class="eyebrow">Pre-Workshop Survey</div>
+        <h1 id="workshopTitle">Loading…</h1>
+        <p class="subtitle">Please take a moment to fill this out before we begin.</p>
+      </div>
+      <div class="card-body">
+        <form id="surveyForm" novalidate>
+          <div class="form-group">
+            <label for="respondentName">Your Name <span class="required-star">*</span></label>
+            <input type="text" id="respondentName" placeholder="First and last name" autocomplete="name" required>
+          </div>
+          <div class="form-group">
+            <label for="respondentEmail">Email Address</label>
+            <input type="email" id="respondentEmail" placeholder="you@example.com" autocomplete="email">
+            <div class="hint">Optional — only used to match your registration</div>
+          </div>
+
+          <div id="questionsArea"></div>
+
+          <div class="error-msg" id="formError"></div>
+
+          <button type="submit" class="btn-submit" id="submitBtn">Submit Survey</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">Home Stabilization Program &nbsp;·&nbsp; Housing Counseling</div>
+
+  <script type="module">
+    import { initializeApp }         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getFirestore, doc, getDoc, addDoc, collection, serverTimestamp }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyDr37nN71_lgHcEElGa0SmDnML2rTyZsuo",
+      authDomain:        "housing-counseling.firebaseapp.com",
+      projectId:         "housing-counseling",
+      storageBucket:     "housing-counseling.firebasestorage.app",
+      messagingSenderId: "1084104773953",
+      appId:             "1:1084104773953:web:b059f405cedf09361c91c0",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    const params      = new URLSearchParams(location.search);
+    const workshopId  = params.get('w');
+    const loading     = document.getElementById('loadingState');
+    const errorState  = document.getElementById('errorState');
+    const content     = document.getElementById('surveyContent');
+    const successState = document.getElementById('successState');
+
+    loading.style.display = '';
+
+    if (!workshopId) {
+      loading.style.display = 'none';
+      errorState.style.display = '';
+    } else {
+      loadWorkshop(workshopId);
+    }
+
+    async function loadWorkshop(id) {
+      try {
+        const snap = await getDoc(doc(db, 'workshops', id));
+        if (!snap.exists()) throw new Error('Not found');
+        const ws = snap.data();
+
+        document.getElementById('workshopTitle').textContent = ws.title || 'Workshop Survey';
+        document.title = (ws.title || 'Workshop') + ' — Pre-Workshop Survey';
+
+        const questions = ws.surveyQuestions || [];
+        renderQuestions(questions);
+
+        loading.style.display  = 'none';
+        content.style.display  = '';
+      } catch (err) {
+        loading.style.display  = 'none';
+        errorState.style.display = '';
+        document.querySelector('#errorState p').textContent =
+          '⚠️ Could not load this survey. The link may be invalid.';
+      }
+    }
+
+    function renderQuestions(questions) {
+      const area = document.getElementById('questionsArea');
+      if (!questions.length) {
+        area.innerHTML = '<p style="font-size:0.85rem;color:#6b7280;font-style:italic;margin-bottom:1rem;">No questions have been added to this survey yet.</p>';
+        return;
+      }
+      area.innerHTML = questions.map((q, i) => `
+        <div class="question-block form-group">
+          <div class="question-num">Question ${i + 1}</div>
+          <label for="q_${q.id}">${escHtml(q.label)}${q.required ? '<span class="required-star">*</span>' : ''}</label>
+          <textarea id="q_${q.id}" data-qid="${q.id}" data-required="${q.required ? '1' : '0'}" rows="3" placeholder="Your answer…"></textarea>
+        </div>
+      `).join('');
+    }
+
+    function escHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('surveyForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('formError');
+      const btn   = document.getElementById('submitBtn');
+      errEl.style.display = 'none';
+
+      const name = document.getElementById('respondentName').value.trim();
+      if (!name) {
+        errEl.textContent = 'Please enter your name.';
+        errEl.style.display = '';
+        document.getElementById('respondentName').focus();
+        return;
+      }
+
+      // Collect answers, check required
+      const answers = {};
+      let missingRequired = null;
+      document.querySelectorAll('#questionsArea textarea').forEach(ta => {
+        const qid = ta.dataset.qid;
+        const val = ta.value.trim();
+        answers[qid] = val;
+        if (ta.dataset.required === '1' && !val && !missingRequired) {
+          missingRequired = ta;
+        }
+      });
+
+      if (missingRequired) {
+        errEl.textContent = 'Please answer all required questions.';
+        errEl.style.display = '';
+        missingRequired.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+
+      try {
+        await addDoc(collection(db, 'workshopSurveyResponses'), {
+          workshopId,
+          workshopTitle: document.getElementById('workshopTitle').textContent,
+          respondentName: name,
+          respondentEmail: document.getElementById('respondentEmail').value.trim(),
+          answers,
+          source: 'qr',
+          enteredBy: '',
+          submittedAt: serverTimestamp(),
+        });
+
+        content.style.display    = 'none';
+        successState.style.display = '';
+      } catch (err) {
+        errEl.textContent = 'Submission failed — please try again.';
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Submit Survey';
+      }
+    });
+  </script>
+</body>
+</html>

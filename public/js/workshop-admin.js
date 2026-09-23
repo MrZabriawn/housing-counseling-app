@@ -19,6 +19,11 @@ let _sessionMatches     = [];    // { reg, status, clientId, clientName } per re
 let _sessionCounselors  = [];    // counselor names for sessions dropdown
 let _sessionCounsLoaded = false;
 
+// Survey state
+let _surveyResponses    = [];    // responses for current workshop
+let _surveyLoaded       = false; // true after first load for current workshop
+let _sqCount            = 0;     // counter for new question id generation
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 requireAuth(async (user, profile) => {
   _user = user;
@@ -58,6 +63,7 @@ function initTabs() {
       p.style.display = active ? '' : 'none';
     });
     if (tabId === 'sessions') loadSessionsTab();
+    if (tabId === 'survey')   loadSurveyTab();
   });
 }
 
@@ -103,6 +109,8 @@ function renderWorkshopSelect() {
 
 async function selectWorkshop(id) {
   _currentId = id;
+  _surveyLoaded = false;   // reset so survey tab re-loads for new workshop
+  _surveyResponses = [];
   qs('#workshopSelect').value = id;
 
   try {
@@ -813,4 +821,407 @@ async function createSessionRecords() {
   }
 
   renderSessionMatches();
+}
+
+// ── Survey ────────────────────────────────────────────────────────────────────
+
+async function loadSurveyTab() {
+  if (!_currentId) return;
+
+  // Question editor — always re-render from current workshop data
+  renderSurveyQuestionEditor(_currentWs?.surveyQuestions || []);
+  renderSurveyLink(_currentId);
+  renderSurveyQrCode(_currentId);
+  initSurveySubTabs();
+  initManualEntryForm();
+
+  // Load responses (reload each time tab is opened for fresh data)
+  await loadSurveyResponses();
+}
+
+function renderSurveyLink(workshopId) {
+  const base = `${location.origin}${location.pathname.replace('workshop-admin.html', '')}`;
+  const link = `${base}workshop-survey.html?w=${workshopId}`;
+  qs('#surveyLinkInput').value = link;
+
+  const copyBtn = qs('#copySurveyLinkBtn');
+  const newCopy = copyBtn.cloneNode(true);
+  copyBtn.parentNode.replaceChild(newCopy, copyBtn);
+  newCopy.addEventListener('click', () => {
+    navigator.clipboard.writeText(link).then(() => {
+      newCopy.textContent = 'Copied!';
+      setTimeout(() => { newCopy.textContent = 'Copy'; }, 1800);
+    });
+  });
+
+  const printBtn = qs('#printQrBtn');
+  const newPrint = printBtn.cloneNode(true);
+  printBtn.parentNode.replaceChild(newPrint, printBtn);
+  newPrint.addEventListener('click', () => printSurveyQr(link, _currentWs?.title || 'Workshop'));
+}
+
+function renderSurveyQrCode(workshopId) {
+  const base = `${location.origin}${location.pathname.replace('workshop-admin.html', '')}`;
+  const link = `${base}workshop-survey.html?w=${workshopId}`;
+  const container = qs('#surveyQrCode');
+  container.innerHTML = '';
+  // QRCode is loaded as a global from the qrcodejs CDN script
+  try {
+    new QRCode(container, { // eslint-disable-line no-undef
+      text:       link,
+      width:      180,
+      height:     180,
+      colorDark:  '#111827',
+      colorLight: '#ffffff',
+    });
+  } catch (e) {
+    container.textContent = 'QR code unavailable';
+  }
+}
+
+function printSurveyQr(link, title) {
+  const win = window.open('', '_blank', 'width=500,height=600');
+  win.document.write(`<!DOCTYPE html><html><head><title>Survey QR — ${escHtml(title)}</title>
+    <style>
+      body { font-family:sans-serif; text-align:center; padding:2rem; color:#111; }
+      h2 { font-size:1rem; margin-bottom:0.25rem; }
+      p  { font-size:0.75rem; color:#666; margin:0 0 1.5rem; word-break:break-all; }
+      img { max-width:220px; border:1px solid #ddd; padding:8px; border-radius:8px; }
+      .footer { font-size:0.7rem; color:#aaa; margin-top:1.5rem; }
+    </style>
+  </head><body>
+    <h2>${escHtml(title)}</h2>
+    <p>Pre-Workshop Survey<br>${escHtml(link)}</p>
+    <div id="qr"></div>
+    <div class="footer">Scan to fill out the pre-workshop survey</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <script>
+      new QRCode(document.getElementById('qr'), {
+        text: ${JSON.stringify(link)},
+        width:220, height:220, colorDark:'#111827', colorLight:'#fff'
+      });
+      setTimeout(() => window.print(), 600);
+    <\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+// ── Survey question editor ─────────────────────────────────────────────────────
+
+function renderSurveyQuestionEditor(questions) {
+  const builder = qs('#sqBuilder');
+  builder.innerHTML = '';
+  (questions || []).forEach(q => addSurveyQuestionRow(q));
+
+  // Re-wire add + save buttons each time
+  const addBtn = qs('#addSqBtn');
+  const newAdd = addBtn.cloneNode(true);
+  addBtn.parentNode.replaceChild(newAdd, addBtn);
+  newAdd.addEventListener('click', () => addSurveyQuestionRow());
+
+  const saveBtn = qs('#saveSurveyQsBtn');
+  const newSave = saveBtn.cloneNode(true);
+  saveBtn.parentNode.replaceChild(newSave, saveBtn);
+  newSave.addEventListener('click', saveSurveyQuestions);
+}
+
+function addSurveyQuestionRow(q = null) {
+  _sqCount++;
+  const id  = q?.id  || `q${Date.now()}${_sqCount}`;
+  const row = document.createElement('div');
+  row.className = 'sq-row';
+  row.dataset.qid = id;
+  row.innerHTML = `
+    <input type="text" class="sq-label-input" placeholder="Question text…" value="${escHtml(q?.label || '')}">
+    <label class="sq-req-label">
+      <input type="checkbox" class="sq-req-check" ${q?.required ? 'checked' : ''}> Required
+    </label>
+    <button type="button" class="btn-sq-del" title="Remove">✕</button>
+  `;
+  row.querySelector('.btn-sq-del').addEventListener('click', () => row.remove());
+  qs('#sqBuilder').appendChild(row);
+}
+
+async function saveSurveyQuestions() {
+  const msgEl   = qs('#sqSaveMsg');
+  const saveBtn = qs('#saveSurveyQsBtn');
+  msgEl.textContent = 'Saving…';
+  saveBtn.disabled  = true;
+
+  const rows = qs('#sqBuilder').querySelectorAll('.sq-row');
+  const questions = [];
+  let hasEmpty = false;
+  rows.forEach(row => {
+    const label = row.querySelector('.sq-label-input').value.trim();
+    if (!label) { hasEmpty = true; return; }
+    questions.push({
+      id:       row.dataset.qid,
+      label,
+      required: row.querySelector('.sq-req-check').checked,
+    });
+  });
+
+  if (hasEmpty) {
+    msgEl.textContent = 'Remove or fill in blank questions first.';
+    saveBtn.disabled  = false;
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, 'workshops', _currentId), { surveyQuestions: questions });
+    _currentWs.surveyQuestions = questions;
+    msgEl.textContent = '✓ Saved!';
+    // Refresh manual entry form questions
+    renderManualEntryQuestions(questions);
+  } catch (err) {
+    msgEl.textContent = 'Error: ' + err.message;
+  } finally {
+    saveBtn.disabled = false;
+    setTimeout(() => { msgEl.textContent = ''; }, 2500);
+  }
+}
+
+// ── Survey responses ──────────────────────────────────────────────────────────
+
+async function loadSurveyResponses() {
+  const listBody = qs('#respListBody');
+  listBody.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;padding:0.5rem 0;">Loading…</p>';
+
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'workshopSurveyResponses'),
+      where('workshopId', '==', _currentId)
+    ));
+    _surveyResponses = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const at = a.submittedAt?.toMillis?.() ?? 0;
+        const bt = b.submittedAt?.toMillis?.() ?? 0;
+        return bt - at; // newest first
+      });
+    _surveyLoaded = true;
+    renderResponsesList();
+    renderResponsesSummary();
+    updateRespCountBadge();
+  } catch (err) {
+    listBody.innerHTML = `<p style="color:var(--danger);font-size:0.875rem;">Could not load responses: ${escHtml(err.message)}</p>`;
+  }
+}
+
+function updateRespCountBadge() {
+  const badge = qs('#respCountBadge');
+  if (!badge) return;
+  const n = _surveyResponses.length;
+  badge.textContent = n > 0 ? `(${n})` : '';
+}
+
+function renderResponsesList() {
+  const body = qs('#respListBody');
+  if (!_surveyResponses.length) {
+    body.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>No survey responses yet.</div>';
+    return;
+  }
+  const questions = _currentWs?.surveyQuestions || [];
+  body.innerHTML = _surveyResponses.map(r => {
+    const fmtDate = ts => {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    };
+    const answers = r.answers || {};
+    const answersHtml = questions.map(q =>
+      `<div class="resp-answer-block">
+        <div class="resp-answer-q">${escHtml(q.label)}</div>
+        <div class="resp-answer-a">${escHtml(answers[q.id] || '—')}</div>
+      </div>`
+    ).join('');
+
+    const sourceBadge = r.source === 'manual'
+      ? `<span style="font-size:0.68rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-weight:700;">Manual</span>`
+      : '';
+
+    return `<div class="resp-row" data-rid="${r.id}">
+      <div class="resp-row-hdr">
+        <div>
+          <span class="resp-row-name">${escHtml(r.respondentName || '(no name)')}</span>
+          ${sourceBadge}
+          ${r.respondentEmail ? `<span style="font-size:0.775rem;color:var(--text-muted);margin-left:0.4rem;">${escHtml(r.respondentEmail)}</span>` : ''}
+        </div>
+        <div class="resp-row-meta">${fmtDate(r.submittedAt)} ▸</div>
+      </div>
+      <div class="resp-detail">${answersHtml || '<em style="color:var(--text-muted);">No answers recorded.</em>'}</div>
+    </div>`;
+  }).join('');
+
+  // Row click toggles detail
+  body.querySelectorAll('.resp-row-hdr').forEach(hdr => {
+    hdr.addEventListener('click', () => {
+      const detail = hdr.nextElementSibling;
+      detail.classList.toggle('open');
+      const arrow = hdr.querySelector('.resp-row-meta');
+      if (arrow) arrow.textContent = arrow.textContent.replace(/[▸▾]/g, detail.classList.contains('open') ? '▾' : '▸');
+    });
+  });
+}
+
+function renderResponsesSummary() {
+  const body = qs('#respSummaryBody');
+  const questions = _currentWs?.surveyQuestions || [];
+
+  if (!questions.length) {
+    body.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No questions have been defined for this survey yet.</p>';
+    return;
+  }
+  if (!_surveyResponses.length) {
+    body.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">No responses yet.</p>';
+    return;
+  }
+
+  body.innerHTML = questions.map(q => {
+    const answers = _surveyResponses
+      .map(r => (r.answers?.[q.id] || '').trim())
+      .filter(Boolean);
+    const answersHtml = answers.length
+      ? answers.map(a => `<div class="summ-answer">${escHtml(a)}</div>`).join('')
+      : '<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic;">No answers</div>';
+    return `<div class="summ-question">
+      <div class="summ-q-label">${escHtml(q.label)} <span style="font-weight:400;color:var(--text-muted);">(${answers.length} answer${answers.length !== 1 ? 's' : ''})</span></div>
+      ${answersHtml}
+    </div>`;
+  }).join('');
+}
+
+function exportResponsesCsv() {
+  if (!_surveyResponses.length) { alert('No responses to export.'); return; }
+  const questions = _currentWs?.surveyQuestions || [];
+  const header = ['Name', 'Email', 'Submitted', 'Source', ...questions.map(q => q.label)];
+  const fmtDate = ts => {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toISOString();
+  };
+  const rows = _surveyResponses.map(r => [
+    r.respondentName  || '',
+    r.respondentEmail || '',
+    fmtDate(r.submittedAt),
+    r.source          || 'qr',
+    ...questions.map(q => r.answers?.[q.id] || ''),
+  ]);
+  const csvContent = [header, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  // Build a temporary <a> with a data URI for text files (blob: is blocked for viewer downloads;
+  // we're staff-only here so a data: URI on a named anchor works for self-download)
+  const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+  const a = document.createElement('a');
+  a.href = dataUri;
+  a.download = `survey-responses-${_currentId}.csv`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ── Manual entry form ─────────────────────────────────────────────────────────
+
+function initManualEntryForm() {
+  renderManualEntryQuestions(_currentWs?.surveyQuestions || []);
+
+  const form   = qs('#manualRespForm');
+  const newFrm = form.cloneNode(false);          // clone without children
+  while (form.firstChild) newFrm.appendChild(form.firstChild); // move children
+  form.parentNode.replaceChild(newFrm, form);
+
+  newFrm.addEventListener('submit', submitManualResponse);
+}
+
+function renderManualEntryQuestions(questions) {
+  const area = qs('#mrQuestionsArea');
+  if (!area) return;
+  area.innerHTML = (questions || []).map(q =>
+    `<div class="form-group">
+      <label>${escHtml(q.label)}${q.required ? ' <span style="color:var(--danger)">*</span>' : ''}</label>
+      <textarea data-qid="${q.id}" data-required="${q.required ? '1' : '0'}" rows="3" placeholder="Answer…" style="resize:vertical;"></textarea>
+    </div>`
+  ).join('');
+}
+
+async function submitManualResponse(e) {
+  e.preventDefault();
+  const name    = qs('#mrName').value.trim();
+  const statusEl = qs('#mrStatus');
+  const btn     = qs('#mrSubmitBtn');
+  statusEl.textContent = '';
+  statusEl.style.color = '';
+
+  if (!name) { statusEl.textContent = 'Name is required.'; statusEl.style.color = 'var(--danger)'; return; }
+
+  const answers = {};
+  let missingReq = false;
+  qs('#mrQuestionsArea').querySelectorAll('textarea').forEach(ta => {
+    const val = ta.value.trim();
+    answers[ta.dataset.qid] = val;
+    if (ta.dataset.required === '1' && !val) missingReq = true;
+  });
+  if (missingReq) { statusEl.textContent = 'Please answer all required questions.'; statusEl.style.color = 'var(--danger)'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const docRef = await addDoc(collection(db, 'workshopSurveyResponses'), {
+      workshopId:       _currentId,
+      workshopTitle:    _currentWs?.title || '',
+      respondentName:   name,
+      respondentEmail:  qs('#mrEmail').value.trim(),
+      answers,
+      source:           'manual',
+      enteredBy:        _user?.displayName || _user?.email || '',
+      submittedAt:      serverTimestamp(),
+    });
+    _surveyResponses.unshift({ id: docRef.id, workshopId: _currentId, respondentName: name,
+      respondentEmail: qs('#mrEmail').value.trim(), answers, source: 'manual',
+      enteredBy: _user?.displayName || '', submittedAt: { toMillis: () => Date.now(), toDate: () => new Date() } });
+    renderResponsesList();
+    renderResponsesSummary();
+    updateRespCountBadge();
+
+    // Reset form
+    qs('#mrName').value  = '';
+    qs('#mrEmail').value = '';
+    qs('#mrQuestionsArea').querySelectorAll('textarea').forEach(ta => { ta.value = ''; });
+    statusEl.textContent = '✓ Response saved!';
+    statusEl.style.color = 'var(--success, #16a34a)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2500);
+  } catch (err) {
+    statusEl.textContent = 'Failed: ' + err.message;
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Response';
+  }
+}
+
+// ── Survey sub-tabs ───────────────────────────────────────────────────────────
+
+function initSurveySubTabs() {
+  const tabs = document.querySelectorAll('.survey-sub-tab');
+  tabs.forEach(tab => {
+    const newTab = tab.cloneNode(true);
+    tab.parentNode.replaceChild(newTab, tab);
+    newTab.addEventListener('click', () => {
+      document.querySelectorAll('.survey-sub-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.survey-sub-panel').forEach(p => p.classList.remove('active'));
+      newTab.classList.add('active');
+      const panel = qs(`#sp${capitalize(newTab.dataset.stab)}`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Export CSV button
+  const exportBtn = qs('#exportRespCsvBtn');
+  const newExport = exportBtn.cloneNode(true);
+  exportBtn.parentNode.replaceChild(newExport, exportBtn);
+  newExport.addEventListener('click', exportResponsesCsv);
 }
