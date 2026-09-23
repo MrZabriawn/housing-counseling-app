@@ -35,9 +35,9 @@ import {
 
 // ── Qrew sync ─────────────────────────────────────────────────────────────────
 
-const QREW_SYNC_URL   = 'https://housing-workforce.web.app/api/housing-status-update';
-const QREW_CREATE_URL = 'https://housing-workforce.web.app/api/create-repair-job';
-const QREW_JOB_BASE   = 'https://housing-workforce.web.app/jobs/';
+const QREW_SYNC_URL   = 'https://workforce.housingopps.org/api/housing-status-update';
+const QREW_CREATE_URL = 'https://workforce.housingopps.org/api/create-repair-job';
+const QREW_JOB_BASE   = 'https://workforce.housingopps.org/jobs/';
 
 const HOUSING_TO_QREW = {
   'er_review':    'draft',
@@ -52,7 +52,7 @@ async function pushStatusToQrew(qrewJobId, housingStatus) {
     const res = await fetch(QREW_SYNC_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Api-Key': QREW_API_KEY },
-      body:    JSON.stringify({ jobFileId: qrewJobId, status: qrewStatus, _syncSource: 'housing' }),
+      body:    JSON.stringify({ jobFileId: qrewJobId, status: qrewStatus, housingRecordId: editingId, _syncSource: 'housing' }),
     });
     return res.ok ? 'synced' : 'failed';
   } catch {

@@ -1,4 +1,11 @@
 {
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git"]
+    }
+  ],
   "hosting": {
     "public": "public",
     "ignore": [
@@ -6,6 +13,9 @@
       "**/.*",
       "**/node_modules/**",
       "scripts/**"
+    ],
+    "rewrites": [
+      { "source": "/api/qrew-status-update", "function": "qrewStatusUpdate" }
     ]
   },
   "firestore": {
