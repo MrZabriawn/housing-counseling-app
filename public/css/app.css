@@ -563,6 +563,40 @@ tr.row-duplicate td:first-child::before { content: "⚠ "; color: #f57f17; }
   .report-header-fields { grid-template-columns: 1fr; }
 }
 
+/* ── Program enrollment mini-cards ── */
+.program-mini-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: #f8f9fb;
+}
+.program-mini-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.program-mini-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.program-mini-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 0.4rem 0 0.1rem;
+}
+.list-detail {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.list-detail span {
+  font-weight: 600;
+  color: var(--text);
+  margin-right: 0.3rem;
+}
+
 /* ── Portrait phone ── */
 @media (max-width: 600px) {
   .nav-user span { display: none; }   /* keep the logout button; drop the name to save room */

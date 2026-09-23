@@ -1,7 +1,7 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
 import {
-  collection, doc, addDoc, getDoc, getDocs, updateDoc,
+  collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
   query, orderBy, where, serverTimestamp, Timestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -18,6 +18,9 @@ let _clientsLoaded      = false;
 let _sessionMatches     = [];    // { reg, status, clientId, clientName } per registrant
 let _sessionCounselors  = [];    // counselor names for sessions dropdown
 let _sessionCounsLoaded = false;
+
+// Registration edit state
+let _editingRegId = null;
 
 // Survey state
 let _surveyResponses    = [];    // responses for current workshop
@@ -255,7 +258,7 @@ function renderRegistrants() {
 
   const tbody = qs('#regTableBody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem;">No registrants found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="20" style="text-align:center;color:var(--text-muted);padding:2rem;">No registrants found.</td></tr>`;
     qs('#regCount').textContent = '';
     return;
   }
@@ -270,7 +273,18 @@ function renderRegistrants() {
       ${ws.askMortgage ? `<td>${r.hasMortgage ? `<span class="mortgage-chip">${escHtml(r.hasMortgage)}</span>` : '—'}</td>` : ''}
       ${ws.hasRaffle ? `<td>${r.raffleEntry ? '<span class="raffle-chip">Entered</span>' : '—'}</td>` : ''}
       <td>${formatShort(r.createdAt)}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm btn-secondary reg-edit-btn" data-id="${r.id}">Edit</button>
+        <button class="btn btn-sm reg-del-btn" data-id="${r.id}" style="color:var(--danger,#dc2626);margin-left:0.3rem;">Delete</button>
+      </td>
     </tr>`).join('');
+
+  tbody.querySelectorAll('.reg-edit-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openEditRegModal(btn.dataset.id); });
+  });
+  tbody.querySelectorAll('.reg-del-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteRegistration(btn.dataset.id); });
+  });
 
   qs('#regCount').textContent = `Showing ${rows.length} of ${_registrants.length} registrant${_registrants.length === 1 ? '' : 's'}`;
 }
@@ -283,6 +297,124 @@ function setupRegFilters() {
   qs('#searchReg').addEventListener('input', renderRegistrants);
   qs('#exportCsvBtn').addEventListener('click', exportCsv);
 }
+
+// ── Registration edit / delete ────────────────────────────────────────────────
+
+function openEditRegModal(regId) {
+  const reg = _registrants.find(r => r.id === regId);
+  if (!reg) return;
+  _editingRegId = regId;
+
+  document.getElementById('regEditTitle').textContent =
+    `Edit: ${(reg.firstName || '')} ${(reg.lastName || '')}`.trim();
+  document.getElementById('reFirstName').value = reg.firstName || '';
+  document.getElementById('reLastName').value  = reg.lastName  || '';
+  document.getElementById('reEmail').value     = reg.email     || '';
+  document.getElementById('rePhone').value     = reg.phone     || '';
+  document.getElementById('reCity').value      = reg.city      || '';
+
+  const locSel = document.getElementById('reLocation');
+  const locs   = _currentWs.locations || [];
+  locSel.innerHTML = locs.map(l =>
+    `<option value="${escHtml(l.id)}"${l.id === reg.locationId ? ' selected' : ''}>${escHtml(l.label)}</option>`
+  ).join('');
+
+  const mortGrp = document.getElementById('reMortgageGroup');
+  const raffGrp = document.getElementById('reRaffleGroup');
+  mortGrp.style.display = _currentWs.askMortgage ? '' : 'none';
+  raffGrp.style.display = _currentWs.hasRaffle   ? '' : 'none';
+  if (_currentWs.askMortgage) document.getElementById('reMortgage').value    = reg.hasMortgage  || '';
+  if (_currentWs.hasRaffle)   document.getElementById('reRaffle').checked    = !!reg.raffleEntry;
+
+  document.getElementById('regEditError').classList.add('hidden');
+  document.getElementById('regEditModal').classList.remove('hidden');
+}
+
+function closeEditRegModal() {
+  _editingRegId = null;
+  document.getElementById('regEditModal').classList.add('hidden');
+}
+
+async function saveRegEdit() {
+  const reg = _registrants.find(r => r.id === _editingRegId);
+  if (!reg) return;
+  const saveBtn = document.getElementById('regEditSave');
+  const errEl   = document.getElementById('regEditError');
+  errEl.classList.add('hidden');
+  saveBtn.disabled    = true;
+  saveBtn.textContent = 'Saving…';
+
+  try {
+    const newLocId = document.getElementById('reLocation').value;
+    const oldLocId = reg.locationId;
+
+    const updates = {
+      firstName:  document.getElementById('reFirstName').value.trim(),
+      lastName:   document.getElementById('reLastName').value.trim(),
+      email:      document.getElementById('reEmail').value.trim().toLowerCase(),
+      phone:      document.getElementById('rePhone').value.trim(),
+      city:       document.getElementById('reCity').value.trim(),
+      locationId: newLocId,
+      updatedAt:  serverTimestamp(),
+    };
+    if (_currentWs.askMortgage) updates.hasMortgage  = document.getElementById('reMortgage').value;
+    if (_currentWs.hasRaffle)   updates.raffleEntry  = document.getElementById('reRaffle').checked;
+
+    if (newLocId !== oldLocId) {
+      const locs = (_currentWs.locations || []).map(l => {
+        if (l.id === oldLocId) return { ...l, seatCount: Math.max(0, (l.seatCount || 0) - 1) };
+        if (l.id === newLocId) return { ...l, seatCount: (l.seatCount || 0) + 1 };
+        return l;
+      });
+      await updateDoc(doc(db, 'workshops', _currentId), { locations: locs });
+      _currentWs.locations = locs;
+      renderSeatCards(_currentWs);
+    }
+
+    await updateDoc(doc(db, 'workshopRegistrations', _editingRegId), updates);
+    const idx = _registrants.findIndex(r => r.id === _editingRegId);
+    if (idx !== -1) _registrants[idx] = { ..._registrants[idx], ...updates };
+
+    closeEditRegModal();
+    renderRegistrants();
+  } catch (err) {
+    errEl.textContent = 'Save failed: ' + err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
+  }
+}
+
+async function deleteRegistration(regId) {
+  const reg = _registrants.find(r => r.id === regId);
+  if (!reg) return;
+  const name = `${reg.firstName || ''} ${reg.lastName || ''}`.trim() || 'this registrant';
+  const note = reg.sessionCreated ? '\n\nNote: their session record will NOT be deleted.' : '';
+  if (!confirm(`Delete registration for ${name}?${note}`)) return;
+
+  try {
+    const locs = (_currentWs.locations || []).map(l =>
+      l.id === reg.locationId
+        ? { ...l, seatCount: Math.max(0, (l.seatCount || 0) - 1) }
+        : l
+    );
+    await updateDoc(doc(db, 'workshops', _currentId), { locations: locs });
+    _currentWs.locations = locs;
+
+    await deleteDoc(doc(db, 'workshopRegistrations', regId));
+    _registrants = _registrants.filter(r => r.id !== regId);
+
+    renderSeatCards(_currentWs);
+    renderRegistrants();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+// Wire registration edit modal buttons at module load
+document.getElementById('regEditSave').addEventListener('click', saveRegEdit);
+document.getElementById('regEditCancel').addEventListener('click', closeEditRegModal);
 
 // ── CSV export ────────────────────────────────────────────────────────────────
 function exportCsv() {

@@ -22,6 +22,50 @@ let _allUsers         = [];   // { uid, name } from users/{uid}
 let _driveFolder      = null;
 let _editingSessionId = null; // null = new session, else existing id
 let _amiLimits        = null; // counties → tier → [8 income limits]
+let _rentListEntry    = null; // full rentList doc data for this client
+let _ccaListEntry     = null; // full ccaList doc data for this client
+let _higListEntry     = null; // full higWaitlist doc data for this client
+
+// ── HOME-ARP QP data ──────────────────────────────────────────────────────────
+const HOME_ARP_QPS = {
+  QP1: { subTypes: [
+    { value: 'QP1-1', label: 'Par. 1 — Literally Homeless' },
+    { value: 'QP1-2', label: 'Par. 2 — Imminent Risk of Homelessness' },
+    { value: 'QP1-3', label: 'Par. 3 — Homeless Under Other Federal Statutes' },
+  ]},
+  QP2: { subTypes: [
+    { value: 'QP2-1', label: 'Par. 1 — Individuals and Families' },
+    { value: 'QP2-2', label: 'Par. 2 — Unaccompanied Children and Youth' },
+    { value: 'QP2-3', label: 'Par. 3 — Families with Children and Youth' },
+  ]},
+  QP3: { subTypes: [
+    { value: 'QP3-DV',     label: 'Domestic Violence' },
+    { value: 'QP3-Dating', label: 'Dating Violence' },
+    { value: 'QP3-SA',     label: 'Sexual Assault' },
+    { value: 'QP3-Stalk',  label: 'Stalking' },
+    { value: 'QP3-HT',     label: 'Human Trafficking' },
+  ]},
+  QP4: { subTypes: [
+    { value: 'QP4-2i',  label: 'Par. 2.i — At Greatest Risk of Housing Instability' },
+    { value: 'QP4-2ii', label: 'Par. 2.ii — At Greatest Risk of Housing Instability' },
+  ]},
+};
+
+function updateClientQpSubTypes(preselect = '') {
+  const qp  = document.getElementById('clientQpDesig')?.value;
+  const sel = document.getElementById('clientQpSubType');
+  if (!sel) return;
+  if (!qp || !HOME_ARP_QPS[qp]) {
+    sel.innerHTML = '<option value="">—</option>';
+    sel.disabled  = true;
+    return;
+  }
+  sel.disabled  = false;
+  sel.innerHTML = '<option value="">— Select sub-type —</option>' +
+    HOME_ARP_QPS[qp].subTypes.map(o =>
+      `<option value="${o.value}"${o.value === preselect ? ' selected' : ''}>${o.label}</option>`
+    ).join('');
+}
 
 // ── Billing Type → report routing ─────────────────────────────────────────────
 // billingType is stored on the client document (not per-session) and determines
@@ -488,6 +532,18 @@ function populateClientForm(c) {
   }
   renderFolderUI();
 
+  // HOME-ARP QP
+  const ha = c.homeArp || {};
+  const qpEl = document.getElementById('clientQpDesig');
+  if (qpEl) {
+    qpEl.value = ha.qp || '';
+    updateClientQpSubTypes(ha.subType || '');
+    const verEl = document.getElementById('clientQpVerification');
+    if (verEl) verEl.value = ha.verificationMethod || '';
+    const qpNotesEl = document.getElementById('clientQpNotes');
+    if (qpNotesEl) qpNotesEl.value = ha.notes || '';
+  }
+
   // Financials
   loadFinancials(c);
 }
@@ -720,6 +776,9 @@ function wireClientForm() {
     updateIntakeSections(type);
   });
 
+  // HOME-ARP QP sub-type updates when QP changes
+  document.getElementById('clientQpDesig')?.addEventListener('change', () => updateClientQpSubTypes());
+
   // Primary save button (Overview tab)
   document.getElementById('saveClientBtn').addEventListener('click', () => saveClient());
 
@@ -922,6 +981,17 @@ async function saveClient(msgId = 'clientSaveMsg') {
       // Intake Notes
       intakeDate:           document.getElementById('intakeDate').value,
       intakeNotes:          (document.getElementById('intakeNotes')?.value || '').trim(),
+      // HOME-ARP QP
+      homeArp: (() => {
+        const qp = document.getElementById('clientQpDesig')?.value;
+        if (!qp) return null;
+        return {
+          qp,
+          subType:            document.getElementById('clientQpSubType')?.value || '',
+          verificationMethod: document.getElementById('clientQpVerification')?.value || '',
+          notes:              (document.getElementById('clientQpNotes')?.value || '').trim(),
+        };
+      })(),
       // Preserve confidentiality fields — only ED can change these via saveTierChange()
       confidentialityTier:   _client.confidentialityTier || 'standard',
       careTeam:              _client.careTeam || [],
@@ -1336,25 +1406,107 @@ async function loadListMembership() {
       getDocs(query(collection(db, 'rentList'),   where('clientId', '==', clientId), limit(1))),
       getDocs(query(collection(db, 'higWaitlist'), where('clientId', '==', clientId), limit(1))),
     ]);
-    renderListSlot('buyerReadySlot',  ccaSnap.empty  ? null : ccaSnap.docs[0].id,  'Buyer Ready',  'buyer-ready');
-    renderListSlot('rentReadySlot',   rentSnap.empty ? null : rentSnap.docs[0].id, 'Rent Ready',   'rent-ready');
-    renderListSlot('homeRepairsSlot', higSnap.empty  ? null : higSnap.docs[0].id,  'Home Repairs', 'repair-ready');
+
+    _ccaListEntry  = ccaSnap.empty  ? null : { id: ccaSnap.docs[0].id,  ...ccaSnap.docs[0].data() };
+    _rentListEntry = rentSnap.empty ? null : { id: rentSnap.docs[0].id, ...rentSnap.docs[0].data() };
+    _higListEntry  = higSnap.empty  ? null : { id: higSnap.docs[0].id,  ...higSnap.docs[0].data() };
+
+    renderListSlot('buyerReadySlot',  _ccaListEntry,  'Buyer Ready',  'buyer-ready');
+    renderListSlot('rentReadySlot',   _rentListEntry, 'Rent Ready',   'rent-ready');
+    renderListSlot('homeRepairsSlot', _higListEntry,  'Home Repairs', 'repair-ready');
+
+    // If the client has no QP on their own record but their Rent Ready entry has one,
+    // seed the QP fields and in-memory client from the Rent Ready document.
+    if (_rentListEntry && !_client?.homeArp?.qp) {
+      const rrHomeArp = _rentListEntry.homeArp;
+      if (rrHomeArp?.qp) {
+        _client.homeArp = rrHomeArp; // keep in-memory state in sync for PDF export
+        const qpEl = document.getElementById('clientQpDesig');
+        if (qpEl) {
+          qpEl.value = rrHomeArp.qp || '';
+          updateClientQpSubTypes(rrHomeArp.subType || '');
+          const verEl     = document.getElementById('clientQpVerification');
+          const qpNotesEl = document.getElementById('clientQpNotes');
+          if (verEl)     verEl.value     = rrHomeArp.verificationMethod || '';
+          if (qpNotesEl) qpNotesEl.value = rrHomeArp.notes || '';
+        }
+      }
+    }
   } catch (_) {}
 }
 
-function renderListSlot(slotId, linkedId, label, page) {
+function renderListSlot(slotId, entry, label, page) {
   const slot = document.getElementById(slotId);
   if (!slot) return;
-  if (linkedId) {
-    slot.innerHTML = `<a href="${page}.html" class="btn btn-secondary btn-sm">View on ${label}</a>`;
-  } else {
+  if (!entry) {
     const btn = document.createElement('button');
     btn.className = 'btn btn-secondary btn-sm';
     btn.textContent = `+ Add to ${label}`;
     btn.addEventListener('click', () => addToList(slotId, label, page));
     slot.innerHTML = '';
     slot.appendChild(btn);
+    return;
   }
+
+  const statusLabels = {
+    waitlisted: 'Waitlisted', placed: 'Placed', inactive: 'Inactive',
+    eligible: 'Eligible', under_contract: 'Under Contract', closed: 'Closed',
+    needs_scope: 'Needs Scope', er_review: 'ER Review', repair_ready: 'Repair Ready', complete: 'Complete',
+  };
+  const statusColors = {
+    waitlisted: 'badge-blue', placed: 'badge-green', inactive: 'badge-gray',
+    eligible: 'badge-blue', under_contract: 'badge-green', closed: 'badge-gray',
+    needs_scope: 'badge-yellow', er_review: 'badge-blue', repair_ready: 'badge-green', complete: 'badge-gray',
+  };
+
+  const row = (lbl, val) => val ? `<div class="list-detail"><span>${escHtml(lbl)}</span>${escHtml(String(val))}</div>` : '';
+
+  let details = '';
+  if (page === 'rent-ready') {
+    if (entry.status === 'placed') {
+      details = [
+        row('Address',      entry.propertyAddress),
+        row('Move-in',      entry.placedMoveInDate ? fmtDate(entry.placedMoveInDate) : ''),
+        row('Monthly Rent', entry.monthlyRentAgreed ? fmtMoney(entry.monthlyRentAgreed) : ''),
+      ].join('');
+    } else if (entry.status === 'waitlisted') {
+      const hasRange = entry.rentRangeMin || entry.rentRangeMax;
+      details = [
+        hasRange ? row('Rent Range', `$${entry.rentRangeMin || 0}–$${entry.rentRangeMax || 0}`) : '',
+        row('Bedrooms', entry.bedrooms),
+        entry.areasOfInterest?.length ? row('Areas', entry.areasOfInterest.join(', ')) : '',
+      ].join('');
+    }
+  } else if (page === 'buyer-ready') {
+    if (entry.status === 'closed') {
+      details = [
+        row('CCA Provided', entry.ccaAmountProvided ? fmtMoney(entry.ccaAmountProvided) : ''),
+        row('Closure Date',  entry.closureDate),
+      ].join('');
+    } else if (entry.status === 'under_contract') {
+      details = [
+        row('CCA Amount',   entry.ccaAmount ? fmtMoney(entry.ccaAmount) : ''),
+        row('Closing Date', entry.closingDate),
+      ].join('');
+    }
+  } else if (page === 'repair-ready') {
+    const scope = entry.scopeOfWork ? entry.scopeOfWork.slice(0, 80) + (entry.scopeOfWork.length > 80 ? '…' : '') : '';
+    details = [
+      row('Scope',      scope),
+      row('Est. Budget', entry.estimatedBudget ? fmtMoney(entry.estimatedBudget) : ''),
+    ].join('');
+  }
+
+  slot.innerHTML = `
+    <div class="program-mini-card">
+      <div class="program-mini-header">
+        <span class="program-mini-name">${escHtml(label)}</span>
+        <span class="badge ${statusColors[entry.status] || 'badge-blue'}">${escHtml(statusLabels[entry.status] || entry.status || '')}</span>
+      </div>
+      ${details ? `<div class="program-mini-details">${details}</div>` : ''}
+      <a href="${page}.html" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;display:inline-block;">View on ${escHtml(label)}</a>
+    </div>
+  `;
 }
 
 async function addToList(slotId, label, page) {
@@ -3051,6 +3203,76 @@ function generateExportPdf() {
           <td>${r.active !== false ? 'Yes' : 'No'}</td>
         </tr>`).join('')}</tbody>
       </table>`;
+    }
+
+    if (c.homeArp?.qp) {
+      const ha = c.homeArp;
+      const qpLabels = { QP1: 'Homeless', QP2: 'At Risk of Homelessness', QP3: 'Fleeing / Attempting to Flee', QP4: 'Other Families Requiring Services' };
+      const subLabel = HOME_ARP_QPS[ha.qp]?.subTypes.find(s => s.value === ha.subType)?.label || ha.subType || '—';
+      body += secHdr('HOME-ARP Qualifying Population');
+      body += `<div class="two-col">
+        <div>
+          ${pdfRow('Qualifying Population', v(`${ha.qp} — ${qpLabels[ha.qp] || ''}`))}
+          ${pdfRow('Sub-Type', v(subLabel))}
+        </div>
+        <div>
+          ${pdfRow('Documentation Method', v(ha.verificationMethod || '—'))}
+          ${ha.notes ? pdfRow('Documentation Notes', v(ha.notes)) : ''}
+        </div>
+      </div>`;
+    }
+
+    // ── Program Enrollment ────────────────────────────────────────────────────
+    if (_rentListEntry || _ccaListEntry || _higListEntry) {
+      const pdfStatusLabels = {
+        waitlisted: 'Waitlisted', placed: 'Placed', inactive: 'Inactive',
+        eligible: 'Eligible', under_contract: 'Under Contract', closed: 'Closed',
+        needs_scope: 'Needs Scope', er_review: 'ER Review', repair_ready: 'Repair Ready', complete: 'Complete',
+      };
+      body += secHdr('Program Enrollment');
+
+      if (_rentListEntry) {
+        const r = _rentListEntry;
+        const statusLabel = pdfStatusLabels[r.status] || r.status || '';
+        body += `<div style="margin-bottom:0.75rem;">`;
+        body += `<strong>Rent Ready</strong> &mdash; ${v(statusLabel)}<br>`;
+        if (r.status === 'placed') {
+          if (r.propertyAddress)  body += pdfRow('Property Address', v(r.propertyAddress));
+          if (r.placedMoveInDate) body += pdfRow('Move-in Date', v(fmtDate(r.placedMoveInDate)));
+          if (r.monthlyRentAgreed) body += pdfRow('Monthly Rent', v(fmtMoney(r.monthlyRentAgreed)));
+        } else if (r.status === 'waitlisted') {
+          if (r.rentRangeMin || r.rentRangeMax) body += pdfRow('Rent Range', v(`$${r.rentRangeMin || 0}–$${r.rentRangeMax || 0}`));
+          if (r.bedrooms)            body += pdfRow('Bedrooms', v(r.bedrooms));
+          if (r.areasOfInterest?.length) body += pdfRow('Areas of Interest', v(r.areasOfInterest.join(', ')));
+        }
+        body += `</div>`;
+      }
+
+      if (_ccaListEntry) {
+        const r = _ccaListEntry;
+        const statusLabel = pdfStatusLabels[r.status] || r.status || '';
+        body += `<div style="margin-bottom:0.75rem;">`;
+        body += `<strong>Buyer Ready</strong> &mdash; ${v(statusLabel)}<br>`;
+        if (r.status === 'closed') {
+          if (r.ccaAmountProvided) body += pdfRow('CCA Amount Provided', v(fmtMoney(r.ccaAmountProvided)));
+          if (r.closureDate)       body += pdfRow('Closure Date', v(r.closureDate));
+        } else if (r.status === 'under_contract') {
+          if (r.ccaAmount)    body += pdfRow('CCA Amount', v(fmtMoney(r.ccaAmount)));
+          if (r.closingDate)  body += pdfRow('Closing Date', v(r.closingDate));
+        }
+        body += `</div>`;
+      }
+
+      if (_higListEntry) {
+        const r = _higListEntry;
+        const statusLabel = pdfStatusLabels[r.status] || r.status || '';
+        body += `<div style="margin-bottom:0.75rem;">`;
+        body += `<strong>Home Repairs</strong> &mdash; ${v(statusLabel)}<br>`;
+        if (r.scopeOfWork)      body += pdfRow('Scope of Work', v(r.scopeOfWork));
+        if (r.estimatedBudget)  body += pdfRow('Estimated Budget', v(fmtMoney(r.estimatedBudget)));
+        if (r.estimatedDays)    body += pdfRow('Estimated Days', v(r.estimatedDays));
+        body += `</div>`;
+      }
     }
   }
 

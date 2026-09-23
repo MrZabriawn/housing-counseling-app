@@ -228,6 +228,7 @@
               <th id="mortgageTh" style="display:none;">Mortgage?</th>
               <th id="raffleTh" style="display:none;">Raffle</th>
               <th>Registered</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="regTableBody"></tbody>
@@ -410,6 +411,57 @@
     </div>
 
   </main>
+
+  <!-- Registration edit modal -->
+  <div id="regEditModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3 id="regEditTitle">Edit Registration</h3>
+      <div class="form-grid" style="margin-top:0.75rem;">
+        <div class="form-group">
+          <label for="reFirstName">First Name</label>
+          <input type="text" id="reFirstName">
+        </div>
+        <div class="form-group">
+          <label for="reLastName">Last Name</label>
+          <input type="text" id="reLastName">
+        </div>
+        <div class="form-group">
+          <label for="reEmail">Email</label>
+          <input type="email" id="reEmail">
+        </div>
+        <div class="form-group">
+          <label for="rePhone">Phone</label>
+          <input type="tel" id="rePhone">
+        </div>
+        <div class="form-group">
+          <label for="reCity">City</label>
+          <input type="text" id="reCity">
+        </div>
+        <div class="form-group">
+          <label for="reLocation">Location</label>
+          <select id="reLocation"></select>
+        </div>
+        <div class="form-group" id="reMortgageGroup" style="display:none;">
+          <label for="reMortgage">Mortgage Status</label>
+          <select id="reMortgage">
+            <option value="">—</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+        <div class="form-group" id="reRaffleGroup" style="display:none;">
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-top:1.5rem;">
+            <input type="checkbox" id="reRaffle"> Raffle entry
+          </label>
+        </div>
+      </div>
+      <p id="regEditError" class="error-msg hidden"></p>
+      <div class="form-actions">
+        <button id="regEditSave" class="btn btn-primary">Save</button>
+        <button id="regEditCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- QR code library — loaded as global before the module so it's accessible -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>

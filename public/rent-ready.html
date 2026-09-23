@@ -175,6 +175,43 @@
           <label for="editRrNotes">Notes</label>
           <textarea id="editRrNotes" rows="3"></textarea>
         </div>
+
+        <!-- HOME-ARP Qualifying Population -->
+        <div class="form-group full-width" style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;background:#f8f9fb;">
+          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">HOME-ARP Qualifying Population</p>
+          <div class="form-grid" style="margin:0;">
+            <div class="form-group">
+              <label for="editQpDesig">Qualifying Population</label>
+              <select id="editQpDesig">
+                <option value="">— None designated —</option>
+                <option value="QP1">QP1 — Homeless</option>
+                <option value="QP2">QP2 — At Risk of Homelessness</option>
+                <option value="QP3">QP3 — Fleeing / Attempting to Flee</option>
+                <option value="QP4">QP4 — Other Families Requiring Services</option>
+              </select>
+            </div>
+            <div class="form-group" id="qpSubTypeGroup">
+              <label for="editQpSubType">Sub-Type</label>
+              <select id="editQpSubType" disabled>
+                <option value="">—</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="editQpVerification">Documentation Method</label>
+              <select id="editQpVerification">
+                <option value="">— Select method —</option>
+                <option value="Third Party Verification">Third Party Verification</option>
+                <option value="Intake Worker Observation">Intake Worker Observation</option>
+                <option value="Self-Certification">Self-Certification</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="editQpNotes">Documentation Notes</label>
+              <textarea id="editQpNotes" rows="2" placeholder="Documentation collected or reviewed…"></textarea>
+            </div>
+          </div>
+        </div>
+
       </div>
       <p id="rrEditError" class="error-msg hidden"></p>
       <div class="form-actions">

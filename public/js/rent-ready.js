@@ -8,6 +8,30 @@ import {
 const STATUS_LABELS = { waitlisted: 'Waitlisted', placed: 'Placed', inactive: 'Inactive' };
 const STATUS_COLORS = { waitlisted: 'badge-blue', placed: 'badge-green', inactive: 'badge-gray' };
 
+const HOME_ARP_QPS = {
+  QP1: { label: 'QP1 — Homeless', subTypes: [
+    { value: 'QP1-1', label: 'Par. 1 — Literally Homeless' },
+    { value: 'QP1-2', label: 'Par. 2 — Imminent Risk of Homelessness' },
+    { value: 'QP1-3', label: 'Par. 3 — Homeless Under Other Federal Statutes' },
+  ]},
+  QP2: { label: 'QP2 — At Risk of Homelessness', subTypes: [
+    { value: 'QP2-1', label: 'Par. 1 — Individuals and Families' },
+    { value: 'QP2-2', label: 'Par. 2 — Unaccompanied Children and Youth' },
+    { value: 'QP2-3', label: 'Par. 3 — Families with Children and Youth' },
+  ]},
+  QP3: { label: 'QP3 — Fleeing / Attempting to Flee', subTypes: [
+    { value: 'QP3-DV',     label: 'Domestic Violence' },
+    { value: 'QP3-Dating', label: 'Dating Violence' },
+    { value: 'QP3-SA',     label: 'Sexual Assault' },
+    { value: 'QP3-Stalk',  label: 'Stalking' },
+    { value: 'QP3-HT',     label: 'Human Trafficking' },
+  ]},
+  QP4: { label: 'QP4 — Other Families Requiring Services', subTypes: [
+    { value: 'QP4-2i',  label: 'Par. 2.i — At Greatest Risk of Housing Instability' },
+    { value: 'QP4-2ii', label: 'Par. 2.ii — At Greatest Risk of Housing Instability' },
+  ]},
+};
+
 let allRows        = [];
 let _allClients    = [];
 let editingId      = null;
@@ -31,6 +55,7 @@ requireAuth(async (user, profile) => {
   document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('showInactive').addEventListener('change', render);
   document.getElementById('editRrStatus').addEventListener('change', toggleClosureSections);
+  document.getElementById('editQpDesig').addEventListener('change', () => updateQpSubTypes());
 
   document.getElementById('rrEditCancel').addEventListener('click', closeModal);
   document.getElementById('rrEditSave').addEventListener('click', saveEdit);
@@ -115,8 +140,12 @@ function render() {
     const statusLabel = STATUS_LABELS[r.status] || r.status || 'Waitlisted';
     const statusBadge = STATUS_COLORS[r.status] || 'badge-blue';
 
+    const qpBadge = r.homeArp?.qp
+      ? `<div style="font-size:0.7rem;font-weight:600;color:var(--primary,#1a56db);margin-top:0.1rem;">${esc(r.homeArp.qp)}</div>`
+      : '';
+
     return `<tr class="clickable-row" data-id="${r.id}" data-client-id="${r.clientId || ''}" style="${isDone ? 'opacity:0.55;' : ''}">
-      <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}</td>
+      <td style="font-weight:600;">${esc(toTitleCase(r.clientName))}${qpBadge}</td>
       <td>${esc(r.counselor || '')}</td>
       <td><span class="badge ${statusBadge}">${statusLabel}</span></td>
       <td style="white-space:nowrap;">${rentRange}</td>
@@ -152,6 +181,21 @@ function toggleClosureSections() {
   document.getElementById('inactiveSection').classList.toggle('hidden', status !== 'inactive');
 }
 
+function updateQpSubTypes(preselect = '') {
+  const qp  = document.getElementById('editQpDesig').value;
+  const sel = document.getElementById('editQpSubType');
+  if (!qp || !HOME_ARP_QPS[qp]) {
+    sel.innerHTML = '<option value="">—</option>';
+    sel.disabled  = true;
+    return;
+  }
+  sel.disabled  = false;
+  sel.innerHTML = '<option value="">— Select sub-type —</option>' +
+    HOME_ARP_QPS[qp].subTypes.map(o =>
+      `<option value="${o.value}"${o.value === preselect ? ' selected' : ''}>${esc(o.label)}</option>`
+    ).join('');
+}
+
 function openEditModal(id) {
   const r = allRows.find(x => x.id === id);
   if (!r) return;
@@ -179,6 +223,12 @@ function openEditModal(id) {
 
   toggleClosureSections();
   renderEditingChips();
+
+  const ha = r.homeArp || {};
+  document.getElementById('editQpDesig').value        = ha.qp || '';
+  updateQpSubTypes(ha.subType || '');
+  document.getElementById('editQpVerification').value = ha.verificationMethod || '';
+  document.getElementById('editQpNotes').value        = ha.notes || '';
 
   if (r.clientId) {
     const anchor = document.getElementById('rrClientAnchor');
@@ -249,6 +299,14 @@ async function saveEdit() {
     })();
 
     const moveInVal = document.getElementById('editMoveInDate').value;
+    const qp        = document.getElementById('editQpDesig').value;
+    const homeArp   = qp ? {
+      qp,
+      subType:            document.getElementById('editQpSubType').value,
+      verificationMethod: document.getElementById('editQpVerification').value,
+      notes:              document.getElementById('editQpNotes').value.trim(),
+    } : null;
+
     const updates = {
       rentRangeMin:    parseFloat(document.getElementById('editRentMin').value) || 0,
       rentRangeMax:    parseFloat(document.getElementById('editRentMax').value) || 0,
@@ -257,6 +315,7 @@ async function saveEdit() {
       targetMoveInDate: moveInVal ? new Date(moveInVal + 'T12:00:00') : null,
       status,
       notes:           document.getElementById('editRrNotes').value.trim(),
+      homeArp,
       updatedAt:       serverTimestamp(),
       ...closureFields,
     };
