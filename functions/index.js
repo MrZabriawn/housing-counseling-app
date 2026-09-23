@@ -1,16 +1,12 @@
 'use strict';
 
-const functions  = require('firebase-functions');
-const { defineSecret } = require('firebase-functions/params');
-const admin      = require('firebase-admin');
+const { onRequest } = require('firebase-functions/v2/https');
+const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
 
-const SYNC_API_KEY = defineSecret('QREW_SYNC_API_KEY');
-
-// Qrew status values this endpoint accepts, mapped to Housing internal statuses.
-// Qrew only pushes statuses that have a Housing equivalent.
+// Qrew status values this endpoint accepts, all map directly to Housing statuses.
 const QREW_TO_HOUSING = {
   er_review:    'er_review',
   repair_ready: 'repair_ready',
@@ -25,14 +21,17 @@ const QREW_TO_HOUSING = {
  * Body:    { housingRecordId, status, _syncSource: "qrew" }
  * Returns: { ok: true }
  */
-exports.qrewStatusUpdate = functions
-  .runWith({ secrets: [SYNC_API_KEY] })
-  .https.onRequest(async (req, res) => {
+exports.qrewStatusUpdate = onRequest(
+  { secrets: ['QREW_SYNC_API_KEY'], cors: false, invoker: 'public' },
+  async (req, res) => {
+    const expectedKey = (process.env.QREW_SYNC_API_KEY || '').trim();
+
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    if (req.headers['x-api-key'] !== SYNC_API_KEY.value()) {
+    const providedKey = (req.headers['x-api-key'] || '').trim();
+    if (!expectedKey || providedKey !== expectedKey) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -57,10 +56,14 @@ exports.qrewStatusUpdate = functions
       });
       return res.json({ ok: true });
     } catch (err) {
-      if (err.code === 5) {
+      if (err.code === 5 || err.code === 'not-found') {
         return res.status(404).json({ error: 'Housing record not found' });
       }
-      functions.logger.error('qrewStatusUpdate: Firestore update failed', { housingRecordId });
+      if (err.code === 3) {
+        return res.status(400).json({ error: 'Invalid housingRecordId' });
+      }
+      console.error('qrewStatusUpdate: Firestore update failed', housingRecordId);
       return res.status(500).json({ error: 'Update failed' });
     }
-  });
+  }
+);
