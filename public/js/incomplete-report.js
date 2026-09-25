@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import { RE_CODES, amiDisplayLabel, amiCategory } from './data.js';
 import {
-  collection, getDocs, doc, updateDoc, serverTimestamp, query, orderBy,
+  collection, collectionGroup, getDocs, doc, updateDoc, serverTimestamp, query, orderBy,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let _isED   = false;
@@ -36,13 +36,28 @@ async function loadIncomplete() {
   resultEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;">Loading clients…</p>';
 
   try {
-    const snap = await getDocs(collection(db, 'clients'));
+    const [snap, rxSnap, sessSnap] = await Promise.all([
+      getDocs(collection(db, 'clients')),
+      getDocs(collectionGroup(db, 'rxNumbers')),
+      getDocs(collectionGroup(db, 'sessions')),
+    ]);
+
+    // Build set of client IDs that have an active Rx number (subcollection or session doc)
+    const clientsWithRx = new Set(
+      rxSnap.docs
+        .filter(d => d.data().active !== false && d.data().rxNumber)
+        .map(d => d.ref.parent.parent.id)
+    );
+    sessSnap.docs.forEach(d => {
+      if ((d.data().rxNumber || '').trim()) clientsWithRx.add(d.ref.parent.parent.id);
+    });
+
     let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .filter(c => c.status !== 'closed');
     if (counsel) rows = rows.filter(c => c.counselor === counsel);
 
     const incomplete = rows
-      .filter(c => !(c.amiLabel || c.amiPercent) || !c.reCode || !c.rxNumbers?.length || !c.streetAddress)
+      .filter(c => !(c.amiLabel || c.amiPercent) || !c.reCode || !clientsWithRx.has(c.id) || !c.streetAddress)
       .sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
 
     if (!incomplete.length) {
@@ -76,7 +91,7 @@ async function loadIncomplete() {
             </tr>
           </thead>
           <tbody id="incompleteBody">
-            ${incomplete.map(c => buildRow(c, reOpts, TD)).join('')}
+            ${incomplete.map(c => buildRow(c, reOpts, TD, clientsWithRx)).join('')}
           </tbody>
         </table>
       </div>`;
@@ -91,12 +106,12 @@ async function loadIncomplete() {
   }
 }
 
-function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1px solid #f0f1f3;vertical-align:middle;"') {
+function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1px solid #f0f1f3;vertical-align:middle;"', clientsWithRx = new Set()) {
   const issues = [];
   if (!c.streetAddress)                  issues.push('Address');
   if (!(c.amiLabel || c.amiPercent))     issues.push('AMI');
-  if (!c.reCode)            issues.push('R/E');
-  if (!c.rxNumbers?.length) issues.push('Rx');
+  if (!c.reCode)                         issues.push('R/E');
+  if (!clientsWithRx.has(c.id))          issues.push('Rx');
 
   const missingChips = issues.map(i =>
     `<span class="missing-chip" data-field="${escAttr(i)}" style="background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.68rem;font-weight:700;white-space:nowrap;">${escHtml(i)}</span>`
@@ -119,11 +134,11 @@ function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1
       ${reOpts}
     </select>`;
 
-  const rxStatus = c.rxNumbers?.length
-    ? `<span style="color:var(--accent);font-weight:600;font-size:0.78rem;">${c.rxNumbers.length} Rx#</span>`
+  const rxStatus = clientsWithRx.has(c.id)
+    ? `<span style="color:var(--accent);font-weight:600;font-size:0.78rem;">Has Rx#</span>`
     : `<span style="color:#dc2626;font-weight:600;font-size:0.78rem;">None</span>`;
 
-  return `<tr data-client-id="${escAttr(c.id)}" data-re-val="${escAttr(c.reCode || '')}" data-has-rx="${c.rxNumbers?.length ? '1' : '0'}">
+  return `<tr data-client-id="${escAttr(c.id)}" data-re-val="${escAttr(c.reCode || '')}" data-has-rx="${clientsWithRx.has(c.id) ? '1' : '0'}">
     <td ${TD}><a href="client.html?id=${escAttr(c.id)}" target="_blank" style="font-weight:600;color:var(--primary);">${escHtml(c.clientName || '—')}</a></td>
     <td ${TD} style="color:var(--text-muted);">${escHtml(c.counselor || '—')}</td>
     <td ${TD}><div class="missing-chips" style="display:flex;gap:0.25rem;flex-wrap:wrap;">${missingChips}</div></td>
