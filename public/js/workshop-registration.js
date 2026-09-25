@@ -240,6 +240,13 @@ qs('#form').addEventListener('submit', async (e) => {
     stampRateLimit();
     showSuccess(locationId);
 
+    // Fire-and-forget Google Chat notification — failure doesn't affect the registrant
+    fetch('https://us-central1-housing-counseling.cloudfunctions.net/workshopRegistered', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regId: regRef.id }),
+    }).catch(() => {});
+
   } catch (err) {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Register Now';
