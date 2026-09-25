@@ -123,6 +123,7 @@
       <button class="reports-tab" data-tab="tab-court">Court</button>
       <button class="reports-tab" data-tab="tab-chci">CHCI</button>
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
+      <button class="reports-tab" data-tab="tab-nocontact">No Contact</button>
       <button class="reports-tab" data-tab="tab-hemap">HEMAP</button>
     </div>
 
@@ -432,6 +433,25 @@
       </div>
     </div>
 
+    <!-- ══ No Contact panel ═════════════════════════════════════════════════════ -->
+    <div class="reports-panel no-print" id="tab-nocontact">
+      <div style="margin-bottom:1rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:0.75rem;">
+          No Contact — Active Clients (60+ Days)
+        </h3>
+        <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+          <div class="form-group" style="margin:0;min-width:180px;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Counselor</label>
+            <select id="noContactCounselor" style="font-size:0.875rem;">
+              <option value="">All Counselors</option>
+            </select>
+          </div>
+          <button id="loadNoContactBtn" class="btn btn-primary btn-sm">Load</button>
+        </div>
+      </div>
+      <div id="noContactResult"></div>
+    </div>
+
     <!-- ══ HEMAP Log panel ═══════════════════════════════════════════════════════ -->
     <div class="reports-panel" id="tab-hemap">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
@@ -579,6 +599,7 @@
     import { initCdbgReports, initCourtReport } from './js/reports.js?v=11';
     import { initChciReports } from './js/chci-reports.js?v=3';
     import { initIncompleteReport } from './js/incomplete-report.js';
+    import { initNoContactReport } from './js/no-contact-report.js';
     import { initHemapLog } from './js/hemap-reports.js';
 
     function switchReportsTab(tabId) {
@@ -607,12 +628,17 @@
       await initCdbgReports(user, profile);
       initChciReports();
       await initIncompleteReport(user, profile);
+      await initNoContactReport(user, profile);
       await initHemapLog(user, profile);
 
-      // Auto-switch to incomplete tab if linked from the banner
+      // Auto-switch tabs if linked from a banner
       const params = new URLSearchParams(window.location.search);
       if (params.get('tab') === 'incomplete') {
         switchReportsTab('tab-incomplete');
+      }
+      if (params.get('tab') === 'nocontact') {
+        switchReportsTab('tab-nocontact');
+        document.getElementById('loadNoContactBtn')?.click();
       }
       // If deep-linked directly to court tab, load it now
       if (params.get('tab') === 'court') {

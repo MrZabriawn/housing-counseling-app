@@ -1,6 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
-import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel, amiCategory } from './data.js';
 import {
   collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -310,6 +310,7 @@ async function handleSubmit(e) {
       zipCode:           document.getElementById('zipCode').value.trim(),
       rxNumbers,
       amiPercent:        Number(document.getElementById('amiPercent').value) || null,
+      amiLabel:          (() => { const v = Number(document.getElementById('amiPercent').value); return v ? amiCategory(v) : null; })(),
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,

@@ -1,6 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAdmin, setupNav } from './auth.js?v=2';
-import { AMI_IMPORT_MAP, RE_CODES } from './data.js';
+import { AMI_IMPORT_MAP, RE_CODES, amiCategory } from './data.js';
 import {
   collection, getDocs, query, addDoc, updateDoc, doc, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -97,8 +97,12 @@ function mapColumns(rawRow, rawHeaders) {
 }
 
 function normalizeAmi(val) {
+  if (!val) return null;
   const norm = (val || '').toLowerCase().trim();
-  return AMI_IMPORT_MAP[norm] || val || '';
+  if (AMI_IMPORT_MAP[norm]) return AMI_IMPORT_MAP[norm]; // canonical label
+  const n = Number(val);
+  if (!isNaN(n) && n > 0) return n; // numeric — preserve
+  return null; // unrecognised — drop rather than store garbage
 }
 
 function normalizeReCode(val) {
@@ -235,7 +239,8 @@ function buildRecord(r) {
     counselingDate: counselingDate,
     counselor:      r.counselor,
     counselingType: r.counselingType,
-    amiPercent:     r.amiPercent,
+    amiPercent:     typeof r.amiPercent === 'number' ? r.amiPercent : null,
+    amiLabel:       typeof r.amiPercent === 'number' ? amiCategory(r.amiPercent) : (r.amiPercent || null),
     reCode:         r.reCode,
     notes:          r.notes,
     hispanic:       false,

@@ -60,6 +60,7 @@ requireED(async (user, profile) => {
   // AMI normalization
   document.getElementById('scanAmiBtn').addEventListener('click', scanAmiValues);
   document.getElementById('applyAmiBtn').addEventListener('click', applyAmiNormalization);
+  document.getElementById('runAmiMigrateBtn').addEventListener('click', runAmiMigration);
 
   // Duplicate scanner
   document.getElementById('scanDuplicatesBtn').addEventListener('click', scanDuplicates);
@@ -719,7 +720,9 @@ async function applyAmiNormalization() {
     for (let i = 0; i < _amiNormDocs.length; i += 499) {
       const batch = writeBatch(db);
       _amiNormDocs.slice(i, i + 499).forEach(d => {
-        batch.update(doc(db, 'clients', d.id), { amiPercent: d.normalized, updatedAt: now });
+        const update = { amiLabel: d.normalized, updatedAt: now };
+        if (typeof d.amiPercent !== 'number') update.amiPercent = null;
+        batch.update(doc(db, 'clients', d.id), update);
       });
       await batch.commit();
     }
@@ -732,6 +735,57 @@ async function applyAmiNormalization() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Apply Normalization';
+  }
+}
+
+// ── AMI Two-Field Migration ───────────────────────────────────────────────────
+// One-time migration: backfills amiLabel from amiPercent on all existing clients.
+
+async function runAmiMigration() {
+  const btn   = document.getElementById('runAmiMigrateBtn');
+  const msgEl = document.getElementById('amiMigrateMsg');
+  if (!confirm('Backfill amiLabel for all clients? This is safe to run multiple times.')) return;
+
+  btn.disabled    = true;
+  btn.textContent = 'Running…';
+  msgEl.classList.add('hidden');
+
+  try {
+    const snap = await getDocs(collection(db, 'clients'));
+    const toUpdate = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => {
+        // Need migration if amiLabel is missing but amiPercent can resolve to one
+        if (c.amiLabel) return false; // already has a label
+        return !!(c.amiPercent); // has something to convert
+      });
+
+    if (!toUpdate.length) {
+      showMsg(msgEl, 'All clients already have amiLabel set — nothing to do.', true);
+      return;
+    }
+
+    const now = serverTimestamp();
+    let count = 0;
+    for (let i = 0; i < toUpdate.length; i += 499) {
+      const batch = writeBatch(db);
+      toUpdate.slice(i, i + 499).forEach(c => {
+        const resolved = amiCategory(c.amiPercent);
+        if (!resolved) return;
+        const update = { amiLabel: resolved, updatedAt: now };
+        // If amiPercent was stored as a text string, clear it — numeric values stay
+        if (typeof c.amiPercent !== 'number') update.amiPercent = null;
+        batch.update(doc(db, 'clients', c.id), update);
+        count++;
+      });
+      await batch.commit();
+    }
+    showMsg(msgEl, `Done — ${count} client${count !== 1 ? 's' : ''} updated.`, true);
+  } catch (err) {
+    showMsg(msgEl, 'Migration failed: ' + err.message, false);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Run Migration';
   }
 }
 

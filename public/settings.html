@@ -301,6 +301,21 @@
       </div>
     </div>
 
+    <!-- AMI Two-Field Migration -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">Backfill AMI Labels</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1rem;">
+        One-time migration: reads each client's stored <code>amiPercent</code> and writes the matching HUD tier label
+        (<em>Low Income</em>, <em>Very Low Income</em>, etc.) to the new <code>amiLabel</code> field.
+        Safe to run multiple times — skips clients that already have a label. Text-string values in
+        <code>amiPercent</code> are cleared after the label is set.
+      </p>
+      <div class="form-actions">
+        <button id="runAmiMigrateBtn" class="btn btn-primary">Run Migration</button>
+      </div>
+      <p id="amiMigrateMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.5rem;"></p>
+    </div>
+
     <!-- AMI Income Limits Chart -->
     <div class="card" style="max-width:940px;margin-top:1.25rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">

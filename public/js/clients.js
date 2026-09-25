@@ -21,7 +21,10 @@ let _counselorDocs   = [];    // { id, name, staffNumber } from counselors colle
 
 let _metricsRendered   = false; // true after first visit to Metrics tab
 let _rxGuarantorMap    = new Map(); // rxNumber string → guarantor string
+let _clientsWithActiveRx = new Set(); // client IDs with ≥1 active Rx in subcollection
 let _matchingSessions  = null;  // null = client view; array = session view (date filter active)
+
+let _missingFieldFilter = null; // field name to filter blank, e.g. 'amiLabel'
 
 // Stale client modal state
 let _followUpClientId  = null;
@@ -76,6 +79,32 @@ requireAuth(async (user, profile) => {
   document.getElementById('clearFilters').addEventListener('click', async () => {
     document.getElementById('filterForm').reset();
     sessionStorage.removeItem(SS);
+    clearBlankFilterState();
+    await applyFilters();
+  });
+
+  document.getElementById('clearBlankFilter').addEventListener('click', async (e) => {
+    e.preventDefault();
+    clearBlankFilterState();
+    await applyFilters();
+  });
+
+  document.querySelector('.page-tab[data-tab="metrics-panel"]')?.addEventListener('click', () => {
+    clearBlankFilterState();
+  });
+
+  // Delegated click for breakdown (blank) filter links
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest('.breakdown-blank-link');
+    if (!link) return;
+    e.preventDefault();
+    _missingFieldFilter = link.dataset.field;
+    const LABELS = { amiLabel: 'AMI Level', reCode: 'R/E Code', counselingType: 'Counseling Type', counselor: 'Counselor' };
+    document.getElementById('blankFilterLabel').textContent = LABELS[_missingFieldFilter] || _missingFieldFilter;
+    document.getElementById('blankFilterBadge').style.display = '';
+    // Switch to client list tab and scroll to table
+    switchPageTab('clients-panel');
+    document.querySelector('.table-wrapper')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     await applyFilters();
   });
   document.getElementById('printReportBtn').addEventListener('click', printReport);
@@ -259,6 +288,11 @@ async function loadClients() {
   _rxGuarantorMap = new Map(
     rxSnap.docs.map(d => [d.data().rxNumber, d.data().guarantor]).filter(([rx]) => rx)
   );
+  _clientsWithActiveRx = new Set(
+    rxSnap.docs
+      .filter(d => d.data().active !== false && d.data().rxNumber)
+      .map(d => d.ref.parent.parent.id)
+  );
 
   allClients.sort((a, b) => {
     const da = toDate(a.lastSessionDate).getTime();
@@ -317,8 +351,12 @@ async function applyFilters() {
   let rows = allClients;
   if (name)      rows = rows.filter(c => (c.clientName || '').toLowerCase().includes(name));
   if (counselor) rows = rows.filter(c => c.counselor === counselor);
-  if (ami)       rows = rows.filter(c => amiCategory(c.amiPercent) === ami);
+  if (ami)       rows = rows.filter(c => (c.amiLabel || amiCategory(c.amiPercent)) === ami);
   if (re)        rows = rows.filter(c => c.reCode === re);
+  if (_missingFieldFilter === 'amiLabel')            rows = rows.filter(c => !(c.amiLabel || c.amiPercent));
+  else if (_missingFieldFilter === 'reCode')         rows = rows.filter(c => !c.reCode);
+  else if (_missingFieldFilter === 'counselingType') rows = rows.filter(c => !c.counselingType);
+  else if (_missingFieldFilter === 'counselor')      rows = rows.filter(c => !c.counselor);
   if (status)    rows = rows.filter(c => (c.status || 'active') === status);
   if (rxFilter) {
     const rxSessionIds = new Set(_allSessions.filter(s => (s.rxNumber || '').toLowerCase().includes(rxFilter)).map(s => s.clientId));
@@ -536,7 +574,7 @@ function renderTable(clients) {
       <td>${displayName}${tierBadge}${staleBadge}</td>
       <td>${typeBadge}</td>
       <td>${c.counselor || '—'}</td>
-      <td>${amiDisplayLabel(c.amiPercent) || '—'}</td>
+      <td>${c.amiLabel ? (c.amiPercent ? `${c.amiLabel} (${c.amiPercent}%)` : c.amiLabel) : (amiDisplayLabel(c.amiPercent) || '—')}</td>
       <td style="text-align:center">${c.sessionCount || 0}</td>
       <td>${fmtDate(c.lastSessionDate)}</td>
       <td>${statusBadge}</td>
@@ -611,10 +649,15 @@ function renderStats(clients) {
   document.getElementById('statDollars').textContent  =
     '$' + dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  renderBreakdown('amiTable',      'amiPercent',     clients.map(c => ({ ...c, amiPercent: amiCategory(c.amiPercent) })));
+  renderBreakdown('amiTable',      'amiLabel',       clients.map(c => ({ ...c, amiLabel: c.amiLabel || amiCategory(c.amiPercent) })));
   renderBreakdown('reTable',       'reCode',         clients);
   renderBreakdown('typeTable',     'counselingType', clients);
   renderCounselorSessionBreakdown(clients);
+}
+
+function clearBlankFilterState() {
+  _missingFieldFilter = null;
+  document.getElementById('blankFilterBadge').style.display = 'none';
 }
 
 function renderBreakdown(tableId, field, rows) {
@@ -627,7 +670,12 @@ function renderBreakdown(tableId, field, rows) {
   });
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   tbody.innerHTML = entries.length
-    ? entries.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
+    ? entries.map(([k, v]) => {
+        if (k === '(blank)') {
+          return `<tr><td><a href="#" class="breakdown-blank-link" data-field="${field}" style="color:var(--danger);font-weight:600;">(blank)</a> <span style="font-size:0.7rem;color:var(--text-muted);">← click to filter</span></td><td>${v}</td></tr>`;
+        }
+        return `<tr><td>${k}</td><td>${v}</td></tr>`;
+      }).join('')
     : '<tr><td colspan="2" style="padding:0.5rem;color:var(--text-muted)">No data</td></tr>';
 }
 
@@ -641,7 +689,12 @@ function renderCounselorSessionBreakdown(clients) {
   });
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   tbody.innerHTML = entries.length
-    ? entries.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
+    ? entries.map(([k, v]) => {
+        if (k === '(blank)') {
+          return `<tr><td><a href="#" class="breakdown-blank-link" data-field="counselor" style="color:var(--danger);font-weight:600;">(blank)</a> <span style="font-size:0.7rem;color:var(--text-muted);">← click to filter</span></td><td>${v}</td></tr>`;
+        }
+        return `<tr><td>${k}</td><td>${v}</td></tr>`;
+      }).join('')
     : '<tr><td colspan="2" style="padding:0.5rem;color:var(--text-muted)">No data</td></tr>';
 }
 
@@ -929,11 +982,12 @@ function showIncompleteBanner() {
     })
     .reduce((acc, c) => {
       const issues = [];
-      if (!c.amiPercent)               issues.push('AMI');
+      if (!(c.amiLabel || c.amiPercent)) issues.push('AMI');
       if (!c.reCode)                   issues.push('R/E');
       // Check sessions rather than the stale c.rxNumbers field — rxNumbers live
       // in the subcollection and on individual session docs, not on the client doc.
-      const hasRx = _allSessions.some(s => s.clientId === c.id && (s.rxNumber || '').trim());
+      const hasRx = _clientsWithActiveRx.has(c.id) ||
+                    _allSessions.some(s => s.clientId === c.id && (s.rxNumber || '').trim());
       if (!hasRx)                      issues.push('Rx/Guarantor');
       if (issues.length) acc.push({ ...c, issues });
       return acc;
@@ -1023,7 +1077,9 @@ function showStaleBanner() {
 
   const shown = stale.slice(0, 5);
   const extra = stale.length - 5;
-  const moreHtml = extra > 0 ? `<div style="margin-top:0.35rem;font-size:0.78rem;color:var(--text-muted);">…and ${extra} more</div>` : '';
+  const moreHtml = extra > 0
+    ? `<div style="margin-top:0.35rem;font-size:0.78rem;color:var(--text-muted);">…and ${extra} more &nbsp;·&nbsp; <a href="reports.html?tab=nocontact" style="color:var(--primary);font-weight:600;">Review all →</a></div>`
+    : `<div style="margin-top:0.35rem;font-size:0.78rem;"><a href="reports.html?tab=nocontact" style="color:var(--primary);font-weight:600;">Review all no-contact clients →</a></div>`;
 
   const heading = critical.length
     ? `${critical.length} client${critical.length !== 1 ? 's' : ''} haven't had contact in 120+ days`

@@ -418,16 +418,20 @@ function wireAmiLabel(inputId, labelId) {
   });
 }
 
-function setAmiField(val) {
+function setAmiField(numVal, labelVal) {
   const inp = document.getElementById('amiPercent');
   const lbl = document.getElementById('amiLabel');
   if (!inp) return;
-  const n = Number(val);
-  if (val != null && val !== '' && !isNaN(n) && n > 0) {
+  const n = Number(numVal);
+  if (numVal != null && numVal !== '' && !isNaN(n) && n > 0) {
     inp.value = n;
-    if (lbl) lbl.textContent = amiCategory(n);
-  } else if (val) {
-    if (lbl) lbl.textContent = amiCategory(val);
+    if (lbl) lbl.textContent = labelVal || amiCategory(n);
+  } else if (labelVal) {
+    inp.value = '';
+    if (lbl) lbl.textContent = labelVal;
+  } else {
+    inp.value = '';
+    if (lbl) lbl.textContent = '';
   }
 }
 
@@ -466,7 +470,7 @@ function populateClientForm(c) {
   setValue('zipCode',       c.zipCode);
   setSelectValue('counselingType', c.counselingType);
   setSelectValue('billingType',    c.billingType);
-  setAmiField(c.amiPercent);
+  setAmiField(c.amiPercent, c.amiLabel);
   setSelectValue('reCode',         c.reCode);
 
   setSelectValue('counselor', c.counselor);
@@ -937,6 +941,7 @@ async function saveClient(msgId = 'clientSaveMsg') {
       counselor:         document.getElementById('counselor').value,
       zipCode:           document.getElementById('zipCode').value.trim(),
       amiPercent:        (() => { const v = document.getElementById('amiPercent').value; return v ? Number(v) : (_client?.amiPercent ?? null); })(),
+      amiLabel:          (() => { const v = document.getElementById('amiPercent').value; const n = v ? Number(v) : null; return n ? amiCategory(n) : (_client?.amiLabel || null); })(),
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,
@@ -2967,9 +2972,11 @@ async function saveFinancials() {
 
     const calcPct = computeAmiFromChart();
     if (calcPct !== null) {
-      await updateDoc(doc(db, 'clients', clientId), { amiPercent: calcPct });
+      const calcLabel = amiCategory(calcPct);
+      await updateDoc(doc(db, 'clients', clientId), { amiPercent: calcPct, amiLabel: calcLabel });
       _client.amiPercent = calcPct;
-      setAmiField(calcPct);
+      _client.amiLabel   = calcLabel;
+      setAmiField(calcPct, calcLabel);
       msgEl.textContent = `Saved. AMI updated to ${calcPct}%.`;
     } else {
       msgEl.textContent = 'Saved.';

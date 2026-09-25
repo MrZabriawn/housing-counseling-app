@@ -1,5 +1,5 @@
 import { db } from './firebase-config.js';
-import { RE_CODES, amiDisplayLabel } from './data.js';
+import { RE_CODES, amiDisplayLabel, amiCategory } from './data.js';
 import {
   collection, getDocs, doc, updateDoc, serverTimestamp, query, orderBy,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -42,7 +42,7 @@ async function loadIncomplete() {
     if (counsel) rows = rows.filter(c => c.counselor === counsel);
 
     const incomplete = rows
-      .filter(c => !c.amiPercent || !c.reCode || !c.rxNumbers?.length || !c.streetAddress)
+      .filter(c => !(c.amiLabel || c.amiPercent) || !c.reCode || !c.rxNumbers?.length || !c.streetAddress)
       .sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
 
     if (!incomplete.length) {
@@ -93,8 +93,8 @@ async function loadIncomplete() {
 
 function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1px solid #f0f1f3;vertical-align:middle;"') {
   const issues = [];
-  if (!c.streetAddress)     issues.push('Address');
-  if (!c.amiPercent)        issues.push('AMI');
+  if (!c.streetAddress)                  issues.push('Address');
+  if (!(c.amiLabel || c.amiPercent))     issues.push('AMI');
   if (!c.reCode)            issues.push('R/E');
   if (!c.rxNumbers?.length) issues.push('Rx');
 
@@ -102,14 +102,14 @@ function buildRow(c, reOpts, TD = 'style="padding:0.35rem 0.5rem;border-bottom:1
     `<span class="missing-chip" data-field="${escAttr(i)}" style="background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.68rem;font-weight:700;white-space:nowrap;">${escHtml(i)}</span>`
   ).join(' ');
 
-  const amiVal = c.amiPercent ? String(c.amiPercent) : '';
+  const amiVal = (typeof c.amiPercent === 'number') ? String(c.amiPercent) : '';
   const amiInput = `
     <div style="display:flex;flex-direction:column;gap:0.1rem;">
       <input type="number" class="incomplete-ami" data-id="${escAttr(c.id)}"
         min="1" max="300" step="1" placeholder="e.g. 65"
         value="${escAttr(amiVal)}"
         style="width:80px;padding:0.22rem 0.35rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.8rem;">
-      <span class="ami-live-label" style="font-size:0.68rem;color:var(--text-muted);">${amiVal ? escHtml(amiDisplayLabel(c.amiPercent)) : ''}</span>
+      <span class="ami-live-label" style="font-size:0.68rem;color:var(--text-muted);">${c.amiLabel ? escHtml(c.amiLabel) : (amiVal ? escHtml(amiDisplayLabel(c.amiPercent)) : '')}</span>
     </div>`;
 
   const reSelect = `
@@ -186,7 +186,7 @@ async function saveRow(clientId, row, reOpts) {
 
   // Build update — only include fields that now have a value
   const update = { updatedAt: serverTimestamp() };
-  if (!isNaN(amiVal) && amiVal > 0) update.amiPercent = amiVal;
+  if (!isNaN(amiVal) && amiVal > 0) { update.amiPercent = amiVal; update.amiLabel = amiCategory(amiVal); }
   if (reVal)                         update.reCode     = reVal;
 
   if (Object.keys(update).length === 1) {

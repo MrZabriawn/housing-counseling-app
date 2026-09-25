@@ -1,6 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
-import { COUNSELING_TYPES, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate, amiDisplayLabel } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, MONTHS, AWARD_TYPES, getDefaultRate, amiDisplayLabel, amiCategory } from './data.js';
 
 // Inject a stored value as an option if it doesn't match any existing option
 function setSelectValue(id, val) {
@@ -132,16 +132,20 @@ function wireAmiLabel(inputId, labelId) {
   });
 }
 
-function setAmiField(val) {
+function setAmiField(numVal, labelVal) {
   const inp = document.getElementById('amiPercent');
   const lbl = document.getElementById('amiLabel');
   if (!inp) return;
-  const n = Number(val);
-  if (val != null && val !== '' && !isNaN(n) && n > 0) {
+  const n = Number(numVal);
+  if (numVal != null && numVal !== '' && !isNaN(n) && n > 0) {
     inp.value = n;
-    if (lbl) lbl.textContent = amiDisplayLabel(n);
-  } else if (val) {
-    if (lbl) lbl.textContent = `Legacy: ${val}`;
+    if (lbl) lbl.textContent = labelVal || amiDisplayLabel(n);
+  } else if (labelVal) {
+    inp.value = '';
+    if (lbl) lbl.textContent = labelVal;
+  } else {
+    inp.value = '';
+    if (lbl) lbl.textContent = '';
   }
 }
 
@@ -188,7 +192,7 @@ function populateForm(r) {
   setSelectValue('sourceMonth',    r.sourceMonth);
   setValue('caseStatus',     r.caseStatus);
   setValue('outcome',        r.outcome);
-  setAmiField(r.amiPercent);
+  setAmiField(r.amiPercent, r.amiLabel);
   setSelectValue('reCode',     r.reCode);
   setValue('hours',          r.hours);
   setValue('ratePerHour',    r.ratePerHour);
@@ -297,6 +301,7 @@ function readForm() {
     caseStatus:     document.getElementById('caseStatus').value.trim(),
     outcome:        document.getElementById('outcome').value.trim(),
     amiPercent:     (() => { const v = document.getElementById('amiPercent').value; return v ? Number(v) : (_originalRecord?.amiPercent ?? null); })(),
+    amiLabel:       (() => { const v = document.getElementById('amiPercent').value; const n = v ? Number(v) : null; return n ? amiCategory(n) : (_originalRecord?.amiLabel || null); })(),
     reCode:         selectVal('reCode',     'reCode'),
     hispanic:       document.getElementById('hispanic').checked,
     femaleHeaded:   document.getElementById('femaleHeaded').checked,

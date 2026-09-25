@@ -451,7 +451,7 @@ function renderClientDetail(allRows, unique) {
           const isLegacy   = !r._clientId;
           const src        = isLegacy ? 'Legacy Log' : 'Sessions';
           const srcColor   = isLegacy ? '#b45309' : 'var(--primary)';
-          const curAmi     = amiCategory(r.amiPercent) || '';
+          const curAmi     = r.amiLabel || amiCategory(r.amiPercent) || '';
           const missingAmi = !curAmi;
           const curRe      = r.reCode || '';
           const missingRe  = !curRe;
@@ -511,7 +511,7 @@ function renderClientDetail(allRows, unique) {
       const clientId = sel.dataset.amiClient;
       sel.style.opacity = '0.5';
       try {
-        await updateDoc(doc(db, 'clients', clientId), { amiPercent: sel.value });
+        await updateDoc(doc(db, 'clients', clientId), { amiLabel: sel.value });
         sel.style.opacity = '1';
         sel.style.borderColor = '#16a34a';
         sel.style.background = 'transparent';
