@@ -61,7 +61,7 @@
 
     /* Location builder */
     .loc-builder { display:flex; flex-direction:column; gap:0.5rem; }
-    .loc-row { display:grid; grid-template-columns:1fr 80px 28px; gap:0.4rem; align-items:center; }
+    .loc-row { display:grid; grid-template-columns:1fr 1.2fr 70px 28px; gap:0.4rem; align-items:center; }
     .loc-row input { width:100%; }
     .btn-loc-del { background:none; border:none; cursor:pointer; color:var(--danger,#dc2626); font-size:1.1rem; padding:0.15rem; border-radius:4px; }
     .btn-loc-del:hover { background:#fee2e2; }
@@ -215,6 +215,7 @@
           </select>
         </div>
         <button id="exportCsvBtn" class="btn btn-sm btn-secondary" style="margin-top:auto;">⬇ Export CSV</button>
+        <button id="sendReminderBtn" class="btn btn-sm btn-primary" style="margin-top:auto;">✉ Send Reminder Email</button>
       </div>
       <div style="overflow-x:auto;">
         <table class="reg-table">
@@ -459,6 +460,45 @@
       <div class="form-actions">
         <button id="regEditSave" class="btn btn-primary">Save</button>
         <button id="regEditCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email reminder modal -->
+  <div id="emailModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:640px;width:calc(100vw - 2rem);">
+      <h3>Send Reminder Email</h3>
+      <div style="margin-top:0.9rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div class="form-group" style="margin:0;">
+          <label>Location</label>
+          <select id="emailLocSelect" style="width:100%;"></select>
+        </div>
+        <div>
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.25rem;">To</div>
+          <input type="text" value="office@housingopps.org" readonly style="width:100%;background:#f8f9fb;font-size:0.8125rem;">
+        </div>
+        <div>
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.25rem;">
+            BCC <span id="emailBccCount" style="font-weight:400;color:var(--text-muted);"></span>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+            <textarea id="emailBccList" rows="2" readonly style="flex:1;font-size:0.72rem;font-family:monospace;resize:vertical;line-height:1.5;"></textarea>
+            <button class="btn btn-sm btn-secondary" id="copyBccBtn" style="white-space:nowrap;flex-shrink:0;">Copy</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Subject</label>
+          <input type="text" id="emailSubject" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Body</label>
+          <textarea id="emailBody" rows="16" style="width:100%;font-family:inherit;font-size:0.8125rem;line-height:1.6;resize:vertical;white-space:pre-wrap;"></textarea>
+        </div>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin:0;">Opens your email client with these fields pre-filled. You can review and edit before sending.</p>
+      </div>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button id="openMailtoBtn" class="btn btn-primary">Open in email client</button>
+        <button id="emailModalClose" class="btn btn-secondary">Close</button>
       </div>
     </div>
   </div>

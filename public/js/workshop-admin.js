@@ -296,6 +296,7 @@ function setupRegFilters() {
   });
   qs('#searchReg').addEventListener('input', renderRegistrants);
   qs('#exportCsvBtn').addEventListener('click', exportCsv);
+  qs('#sendReminderBtn').addEventListener('click', openEmailModal);
 }
 
 // ── Registration edit / delete ────────────────────────────────────────────────
@@ -496,13 +497,14 @@ function addDefaultLocation() {
   addLocationRow('Virtual', 999);
 }
 
-function addLocationRow(labelVal = '', capVal = 60) {
+function addLocationRow(labelVal = '', capVal = 60, addrVal = '') {
   const id = `locRow_${_locCount++}`;
   const div = document.createElement('div');
   div.className = 'loc-row';
   div.id = id;
   div.innerHTML = `
     <input type="text" class="loc-name-input" placeholder="Location name" value="${escHtml(labelVal)}" required>
+    <input type="text" class="loc-addr-input" placeholder="Address (for emails)" value="${escHtml(addrVal)}">
     <input type="number" class="loc-cap-input" placeholder="Cap" min="1" value="${capVal}" required>
     <button type="button" class="btn-loc-del" title="Remove" onclick="this.closest('.loc-row').remove()">×</button>`;
   qs('#locBuilder').appendChild(div);
@@ -519,10 +521,11 @@ async function createWorkshop(e) {
   const locations = [];
   let locError = false;
   locRows.forEach((row, i) => {
-    const label = row.querySelector('.loc-name-input').value.trim();
-    const cap   = parseInt(row.querySelector('.loc-cap-input').value, 10);
+    const label   = row.querySelector('.loc-name-input').value.trim();
+    const address = row.querySelector('.loc-addr-input')?.value.trim() || '';
+    const cap     = parseInt(row.querySelector('.loc-cap-input').value, 10);
     if (!label || isNaN(cap)) { locError = true; return; }
-    locations.push({ id: `loc${i}`, label, cap, seatCount: 0 });
+    locations.push({ id: `loc${i}`, label, address, cap, seatCount: 0 });
   });
   if (locError || !locations.length) { alert('Please fill in all location fields.'); return; }
 
@@ -1357,3 +1360,102 @@ function initSurveySubTabs() {
   exportBtn.parentNode.replaceChild(newExport, exportBtn);
   newExport.addEventListener('click', exportResponsesCsv);
 }
+
+// ── Email reminder modal ──────────────────────────────────────────────────────
+
+const EMAIL_TEMPLATE = `Hi there,
+
+HOME School is tomorrow. Here's everything you need.
+
+{DATE}
+11:00 AM to 2:00 PM
+{LOCATION_NAME}
+{LOCATION_ADDRESS}
+
+Come as you are. You don't need to bring anything — we've got the tools, the food, and a tool bag for every household to take home.
+
+Doors open at 11:00. Check in at the table when you get there.
+
+We'll eat together, then break into three small groups for the hands-on stations — water, heat and drafts, and electrical. We wrap up as a group at the end, so plan to stay through 2:00.
+
+If something came up and you can't make it, just reply to this email or call us at 724-728-7511. We have people waiting on a seat and we'd like to give yours to someone who can use it.
+
+See you tomorrow.
+
+Housing Opportunities Inc.
+724-728-7511
+housingopps.org`;
+
+function openEmailModal() {
+  const ws = _currentWs;
+  if (!ws) return;
+
+  const locs = ws.locations || [];
+  const sel = document.getElementById('emailLocSelect');
+  const currentLocFilter = qs('#filterLocation').value;
+  sel.innerHTML = locs.map(l => `<option value="${escHtml(l.id)}">${escHtml(l.label)}</option>`).join('');
+  if (currentLocFilter) sel.value = currentLocFilter;
+
+  fillEmailDraft();
+  sel.addEventListener('change', fillEmailDraft);
+
+  document.getElementById('emailModal').classList.remove('hidden');
+}
+
+function fillEmailDraft() {
+  const ws = _currentWs;
+  if (!ws) return;
+  const locs = ws.locations || [];
+  const locId = document.getElementById('emailLocSelect').value;
+  const loc = locs.find(l => l.id === locId) || null;
+
+  const recipients = locId ? _registrants.filter(r => r.locationId === locId) : _registrants;
+  const emails = [...new Set(recipients.map(r => (r.email || '').toLowerCase().trim()).filter(Boolean))];
+
+  document.getElementById('emailBccList').value = emails.join(', ');
+  document.getElementById('emailBccCount').textContent = `(${emails.length} recipient${emails.length !== 1 ? 's' : ''})`;
+
+  const wsDate = ws.date?.toDate ? ws.date.toDate() : (ws.date ? new Date(ws.date) : null);
+  const dayStr = wsDate
+    ? wsDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })
+    : '[date]';
+
+  const locName = loc?.label || '[location name]';
+  const locAddr = loc?.address || '[location address]';
+
+  document.getElementById('emailSubject').value = `Tomorrow: HOME School at ${locName}, 11AM`;
+  document.getElementById('emailBody').value = EMAIL_TEMPLATE
+    .replace('{DATE}', dayStr)
+    .replace('{LOCATION_NAME}', locName)
+    .replace('{LOCATION_ADDRESS}', locAddr);
+}
+
+function closeEmailModal() {
+  document.getElementById('emailModal').classList.add('hidden');
+  // Remove the change listener to avoid stacking on next open
+  const sel = document.getElementById('emailLocSelect');
+  const fresh = sel.cloneNode(true);
+  sel.parentNode.replaceChild(fresh, sel);
+}
+
+document.getElementById('emailModalClose').addEventListener('click', closeEmailModal);
+document.getElementById('emailModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('emailModal')) closeEmailModal();
+});
+
+document.getElementById('copyBccBtn').addEventListener('click', () => {
+  const val = document.getElementById('emailBccList').value;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.getElementById('copyBccBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+  });
+});
+
+document.getElementById('openMailtoBtn').addEventListener('click', () => {
+  const bcc     = document.getElementById('emailBccList').value.trim();
+  const subject = document.getElementById('emailSubject').value;
+  const body    = document.getElementById('emailBody').value;
+  const mailto  = `mailto:office@housingopps.org?bcc=${encodeURIComponent(bcc)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+});
