@@ -274,8 +274,7 @@ async function refreshStatus() {
       const mySessions  = data.sessions.filter(s => s.counselor === c.name && data.nofaRxSet.has((s.rxNumber||'').trim()) && (parseFloat(s.hours) || 0) > 0);
       const myTM        = data.hudEvents.filter(e => e.counselorId === c.id);
       const cmlSessions = mySessions.filter(s => s.hudType === 'case_management');
-      const parSessions = mySessions.filter(s => s.hudType !== 'case_management');
-      const parEntries  = parSessions.length + myTM.length;
+      const parEntries  = mySessions.length + myTM.length;
       const cmlCnt      = cmlSessions.length;
       const talCnt      = myTM.length;
       const issues      = [];
@@ -284,7 +283,7 @@ async function refreshStatus() {
       if (!c.baseSalary)  issues.push('missing Base Salary');
 
       const cid     = escAttr(c.id);
-      const parHtml = buildParDetailHtml(parSessions, myTM, data.clientMap);
+      const parHtml = buildParDetailHtml(mySessions, myTM, data.clientMap);
       const cmlHtml = buildCmlDetailHtml(cmlSessions, data.clientMap);
       const talHtml = buildTalDetailHtml(myTM);
 
@@ -582,10 +581,12 @@ async function buildPAR(counselor, data) {
   Object.keys(S1_ROWS).forEach(row => { s1DayTotals[row] = {}; });
 
   sessions
-    .filter(s => s.counselor === counselor.name && nofaRxSet.has((s.rxNumber || '').trim()) && s.hudType !== 'case_management')
+    .filter(s => s.counselor === counselor.name && nofaRxSet.has((s.rxNumber || '').trim()))
     .forEach(s => {
       const day = s.dateObj.getDate();
-      s1DayTotals['Counseling'][day] = (s1DayTotals['Counseling'][day] || 0) + (parseFloat(s.hours) || 0);
+      // hudType 'case_management' → Processing-Intake (Section 1); default → Counseling
+      const row = s.hudType === 'case_management' ? 'Processing-Intake' : 'Counseling';
+      s1DayTotals[row][day] = (s1DayTotals[row][day] || 0) + (parseFloat(s.hours) || 0);
     });
 
   // Section 2: Training — from hudEvents (training_marketing, costType T)
