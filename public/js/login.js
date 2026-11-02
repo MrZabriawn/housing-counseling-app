@@ -9,9 +9,9 @@ import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase
 
 const ALLOWED_DOMAIN = 'housingopps.org';
 
-// If already in demo mode or signed in, skip straight to dashboard
+// If already in demo mode or signed in, skip straight to the Counseling Log (home)
 if (sessionStorage.getItem('demoMode') === '1') {
-  window.location.href = 'log.html';
+  window.location.href = 'clients.html';
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -43,7 +43,7 @@ submitBtn.addEventListener('click', async () => {
       sessionStorage.setItem('driveToken', credential.accessToken);
       sessionStorage.setItem('driveTokenTs', Date.now().toString());
     }
-    window.location.href = 'log.html';
+    window.location.href = 'clients.html';
   } catch (err) {
     errorEl.textContent = friendlyError(err.message || err.code);
     errorEl.classList.remove('hidden');
@@ -81,7 +81,7 @@ async function validateDemoPasscode() {
     if (!stored || input !== stored) throw new Error('wrong-passcode');
 
     sessionStorage.setItem('demoMode', '1');
-    window.location.href = 'log.html';
+    window.location.href = 'clients.html';
   } catch (err) {
     demoErrorEl.textContent =
       err.message === 'wrong-passcode'   ? 'Incorrect passcode.' :

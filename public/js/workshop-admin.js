@@ -1,5 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
+import { initWorkshopLog } from './workshop-log.js';
 import {
   collection, doc, addDoc, getDoc, getDocs, updateDoc,
   query, orderBy, where, serverTimestamp, Timestamp,
@@ -23,6 +24,7 @@ let _sessionCounsLoaded = false;
 requireAuth(async (user, profile) => {
   _user = user;
   setupNav(profile, 'workshops');
+  initWorkshopLog(profile);
   initTabs();
   initNewWsForm();
   addDefaultLocation();

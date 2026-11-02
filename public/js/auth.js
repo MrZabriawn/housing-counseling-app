@@ -42,7 +42,7 @@ export function requireAdmin(callback) {
   requireAuth((user, profile) => {
     if (!isAdmin(profile)) {
       if (profile.role !== 'demo') alert('Access denied. Admins only.');
-      window.location.href = 'log.html';
+      window.location.href = 'clients.html';
       return;
     }
     callback(user, profile);
@@ -53,7 +53,7 @@ export function requireED(callback) {
   requireAuth((user, profile) => {
     if (profile.role !== 'executive_director') {
       if (profile.role !== 'demo') alert('Access denied. Executive Director only.');
-      window.location.href = 'log.html';
+      window.location.href = 'clients.html';
       return;
     }
     callback(user, profile);
@@ -65,26 +65,53 @@ export async function logout() {
   window.location.href = 'index.html';
 }
 
+// Grouped navigation. All office staff (ED, admin, housing counselors) see the
+// same menu — no role gating. Display labels differ from page keys where a page
+// was renamed (Intake→Intake Letter, Operations→Guidance, Dashboard→Metrics);
+// the `page` key still matches what each page passes to setupNav() for active state.
+const NAV_GROUPS = [
+  { label: 'Clients', items: [
+    { label: 'Counseling Log', page: 'clients',      href: 'clients.html' },
+    { label: 'New Client',     page: 'new-client',   href: 'new-client.html' },
+    { label: 'Intake Letter',  page: 'intake',       href: 'intake.html' },
+    { label: 'Guidance',       page: 'operations',   href: 'operations.html' },
+  ]},
+  { label: 'Programs', items: [
+    { label: 'Buyer Ready',    page: 'buyer-ready',  href: 'buyer-ready.html' },
+    { label: 'Rent Ready',     page: 'rent-ready',   href: 'rent-ready.html' },
+    { label: 'Repair Ready',   page: 'repair-ready', href: 'repair-ready.html' },
+  ]},
+  { label: 'Engagement', items: [
+    { label: 'Outreach',       page: 'outreach',     href: 'outreach.html' },
+    { label: 'Workshops',      page: 'workshops',    href: 'workshop-admin.html' },
+    { label: 'Training',       page: 'training',     href: 'training.html' },
+  ]},
+  { label: 'Compliance', items: [
+    { label: 'HUD',            page: 'hud',          href: 'hud.html' },
+    { label: 'Reports',        page: 'reports',      href: 'reports.html' },
+    { label: 'Metrics',        page: 'dashboard',    href: 'dashboard.html' },
+  ]},
+  { label: 'Admin', items: [
+    { label: 'Duplicates',     page: 'duplicates',   href: 'duplicates.html' },
+    { label: 'Settings',       page: 'settings',     href: 'settings.html' },
+    { label: 'Import',         page: 'import',       href: 'import.html' },
+  ]},
+];
+
 export function setupNav(profile, activePage) {
   const nav = document.querySelector('nav.nav');
   if (nav) {
+    const groupsHtml = NAV_GROUPS.map(g => `
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" aria-haspopup="true" aria-expanded="false">${g.label}<span class="nav-caret">&#9662;</span></button>
+        <div class="nav-dropdown">
+          ${g.items.map(it => `<a href="${it.href}" data-page="${it.page}" class="nav-drop-link">${it.label}</a>`).join('')}
+        </div>
+      </div>`).join('');
+
     nav.innerHTML = `
       <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
-      <div class="nav-links">
-        <a href="clients.html"      data-page="clients">Counseling Log</a>
-        <a href="intake.html"       data-page="intake">Intake</a>
-        <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
-        <a href="rent-ready.html"   data-page="rent-ready">Rent Ready</a>
-        <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
-        <a href="outreach.html"     data-page="outreach">Outreach</a>
-        <a href="operations.html"   data-page="operations">Operations</a>
-        <a href="hud.html"          data-page="hud">HUD</a>
-        <a href="training.html"     data-page="training">Training</a>
-        <a href="reports.html"      data-page="reports">Reports</a>
-        <a href="workshop-admin.html" data-page="workshops">Workshops</a>
-        <a href="duplicates.html"   data-page="duplicates">Duplicates</a>
-        <a href="settings.html"     data-page="settings" class="admin-only hidden">Settings</a>
-      </div>
+      <div class="nav-links">${groupsHtml}</div>
       <div class="nav-user">
         <span id="navUserName"></span>
         <button id="logoutBtn" class="btn-logout">Logout</button>
@@ -92,18 +119,34 @@ export function setupNav(profile, activePage) {
       <button id="navToggle" class="nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false">&#9776;</button>`;
   }
 
-  // Mobile hamburger: toggle the collapsed nav menu, and close it on link tap
+  // Mobile hamburger
   const navToggle = document.getElementById('navToggle');
   if (nav && navToggle) {
-    navToggle.addEventListener('click', () => {
+    navToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
       const open = nav.classList.toggle('nav-open');
       navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
-    nav.querySelectorAll('.nav-links a').forEach(a => {
-      a.addEventListener('click', () => {
-        nav.classList.remove('nav-open');
-        navToggle.setAttribute('aria-expanded', 'false');
+  }
+
+  // Dropdown groups — click to open one at a time
+  if (nav) {
+    nav.querySelectorAll('.nav-group-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const grp = btn.closest('.nav-group');
+        const wasOpen = grp.classList.contains('open');
+        nav.querySelectorAll('.nav-group.open').forEach(g => {
+          g.classList.remove('open');
+          g.querySelector('.nav-group-btn')?.setAttribute('aria-expanded', 'false');
+        });
+        if (!wasOpen) { grp.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
       });
+    });
+    // Click anywhere else closes any open group + the mobile menu
+    document.addEventListener('click', () => {
+      nav.querySelectorAll('.nav-group.open').forEach(g => g.classList.remove('open'));
+      nav.classList.remove('nav-open');
     });
   }
 
@@ -123,16 +166,16 @@ export function setupNav(profile, activePage) {
     }
   }
 
-  if (isAdmin(profile)) {
-    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-  }
-  if (profile.role === 'executive_director') {
-    document.querySelectorAll('.ed-only').forEach(el => el.classList.remove('hidden'));
-  }
+  // Legacy role-gated elements (kept working, just always shown now)
+  document.querySelectorAll('.admin-only, .ed-only').forEach(el => el.classList.remove('hidden'));
 
-  if (activePage) {
-    const link = document.querySelector(`.nav-links a[data-page="${activePage}"]`);
-    if (link) link.classList.add('active');
+  // Active state — highlight the current item and its parent group
+  if (activePage && nav) {
+    const link = nav.querySelector(`.nav-drop-link[data-page="${activePage}"]`);
+    if (link) {
+      link.classList.add('active');
+      link.closest('.nav-group')?.querySelector('.nav-group-btn')?.classList.add('active');
+    }
   }
 
   if (isDemoMode()) {

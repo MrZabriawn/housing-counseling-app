@@ -48,6 +48,28 @@ export function amiCdbgCategory(val) {
   return amiCategory(val);
 }
 
+// Compute a household's AMI % from actual income vs. the county's HUD 100%
+// income limit for their household size. Shared by the client profile and the
+// New Client form so the math never diverges. Returns null when any input is
+// missing/unusable (caller then keeps whatever was entered manually).
+//   limits:       settings/amiLimits `counties` map (county → tier → [8 limits])
+//   county:       county name (with or without a trailing "County")
+//   hhSize:       household size (adults + children); clamped 1–8
+//   grossMonthly: total gross MONTHLY household income
+export function computeAmiPercent({ limits, county, hhSize, grossMonthly }) {
+  if (!limits || !grossMonthly || grossMonthly <= 0) return null;
+  const raw = String(county || '').replace(/\s*county\s*$/i, '').trim();
+  if (!raw) return null;
+  const key        = Object.keys(limits).find(k => k.toLowerCase() === raw.toLowerCase());
+  const countyData = key ? limits[key] : null;
+  if (!countyData) return null;
+  const size = Math.max(1, Math.min(8, parseInt(hhSize) || 0));
+  if (!size) return null;
+  const base = (countyData['100'] || [])[size - 1] || 0;
+  if (!base) return null;
+  return Math.round((grossMonthly * 12 / base) * 100);
+}
+
 export const RE_CODES = [
   'White (Code 11)',
   'Black (Code 12)',

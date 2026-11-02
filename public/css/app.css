@@ -500,3 +500,44 @@ tr.row-duplicate td:first-child::before { content: "⚠ "; color: #f57f17; }
   .form-actions { flex-direction: column; align-items: stretch; }
   .form-actions .btn { width: 100%; }
 }
+
+/* ── Grouped dropdown navigation ─────────────────────────────────────────── */
+.nav-group { position: relative; }
+.nav-group-btn {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  color: var(--text-muted); padding: 0.4rem 0.7rem; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 500; white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-group-btn:hover,
+.nav-group.open .nav-group-btn { background: rgba(0,0,0,0.07); color: var(--text); }
+.nav-group-btn.active { color: var(--primary); }
+.nav-caret { font-size: 0.6rem; opacity: 0.7; }
+.nav-dropdown {
+  position: absolute; top: calc(100% + 2px); left: 0; min-width: 190px;
+  background: var(--nav-bar); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-md);
+  padding: 0.3rem; display: none; z-index: 200;
+}
+.nav-group:hover .nav-dropdown,
+.nav-group.open .nav-dropdown { display: block; }
+.nav-drop-link {
+  display: block; padding: 0.5rem 0.75rem; border-radius: var(--radius);
+  color: var(--text-muted); text-decoration: none; font-size: 0.875rem; white-space: nowrap;
+}
+.nav-drop-link:hover { background: rgba(0,0,0,0.07); color: var(--text); }
+.nav-drop-link.active { background: var(--primary); color: #fff; }
+
+/* Mobile: groups become stacked accordions inside the hamburger menu */
+@media (max-width: 1024px) {
+  .nav-group { width: 100%; }
+  .nav-group-btn { width: 100%; justify-content: space-between; padding: 0.65rem 0.9rem; }
+  .nav-dropdown {
+    position: static; display: none; box-shadow: none; border: none;
+    background: transparent; padding: 0 0 0.3rem 0.9rem; min-width: 0;
+  }
+  .nav-group:hover .nav-dropdown { display: none; }   /* no hover-open on touch */
+  .nav-group.open .nav-dropdown { display: block; }
+  .nav-drop-link { padding: 0.55rem 0.75rem; }
+}

@@ -1,5 +1,5 @@
 ﻿import { db } from './firebase-config.js';
-import { requireED, setupNav } from './auth.js?v=2';
+import { requireAuth, setupNav } from './auth.js?v=2';
 import { amiCategory, AMI_IMPORT_MAP } from './data.js';
 import {
   findReasons, pairKey, confidenceColor, confidenceLabel, confRank,
@@ -12,7 +12,7 @@ import {
 const DEFAULTS = { amiWeight: 50, waitTimeWeight: 50 };
 const _sessionMonthCache = new Map(); // "YYYY-MM" → Set<clientId>
 
-requireED(async (user, profile) => {
+requireAuth(async (user, profile) => {
   setupNav(profile, 'settings');
 
   await loadPendingUsers();
@@ -1293,7 +1293,6 @@ async function performMerge() {
       lastSessionDate:   lastSessionDate  || null,
       counselingType:    activeCounselingType,
       // Prefer non-empty fields from either record
-      guarantor:         keep.guarantor  || drop.guarantor  || '',
       zipCode:           keep.zipCode    || drop.zipCode    || '',
       counselor:         keep.counselor  || drop.counselor  || '',
       updatedAt:         now,

@@ -414,7 +414,6 @@ async function loadAllData(year, mon) {
       firstName:   parts[0] || '',
       lastName:    parts.slice(1).join(' ') || '',
       billingType: c.billingType || null,
-      guarantor:   c.guarantor  || null,
     };
   });
 
