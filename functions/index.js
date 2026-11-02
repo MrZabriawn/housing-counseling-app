@@ -44,21 +44,33 @@ exports.publicStats = onRequest(
       periodStart.setMonth(periodStart.getMonth() - months);
 
       const { Timestamp } = admin.firestore;
-      const snap = await db.collectionGroup('sessions')
-        .where('date', '>=', Timestamp.fromDate(periodStart))
-        .where('date', '<=', Timestamp.fromDate(periodEnd))
-        .get();
+      const [sessSnap, clientSnap] = await Promise.all([
+        db.collectionGroup('sessions')
+          .where('date', '>=', Timestamp.fromDate(periodStart))
+          .where('date', '<=', Timestamp.fromDate(periodEnd))
+          .get(),
+        db.collection('clients')
+          .where('closureDate', '>=', Timestamp.fromDate(periodStart))
+          .where('closureDate', '<=', Timestamp.fromDate(periodEnd))
+          .get(),
+      ]);
 
       let sessionCount = 0;
       const households = new Set();
-      let outcomeValue = 0;
 
-      for (const docSnap of snap.docs) {
+      for (const docSnap of sessSnap.docs) {
         const s = docSnap.data();
         if (s.deleted) continue;
         sessionCount++;
         households.add(docSnap.ref.parent.parent.id);
-        outcomeValue += Number(s.dollarsAwarded) || 0;
+      }
+
+      // Sum closure outcome values for cases closed within the window
+      let outcomeValue = 0;
+      for (const docSnap of clientSnap.docs) {
+        const c = docSnap.data();
+        if (c.deleted || c.status !== 'closed') continue;
+        outcomeValue += Number(c.closureOutcomeValue) || 0;
       }
 
       const data = {
