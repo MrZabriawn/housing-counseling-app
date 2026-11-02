@@ -114,6 +114,8 @@ export function setupNav(profile, activePage) {
           </div>
         </div>
 
+        <a href="outreach.html?autoLog=1" style="display:inline-flex;align-items:center;background:var(--primary,#2563eb);color:#fff;padding:0.32rem 0.75rem;border-radius:var(--radius,6px);font-size:0.78rem;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:0.25rem;line-height:1.4;">+ Log Call</a>
+
       </div>
       <div class="nav-user">
         <span id="navUserName"></span>

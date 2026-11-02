@@ -40,6 +40,7 @@ let _selectedClientId   = null; // clientId chosen in the call modal client sear
 let _selectedClientName = null; // display name for the chosen client
 let _webhookMap   = {};         // counselorDocId → chatWebhookUrl (populated on load)
 let _convertCallId      = null; // outreachCall ID being converted to a client
+let _editingCallId      = null; // outreachCall ID currently being edited (null = new)
 
 // TAL Hours modal state
 let _talStaffNum    = null;  // staffNumber from counselors collection for logged-in user
@@ -159,6 +160,17 @@ requireAuth(async (user, profile) => {
 
   addBatchRow();
   await Promise.all([loadRecords(), loadCalls()]);
+
+  // Auto-open call modal when navigated here via "+ Log Call" button
+  if (new URLSearchParams(location.search).get('autoLog') === '1') {
+    document.querySelectorAll('.outreach-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.panel === 'phone-panel');
+    });
+    document.querySelectorAll('.outreach-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'phone-panel');
+    });
+    openCallModal();
+  }
 });
 
 // ── Counselor options ─────────────────────────────────────────────────────────
@@ -512,14 +524,16 @@ function renderCallLog(calls) {
   const tbody = document.getElementById('callLogBody');
   if (!calls.length) {
     const msg = _allCalls.length ? 'No calls match your search.' : 'No calls logged yet.';
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">${msg}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = calls.map(c => {
-    const typeBadge = c.type === 'prospect'
-      ? '<span class="badge badge-yellow">Prospect</span>'
-      : '<span class="badge badge-pre">Client</span>';
+    const typeBadge = c.type === 'organizational'
+      ? '<span class="badge badge-post">Org</span>'
+      : c.type === 'prospect'
+        ? '<span class="badge badge-yellow">Prospect</span>'
+        : '<span class="badge badge-pre">Client</span>';
     const demo = isDemoMode();
     const displayContactName = demo
       ? (c.linkedClientId ? demoClientName(c.linkedClientId) : '—')
@@ -528,6 +542,7 @@ function renderCallLog(calls) {
       ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;">${escHtml(displayContactName)}</a>`
       : escHtml(displayContactName);
     const phoneStr = (!demo && c.phone) ? ` <span style="font-size:0.78rem;color:var(--text-muted);">${escHtml(c.phone)}</span>` : '';
+    const orgContactStr = (!demo && c.orgContact) ? `<div style="font-size:0.78rem;color:var(--text-muted);">${escHtml(c.orgContact)}</div>` : '';
     const linkedName = demo && c.linkedClientId ? demoClientName(c.linkedClientId) : (c.linkedClientName || 'View Client');
     const linkedCell = c.linkedClientId
       ? `<a href="client.html?id=${c.linkedClientId}" style="font-weight:600;font-size:0.875rem;">${escHtml(linkedName)}</a>`
@@ -536,16 +551,19 @@ function renderCallLog(calls) {
                <button class="btn btn-primary btn-sm call-convert-btn" data-id="${escAttr(c.id)}" data-name="${escAttr(c.contactName||'')}" data-phone="${escAttr(c.phone||'')}" style="white-space:nowrap;">Open Client File</button>
                <button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Existing</button>
              </div>`
-          : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`);
+          : c.type === 'organizational'
+            ? '—'
+            : `<button class="btn btn-secondary btn-sm call-link-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Link to Client</button>`);
 
     return `<tr>
       <td style="white-space:nowrap;">${fmtDate(c.date)}</td>
       <td>${typeBadge}</td>
-      <td>${nameCell}${phoneStr}</td>
+      <td>${nameCell}${phoneStr}${orgContactStr}</td>
       <td style="font-size:0.875rem;">${escHtml(c.counselor || '—')}</td>
       <td style="font-size:0.875rem;">${escHtml(c.outcome || '—')}</td>
       <td style="font-size:0.8rem;color:var(--text-muted);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escAttr(c.notes || '')}">${escHtml(c.notes || '—')}</td>
       <td>${linkedCell}</td>
+      <td><button class="btn btn-secondary btn-sm call-edit-btn" data-id="${escAttr(c.id)}" style="white-space:nowrap;">Edit</button></td>
     </tr>`;
   }).join('');
 
@@ -556,6 +574,10 @@ function renderCallLog(calls) {
     });
   });
 
+  tbody.querySelectorAll('.call-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openEditCallModal(btn.dataset.id));
+  });
+
   tbody.querySelectorAll('.call-convert-btn').forEach(btn => {
     btn.addEventListener('click', () => openConvertModal(btn.dataset.id, btn.dataset.name, btn.dataset.phone));
   });
@@ -564,6 +586,7 @@ function renderCallLog(calls) {
 // ── Call Modal ────────────────────────────────────────────────────────────────
 
 function openCallModal() {
+  _editingCallId = null;
   document.getElementById('callDate').value         = new Date().toISOString().split('T')[0];
   document.getElementById('callCounselor').value    = window._currentCounselor;
   document.getElementById('callOutcome').value      = '';
@@ -575,14 +598,56 @@ function openCallModal() {
   document.getElementById('callAssignTo').value        = '';
   document.getElementById('callNotifyRow').style.display = 'none';
   document.getElementById('callNotifyCheck').checked   = true;
+  document.getElementById('orgName').value    = '';
+  document.getElementById('orgContact').value = '';
   clearCallClientSelection();
   setCallType('client');
+  document.getElementById('callModalSave').textContent = 'Save Call';
+  document.getElementById('callModal').classList.remove('hidden');
+}
 
+function openEditCallModal(callId) {
+  const call = _allCalls.find(c => c.id === callId);
+  if (!call) return;
+  _editingCallId = callId;
+
+  const rawDate = call.date?.toDate ? call.date.toDate() : new Date(call.date);
+  document.getElementById('callDate').value      = rawDate.toISOString().split('T')[0];
+  document.getElementById('callCounselor').value = call.counselor || '';
+  document.getElementById('callOutcome').value   = call.outcome   || '';
+  document.getElementById('callNotes').value     = call.notes     || '';
+  document.getElementById('callClientSearch').value = '';
+  document.getElementById('callClientResults').innerHTML =
+    '<div style="padding:1rem;color:var(--text-muted);font-size:0.875rem;">Start typing to find a client.</div>';
+  document.getElementById('callModalError').classList.add('hidden');
+  document.getElementById('callAssignTo').value       = call.assignedToCounselorId || '';
+  document.getElementById('callNotifyRow').style.display = 'none';
+  document.getElementById('callNotifyCheck').checked  = false;
+  document.getElementById('orgName').value    = '';
+  document.getElementById('orgContact').value = '';
+
+  clearCallClientSelection();
+
+  const type = call.type || 'client';
+  if (type === 'client' && call.linkedClientId) {
+    selectCallClient(call.linkedClientId, call.contactName || '');
+  } else if (type === 'prospect') {
+    document.getElementById('prospectName').value  = call.contactName || '';
+    document.getElementById('prospectPhone').value = call.phone       || '';
+  } else if (type === 'organizational') {
+    document.getElementById('orgName').value    = call.orgName    || call.contactName || '';
+    document.getElementById('orgContact').value = call.orgContact || '';
+  }
+
+  setCallType(type);
+  document.getElementById('callModalSave').textContent = 'Update Call';
   document.getElementById('callModal').classList.remove('hidden');
 }
 
 function closeCallModal() {
   document.getElementById('callModal').classList.add('hidden');
+  _editingCallId = null;
+  document.getElementById('callModalSave').textContent = 'Save Call';
 }
 
 function setCallType(type) {
@@ -598,6 +663,14 @@ function setCallType(type) {
   } else {
     prospectSection.classList.add('hidden');
     prospectSection.style.display = 'none';
+  }
+  const orgSection = document.getElementById('organizationalSection');
+  if (type === 'organizational') {
+    orgSection.classList.remove('hidden');
+    orgSection.style.display = 'contents';
+  } else {
+    orgSection.classList.add('hidden');
+    orgSection.style.display = 'none';
   }
 }
 
@@ -673,24 +746,31 @@ async function saveCall() {
   // Validate
   if (!dateVal) { showCallError('Please select a date.'); return; }
 
-  let contactName   = '';
+  let contactName    = '';
   let linkedClientId = null;
   let phone          = '';
+  let orgName        = '';
+  let orgContact     = '';
 
   if (_callType === 'client') {
     if (!_selectedClientId) { showCallError('Please select a client or switch to Prospect.'); return; }
     linkedClientId = _selectedClientId;
     contactName    = _selectedClientName || '';
-  } else {
+  } else if (_callType === 'prospect') {
     contactName = document.getElementById('prospectName').value.trim();
     phone       = document.getElementById('prospectPhone').value.trim();
     if (!contactName) { showCallError('Please enter a prospect name.'); return; }
+  } else {
+    orgName    = document.getElementById('orgName').value.trim();
+    orgContact = document.getElementById('orgContact').value.trim();
+    if (!orgName) { showCallError('Please enter an organization name.'); return; }
+    contactName = orgName;
   }
 
   // Assign to / notify
-  const assignSel         = document.getElementById('callAssignTo');
+  const assignSel             = document.getElementById('callAssignTo');
   const assignedToCounselorId = assignSel.value || null;
-  const assignedToName    = assignedToCounselorId
+  const assignedToName        = assignedToCounselorId
     ? (assignSel.options[assignSel.selectedIndex]?.dataset?.name || '')
     : '';
   const sendNotify = assignedToCounselorId &&
@@ -699,21 +779,28 @@ async function saveCall() {
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving…';
 
+  const payload = {
+    date:           new Date(dateVal + 'T12:00:00'),
+    counselor,
+    type:           _callType,
+    linkedClientId,
+    contactName,
+    phone:          phone || null,
+    orgName:        orgName  || null,
+    orgContact:     orgContact || null,
+    outcome,
+    notes,
+    assignedToCounselorId: assignedToCounselorId || null,
+    assignedToName:        assignedToName || null,
+    updatedAt:      serverTimestamp(),
+  };
+
   try {
-    await addDoc(collection(db, 'outreachCalls'), {
-      date:           new Date(dateVal + 'T12:00:00'),
-      counselor,
-      type:           _callType,
-      linkedClientId,
-      contactName,
-      phone,
-      outcome,
-      notes,
-      assignedToCounselorId: assignedToCounselorId || null,
-      assignedToName:        assignedToName || null,
-      createdAt:      serverTimestamp(),
-      updatedAt:      serverTimestamp(),
-    });
+    if (_editingCallId) {
+      await updateDoc(doc(db, 'outreachCalls', _editingCallId), payload);
+    } else {
+      await addDoc(collection(db, 'outreachCalls'), { ...payload, createdAt: serverTimestamp() });
+    }
 
     // Fire Google Chat webhook non-blocking — failure never prevents the save
     if (sendNotify) {
@@ -1203,176 +1290,188 @@ function showTalErr(msg) {
   el.classList.remove('hidden');
 }
 
-// ── Court batch log ────────────────────────────────────────────────────────────
+// ── Workshop ──────────────────────────────────────────────────────────────────
 
-let _courtSelected = []; // [{ id, clientName, counselor, rxNumbers }]
+async function renderWsClientSearch() {
+  const q    = document.getElementById('wsClientSearch').value.trim().toLowerCase();
+  const box  = document.getElementById('wsClientResults');
+  _wsSelectedClient = null;
+  document.getElementById('wsAddExistingBtn').disabled = true;
 
-async function renderCourtClientSearch() {
-  const raw     = document.getElementById('courtClientSearch').value;
-  const search  = raw.toLowerCase().trim();
-  const results = document.getElementById('courtClientResults');
-
-  if (!search) { results.style.display = 'none'; return; }
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
 
   if (!_allClients.length) {
-    results.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">Loading…</div>';
-    results.style.display = 'block';
+    box.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">Loading…</div>';
+    box.style.display = 'block';
     try {
       const snap = await getDocs(query(collection(db, 'clients'), orderBy('clientName')));
       _allClients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (_) { _allClients = []; }
   }
 
-  const selectedIds = new Set(_courtSelected.map(c => c.id));
-  const matches = _allClients.filter(c =>
-    (c.clientName || '').toLowerCase().includes(search) ||
-    (c.counselor  || '').toLowerCase().includes(search) ||
-    (c.rxNumbers  || []).some(rx => rx.toLowerCase().includes(search))
-  ).slice(0, 30);
+  const matches = _allClients
+    .filter(c => (c.clientName || '').toLowerCase().includes(q))
+    .slice(0, 8);
 
-  if (!matches.length) {
-    results.innerHTML = '<div style="padding:0.6rem 0.75rem;color:var(--text-muted);">No clients found.</div>';
-    results.style.display = 'block';
-    return;
-  }
+  if (!matches.length) { box.style.display = 'none'; return; }
 
-  results.innerHTML = matches.map(c => {
-    const added  = selectedIds.has(c.id);
-    const rxStr  = (c.rxNumbers || []).join(', ');
-    return `<div class="csr-item court-client-result${added ? ' selected' : ''}" data-id="${esc(c.id)}"
-              style="cursor:${added ? 'default' : 'pointer'};">
-      <div class="csr-name">${esc(toTitleCase(c.clientName))} ${added ? '<span style="color:var(--accent);font-size:0.72rem;">(added)</span>' : ''}</div>
-      <div class="csr-meta">${esc(c.counselor || '')}${rxStr ? ' · Rx: ' + esc(rxStr) : ''}</div>
-    </div>`;
-  }).join('');
-  results.style.display = 'block';
-
-  results.querySelectorAll('.court-client-result:not(.selected)').forEach(item => {
+  box.innerHTML = '';
+  matches.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'client-result-item';
+    item.textContent = c.clientName;
     item.addEventListener('click', () => {
-      const client = _allClients.find(c => c.id === item.dataset.id);
-      if (client && !_courtSelected.find(c => c.id === client.id)) {
-        _courtSelected.push({ id: client.id, clientName: client.clientName || '', counselor: client.counselor || '', rxNumbers: client.rxNumbers || [] });
-        renderCourtSelected();
-        renderCourtClientSearch();
-      }
+      _wsSelectedClient = { id: c.id, clientName: c.clientName };
+      document.getElementById('wsClientSearch').value = c.clientName;
+      box.style.display = 'none';
+      document.getElementById('wsAddExistingBtn').disabled = false;
     });
+    box.appendChild(item);
   });
+  box.style.display = 'block';
 }
 
-function renderCourtSelected() {
-  const listEl    = document.getElementById('courtSelectedList');
-  const countEl   = document.getElementById('courtSelectedCount');
-  countEl.textContent = _courtSelected.length;
-
-  if (!_courtSelected.length) {
-    listEl.innerHTML = '<span style="color:var(--text-muted);">No clients added yet. Search above to add clients.</span>';
+function addExistingToWorkshop() {
+  if (!_wsSelectedClient) return;
+  if (_wsAttendees.find(a => a.id === _wsSelectedClient.id)) {
+    document.getElementById('wsClientSearch').value = '';
+    _wsSelectedClient = null;
+    document.getElementById('wsAddExistingBtn').disabled = true;
     return;
   }
+  _wsAttendees.push({ type: 'existing', id: _wsSelectedClient.id, clientName: _wsSelectedClient.clientName });
+  document.getElementById('wsClientSearch').value = '';
+  document.getElementById('wsClientResults').style.display = 'none';
+  _wsSelectedClient = null;
+  document.getElementById('wsAddExistingBtn').disabled = true;
+  renderAttendeeList();
+}
 
-  listEl.innerHTML = _courtSelected.map(c => `
-    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);">
-      <span style="flex:1;font-weight:600;">${esc(toTitleCase(c.clientName))}</span>
-      <span style="font-size:0.775rem;color:var(--text-muted);">${esc(c.counselor)}</span>
-      <button class="court-remove-btn" data-id="${esc(c.id)}"
-        style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.1rem;line-height:1;padding:0.1rem 0.3rem;border-radius:4px;"
-        title="Remove">×</button>
-    </div>`).join('');
+function addNewToWorkshop() {
+  const name = document.getElementById('wsNewName').value.trim();
+  if (!name) {
+    document.getElementById('wsNewName').focus();
+    return;
+  }
+  _wsAttendees.push({
+    type:       'new',
+    clientName: name,
+    phone:      document.getElementById('wsNewPhone').value.trim(),
+    email:      document.getElementById('wsNewEmail').value.trim(),
+    address:    document.getElementById('wsNewAddress').value.trim(),
+  });
+  document.getElementById('wsNewName').value    = '';
+  document.getElementById('wsNewPhone').value   = '';
+  document.getElementById('wsNewEmail').value   = '';
+  document.getElementById('wsNewAddress').value = '';
+  document.getElementById('wsNewAttendeeForm').classList.add('hidden');
+  document.getElementById('wsShowNewFormBtn').classList.remove('hidden');
+  renderAttendeeList();
+}
 
-  listEl.querySelectorAll('.court-remove-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _courtSelected = _courtSelected.filter(c => c.id !== btn.dataset.id);
-      renderCourtSelected();
-      renderCourtClientSearch();
+function renderAttendeeList() {
+  const list  = document.getElementById('wsAttendeeList');
+  const empty = document.getElementById('wsAttendeeEmpty');
+  const count = document.getElementById('wsAttendeeCount');
+
+  count.textContent = _wsAttendees.length
+    ? `${_wsAttendees.length} attendee${_wsAttendees.length !== 1 ? 's' : ''}`
+    : '';
+
+  if (!_wsAttendees.length) {
+    empty.classList.remove('hidden');
+    list.querySelectorAll('.ws-attendee-row').forEach(r => r.remove());
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.querySelectorAll('.ws-attendee-row').forEach(r => r.remove());
+  _wsAttendees.forEach((a, i) => {
+    const row = document.createElement('div');
+    row.className = 'ws-attendee-row';
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid var(--border-color);';
+    const badge = a.type === 'new' ? '<span style="font-size:0.7rem;color:var(--text-muted);margin-left:0.35rem;">new</span>' : '';
+    row.innerHTML = `<span>${escHtml(a.clientName)}${badge}</span><button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 0.25rem;" data-i="${i}" aria-label="Remove">×</button>`;
+    row.querySelector('button').addEventListener('click', () => {
+      _wsAttendees.splice(i, 1);
+      renderAttendeeList();
     });
+    list.appendChild(row);
   });
 }
 
-async function submitCourtBatch() {
-  const btn      = document.getElementById('courtSubmitBtn');
-  const errorEl  = document.getElementById('courtSubmitError');
-  errorEl.classList.add('hidden');
+async function saveWorkshop() {
+  const btn     = document.getElementById('wsSaveWorkshopBtn');
+  const msgEl   = document.getElementById('wsWorkshopMsg');
+  msgEl.textContent = '';
+  msgEl.style.color = '';
 
-  const dateVal   = document.getElementById('courtDate').value;
-  const county    = document.getElementById('courtCounty').value;
-  const counselor = document.getElementById('courtCounselorOut').value;
-  const hours     = parseFloat(document.getElementById('courtHoursOut').value) || 2;
-  const notes     = document.getElementById('courtNotesOut').value.trim();
+  const workshopName = document.getElementById('wsWorkshopName').value.trim();
+  const date         = document.getElementById('wsWorkshopDate').value;
+  const counselor    = document.getElementById('wsWorkshopCounselor').value;
+  const hours        = document.getElementById('wsWorkshopHours').value;
 
-  if (!dateVal)   { showCourtErr('Please enter the court date.'); return; }
-  if (!county)    { showCourtErr('Please select a county.'); return; }
-  if (!counselor) { showCourtErr('Please select a counselor.'); return; }
-  if (!_courtSelected.length) { showCourtErr('Add at least one client.'); return; }
+  if (!workshopName) { msgEl.textContent = 'Workshop name is required.'; msgEl.style.color = 'var(--danger)'; return; }
+  if (!date)         { msgEl.textContent = 'Date is required.';           msgEl.style.color = 'var(--danger)'; return; }
+  if (!counselor)    { msgEl.textContent = 'Counselor is required.';      msgEl.style.color = 'var(--danger)'; return; }
+  if (!_wsAttendees.length) { msgEl.textContent = 'Add at least one attendee.'; msgEl.style.color = 'var(--danger)'; return; }
 
   btn.disabled    = true;
   btn.textContent = 'Saving…';
 
-  const sessionDate = new Date(dateVal + 'T12:00:00');
-  const caseStatus  = `Court — ${county}`;
+  const sessionData = {
+    counselingType: 'Workshop',
+    hudType:        'Group Education',
+    date,
+    hours:          Number(hours) || 0,
+    counselor,
+    workshopName,
+    source:         'workshop',
+    createdAt:      serverTimestamp(),
+  };
 
   try {
-    await Promise.all(_courtSelected.map(c =>
-      addDoc(collection(db, 'clients', c.id, 'sessions'), {
-        date:       sessionDate,
-        counselor:  counselor,
-        rxNumber:   (c.rxNumbers[0] || ''),
-        hours,
-        dollarsFor: '',
-        caseStatus,
-        outcome:    '',
-        notes,
-        clientName: c.clientName || '',
-        createdAt:  serverTimestamp(),
-        updatedAt:  serverTimestamp(),
-      })
-    ));
+    let saved = 0;
+    for (const a of _wsAttendees) {
+      let clientId = a.id;
 
-    // Refresh denormalized fields
-    for (const c of _courtSelected) {
-      try {
-        const snap = await getDocs(query(collection(db, 'clients', c.id, 'sessions'), orderBy('date', 'asc')));
-        const sessions = snap.docs.map(d => d.data());
-        const dated    = sessions.filter(s => s.date);
-        await updateDoc(doc(db, 'clients', c.id), {
-          sessionCount:     sessions.length,
-          totalOutcomeValue: sessions.reduce((s, r) => s + (Number(r.dollarsAwarded) || 0), 0),
-          firstSessionDate: dated.length ? dated[0].date : null,
-          lastSessionDate:  dated.length ? dated[dated.length - 1].date : null,
-          updatedAt:        serverTimestamp(),
+      if (a.type === 'new') {
+        const clientRef = await addDoc(collection(db, 'clients'), {
+          clientName:  a.clientName,
+          phone:       a.phone  || '',
+          email:       a.email  || '',
+          address:     a.address || '',
+          counselor,
+          intakeDate:  date,
+          status:      'Active',
+          createdAt:   serverTimestamp(),
+          updatedAt:   serverTimestamp(),
+          sessionCount: 0,
+          totalOutcomeValue: 0,
         });
-      } catch (_) {}
+        clientId = clientRef.id;
+      }
+
+      await addDoc(collection(db, 'clients', clientId, 'sessions'), { ...sessionData });
+      saved++;
     }
 
-    const count = _courtSelected.length;
-    document.getElementById('courtSuccessMsg').textContent =
-      `Logged ${count} court appearance${count !== 1 ? 's' : ''} for ${county} on ${sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}.`;
-    document.getElementById('courtSuccessBanner').classList.remove('hidden');
-    document.getElementById('courtForm').classList.add('hidden');
+    msgEl.textContent = `Saved ${saved} session${saved !== 1 ? 's' : ''} for "${workshopName}".`;
+    msgEl.style.color = 'var(--success, green)';
+
+    // Reset form
+    _wsAttendees = [];
+    renderAttendeeList();
+    document.getElementById('wsWorkshopName').value  = '';
+    document.getElementById('wsWorkshopDate').value  = '';
+    document.getElementById('wsWorkshopHours').value = '1';
+    document.getElementById('wsWorkshopCounselor').value = window._currentCounselor || '';
   } catch (err) {
-    showCourtErr('Save failed: ' + err.message);
+    msgEl.textContent = 'Save failed: ' + err.message;
+    msgEl.style.color = 'var(--danger)';
   } finally {
     btn.disabled    = false;
-    btn.textContent = 'Log Court Appearances';
+    btn.textContent = 'Save Workshop';
   }
 }
-
-function resetCourtForm() {
-  _courtSelected = [];
-  document.getElementById('courtDate').value        = '';
-  document.getElementById('courtCounty').value      = '';
-  document.getElementById('courtHoursOut').value    = '2';
-  document.getElementById('courtNotesOut').value    = '';
-  document.getElementById('courtClientSearch').value = '';
-  document.getElementById('courtClientResults').style.display = 'none';
-  document.getElementById('courtSubmitError').classList.add('hidden');
-  renderCourtSelected();
-  document.getElementById('courtSuccessBanner').classList.add('hidden');
-  document.getElementById('courtForm').classList.remove('hidden');
-}
-
-function showCourtErr(msg) {
-  const el = document.getElementById('courtSubmitError');
-  el.textContent = msg;
-  el.classList.remove('hidden');
-}
-
 

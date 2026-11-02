@@ -395,6 +395,7 @@ function buildSelects() {
   appendOptions('reCode',           RE_CODES);
   appendOptions('closureAwardType', AWARD_TYPES);
   appendOptions('sCounselingType',  COUNSELING_TYPES);
+  document.getElementById('sCounselingType').addEventListener('change', e => _toggleSessionRxVisibility(e.target.value));
   wireAmiLabel('amiPercent', 'amiLabel');
 }
 
@@ -1096,6 +1097,23 @@ function wireSessionModal() {
   });
 }
 
+const WORKSHOP_TYPES = new Set(['Workshop', 'WORKSHOP', 'Group Education']);
+
+function _toggleSessionRxVisibility(type) {
+  const isWorkshop = WORKSHOP_TYPES.has(type);
+  const rxGroup     = document.getElementById('sRxFormGroup');
+  const newRxGroup  = document.getElementById('sNewRxGroup');
+  const hudTypeGroup = document.getElementById('sHudTypeFormGroup');
+  if (rxGroup)     rxGroup.style.display     = isWorkshop ? 'none' : '';
+  if (newRxGroup)  newRxGroup.style.display  = isWorkshop ? 'none' : 'none'; // stays controlled by rxSelect change
+  if (hudTypeGroup) hudTypeGroup.style.display = isWorkshop ? 'none' : '';
+  if (isWorkshop) {
+    const rxSel = document.getElementById('sRxSelect');
+    if (rxSel) rxSel.value = '';
+    document.getElementById('sRxHoursDisplay').textContent = '';
+  }
+}
+
 function openAddSession() {
   _editingSessionId = null;
   document.getElementById('sessionModalTitle').textContent = 'Add Session';
@@ -1113,6 +1131,7 @@ function openAddSession() {
     _rxDocs.find(r => r.active !== false)
   );
   populateRxDropdown(defaultRx?.rxNumber || '', defaultRx?.guarantor || '');
+  _toggleSessionRxVisibility(document.getElementById('sCounselingType').value);
 
   document.getElementById('sessionModalError').classList.add('hidden');
   document.getElementById('sessionModal').classList.remove('hidden');
@@ -1139,6 +1158,7 @@ function openEditSession(sessionId) {
   document.getElementById('sOutcome').value      = session.outcome     || '';
   document.getElementById('sNotes').value        = session.notes       || '';
 
+  _toggleSessionRxVisibility(document.getElementById('sCounselingType').value);
   document.getElementById('sessionModalError').classList.add('hidden');
   document.getElementById('sessionModal').classList.remove('hidden');
 }
@@ -1260,6 +1280,34 @@ async function saveSession() {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Session';
       return;
+    }
+    if (!data.hours || data.hours <= 0) {
+      errorEl.textContent = 'Hours must be greater than 0.';
+      errorEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Session';
+      return;
+    }
+
+    // Workshop/Group Education sessions don't carry Rx numbers
+    if (WORKSHOP_TYPES.has(data.counselingType)) {
+      data.rxNumber    = '';
+      data.rxGuarantor = '';
+    }
+
+    // Duplicate session guard — warn before adding a same-date same-type session
+    if (!_editingSessionId) {
+      const dateStr = data.date.toISOString().split('T')[0];
+      const dupe = _sessions.find(s => {
+        const sDate = s.date instanceof Date ? s.date.toISOString().split('T')[0]
+          : (s.date?.toDate ? s.date.toDate().toISOString().split('T')[0] : '');
+        return sDate === dateStr && s.counselingType === data.counselingType;
+      });
+      if (dupe && !confirm(`A ${data.counselingType} session already exists for this client on ${dateStr}. Save anyway?`)) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Session';
+        return;
+      }
     }
 
     if (_editingSessionId) {

@@ -22,10 +22,10 @@ import {
   query, orderBy, where, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-let _allClients     = [];
-let _selected       = [];   // { id, clientName, counselor, rxNumbers, sessionId, savedRx, savedNotes }
-let _removedToDelete = [];  // { clientId, sessionId } — deleted on submit
-let _editMode       = false;
+let _allClients      = [];
+let _selected        = [];   // { id, clientName, counselor, rxNumbers, sessionId, savedRx, savedNotes, savedCourtStatus }
+let _removedToDelete = [];   // { clientId, sessionId } — deleted on submit
+let _editMode        = false;
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'clients');
@@ -65,6 +65,8 @@ function wireUI() {
   document.getElementById('logAnotherBtn').addEventListener('click', resetForm);
   document.getElementById('courtCounty').addEventListener('change', checkForExisting);
   document.getElementById('courtDate').addEventListener('change', checkForExisting);
+  document.getElementById('resolveInferredBtn').addEventListener('click', resolveInferredStatuses);
+  loadPendingStatuses();
 }
 
 // ── Existing session check (enforces one-per-month-per-county) ────────────────
@@ -108,13 +110,14 @@ async function checkForExisting() {
 
       const clientDoc = _allClients.find(c => c.id === clientId);
       _selected.push({
-        id:          clientId,
-        clientName:  s.clientName || clientDoc?.clientName || '',
-        counselor:   s.counselor  || clientDoc?.counselor  || '',
-        rxNumbers:   clientDoc?.rxNumbers || [],
-        sessionId:   d.id,
-        savedRx:     s.rxNumber || '',
-        savedNotes:  s.notes    || '',
+        id:               clientId,
+        clientName:       s.clientName || clientDoc?.clientName || '',
+        counselor:        s.counselor  || clientDoc?.counselor  || '',
+        rxNumbers:        clientDoc?.rxNumbers || [],
+        sessionId:        d.id,
+        savedRx:          s.rxNumber    || '',
+        savedNotes:       s.notes       || '',
+        savedCourtStatus: s.courtStatus || '',
       });
     }
 
@@ -190,13 +193,14 @@ function addClient(clientId) {
   if (!client) return;
 
   _selected.push({
-    id:         client.id,
-    clientName: client.clientName || '',
-    counselor:  client.counselor  || '',
-    rxNumbers:  client.rxNumbers  || [],
-    sessionId:  null,
-    savedRx:    (client.rxNumbers || [])[0] || '',
-    savedNotes: '',
+    id:               client.id,
+    clientName:       client.clientName || '',
+    counselor:        client.counselor  || '',
+    rxNumbers:        client.rxNumbers  || [],
+    sessionId:        null,
+    savedRx:          (client.rxNumbers || [])[0] || '',
+    savedNotes:       '',
+    savedCourtStatus: '',
   });
 
   renderSelected();
@@ -243,9 +247,19 @@ function renderSelected() {
           <label style="font-size:0.75rem;">Rx Number</label>
           <input type="text" class="sc-rx" value="${esc(c.savedRx || '')}" placeholder="Rx number…" style="max-width:160px;">
         </div>
-        <div class="form-group" style="margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0.4rem;">
           <label style="font-size:0.75rem;">Session Notes (optional)</label>
           <textarea class="sc-notes" rows="2" placeholder="Brief update for this client…" style="font-size:0.8125rem;">${esc(c.savedNotes || '')}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="font-size:0.75rem;">Outcome *</label>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">
+            ${['continued','resolved','discontinued'].map(v => `
+            <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.825rem;font-weight:500;cursor:pointer;">
+              <input type="radio" class="sc-court-status" name="cs-${esc(c.id)}" value="${v}" ${c.savedCourtStatus === v ? 'checked' : ''}>
+              ${v.charAt(0).toUpperCase() + v.slice(1)}
+            </label>`).join('')}
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -277,14 +291,25 @@ async function submitBatch() {
   const sessionDate = new Date(dateVal + 'T12:00:00');
   const caseStatus  = 'Court — ' + county;
 
-  // Collect per-client rx and notes from the rendered cards
+  // Collect per-client rx, notes, and court status from the rendered cards
   const perClient = {};
   document.querySelectorAll('.selected-client-card').forEach(card => {
+    const statusInput = card.querySelector('.sc-court-status:checked');
     perClient[card.dataset.clientId] = {
-      notes: card.querySelector('.sc-notes').value.trim(),
-      rx:    card.querySelector('.sc-rx').value.trim(),
+      notes:       card.querySelector('.sc-notes').value.trim(),
+      rx:          card.querySelector('.sc-rx').value.trim(),
+      courtStatus: statusInput ? statusInput.value : '',
     };
   });
+
+  // Require a status for every client
+  const missingStatus = _selected.filter(c => !perClient[c.id]?.courtStatus);
+  if (missingStatus.length) {
+    showError(`Please select an outcome (Continued / Resolved / Discontinued) for: ${missingStatus.map(c => c.clientName || c.id).join(', ')}`);
+    submitBtn.disabled    = false;
+    submitBtn.textContent = _editMode ? 'Update Court Appearances' : 'Log Court Appearances';
+    return;
+  }
 
   try {
     // 1. Delete removed sessions
@@ -303,9 +328,10 @@ async function submitBatch() {
         billingType:    'Court',
         hours,
         caseStatus,
-        notes:      extras.notes || '',
-        clientName: c.clientName || '',
-        updatedAt:  serverTimestamp(),
+        courtStatus:    extras.courtStatus || '',
+        notes:          extras.notes || '',
+        clientName:     c.clientName || '',
+        updatedAt:      serverTimestamp(),
       });
     }));
 
@@ -319,17 +345,21 @@ async function submitBatch() {
         counselingType: 'COURT',
         billingType:    'Court',
         hours,
-        dollarsFor: '',
+        dollarsFor:     '',
         caseStatus,
-        outcome:    '',
-        notes:      extras.notes || '',
-        clientName: c.clientName || '',
-        createdAt:  serverTimestamp(),
-        updatedAt:  serverTimestamp(),
+        courtStatus:    extras.courtStatus || '',
+        outcome:        '',
+        notes:          extras.notes || '',
+        clientName:     c.clientName || '',
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
       });
     }));
 
-    // 4. Refresh denormalized fields for all affected clients
+    // 4. Auto-mark prior court sessions (same county, older date) as 'continued'
+    await inferPriorCourtStatuses(_selected.map(c => c.id), county, sessionDate);
+
+    // 5. Refresh denormalized fields for all affected clients
     const allAffected = new Set([
       ..._selected.map(c => c.id),
       ..._removedToDelete.map(r => r.clientId),
@@ -345,14 +375,142 @@ async function submitBatch() {
     document.getElementById('successBanner').classList.remove('hidden');
     document.querySelector('.court-layout').classList.add('hidden');
     document.querySelectorAll('.card').forEach(card => {
-      if (!card.closest('#successBanner')) card.classList.add('hidden');
+      if (!card.closest('#successBanner') && !card.closest('#pendingStatusBanner')) card.classList.add('hidden');
     });
     document.getElementById('editModeBanner').style.display = 'none';
+    loadPendingStatuses();
 
   } catch (err) {
     showError('Save failed: ' + err.message);
     submitBtn.disabled    = false;
     submitBtn.textContent = _editMode ? 'Update Court Appearances' : 'Log Court Appearances';
+  }
+}
+
+// ── Court status inference ────────────────────────────────────────────────────
+
+async function inferPriorCourtStatuses(clientIds, county, beforeDate) {
+  const caseStatus = 'Court — ' + county;
+  for (const clientId of clientIds) {
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'clients', clientId, 'sessions'), where('caseStatus', '==', caseStatus))
+      );
+      for (const d of snap.docs) {
+        const s = d.data();
+        if (s.courtStatus) continue;
+        const dt = s.date?.toDate ? s.date.toDate() : new Date(s.date);
+        if (dt < beforeDate) {
+          await updateDoc(doc(db, 'clients', clientId, 'sessions', d.id), {
+            courtStatus: 'continued',
+            updatedAt:   serverTimestamp(),
+          });
+        }
+      }
+    } catch (_) {}
+  }
+}
+
+const COURT_COUNTIES = ['Beaver County', 'Lawrence County', 'Mercer County'];
+
+async function loadPendingStatuses() {
+  try {
+    const allSessions = [];
+    await Promise.all(COURT_COUNTIES.map(async county => {
+      const cs = 'Court — ' + county;
+      const snap = await getDocs(
+        query(collectionGroup(db, 'sessions'), where('caseStatus', '==', cs))
+      );
+      snap.docs.forEach(d => {
+        if (!d.data().deleted) {
+          allSessions.push({ id: d.id, clientId: d.ref.parent.parent.id, county, ...d.data() });
+        }
+      });
+    }));
+
+    // Group by clientId + county, sort ascending by date
+    const groups = {};
+    for (const s of allSessions) {
+      const key = `${s.clientId}|${s.county}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    }
+    for (const sessions of Object.values(groups)) {
+      sessions.sort((a, b) => {
+        const da = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+        const db2 = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+        return da - db2;
+      });
+    }
+
+    let canInfer = 0;
+    let needsManual = 0;
+    for (const sessions of Object.values(groups)) {
+      for (let i = 0; i < sessions.length; i++) {
+        if (!sessions[i].courtStatus) {
+          if (i < sessions.length - 1) canInfer++;
+          else needsManual++;
+        }
+      }
+    }
+
+    const banner = document.getElementById('pendingStatusBanner');
+    if (!banner) return;
+    if (canInfer === 0 && needsManual === 0) { banner.style.display = 'none'; return; }
+
+    const parts = [];
+    if (canInfer > 0)    parts.push(`${canInfer} prior session${canInfer !== 1 ? 's' : ''} can be auto-marked Continued`);
+    if (needsManual > 0) parts.push(`${needsManual} recent session${needsManual !== 1 ? 's' : ''} need a manual outcome`);
+    document.getElementById('pendingStatusMsg').textContent = parts.join(' · ');
+
+    const resolveBtn = document.getElementById('resolveInferredBtn');
+    resolveBtn.style.display = canInfer > 0 ? '' : 'none';
+    banner.style.display = '';
+  } catch (e) {
+    console.warn('loadPendingStatuses:', e.message);
+  }
+}
+
+async function resolveInferredStatuses() {
+  const btn = document.getElementById('resolveInferredBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Resolving…';
+  try {
+    await Promise.all(COURT_COUNTIES.map(async county => {
+      const cs = 'Court — ' + county;
+      const snap = await getDocs(
+        query(collectionGroup(db, 'sessions'), where('caseStatus', '==', cs))
+      );
+
+      // Group by client, sort, mark non-latest as continued
+      const byClient = {};
+      snap.docs.forEach(d => {
+        if (!d.data().deleted) {
+          const cid = d.ref.parent.parent.id;
+          if (!byClient[cid]) byClient[cid] = [];
+          byClient[cid].push({ ref: d.ref, ...d.data() });
+        }
+      });
+
+      for (const sessions of Object.values(byClient)) {
+        sessions.sort((a, b) => {
+          const da = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+          const db2 = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+          return da - db2;
+        });
+        for (let i = 0; i < sessions.length - 1; i++) {
+          if (!sessions[i].courtStatus) {
+            await updateDoc(sessions[i].ref, { courtStatus: 'continued', updatedAt: serverTimestamp() });
+          }
+        }
+      }
+    }));
+    await loadPendingStatuses();
+  } catch (e) {
+    console.warn('resolveInferredStatuses:', e.message);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Auto-resolve Continued';
   }
 }
 

@@ -1148,6 +1148,21 @@ window.openFollowUpModal = function(id, name) {
   modal.classList.remove('hidden');
 };
 
+async function refreshClientDenorm(cid) {
+  try {
+    const snap     = await getDocs(query(collection(db, 'clients', cid, 'sessions'), orderBy('date', 'asc')));
+    const sessions = snap.docs.map(d => d.data()).filter(s => !s.deleted);
+    const dated    = sessions.filter(s => s.date);
+    await updateDoc(doc(db, 'clients', cid), {
+      sessionCount:      sessions.length,
+      totalOutcomeValue: sessions.reduce((sum, s) => sum + (Number(s.dollarsAwarded) || 0), 0),
+      firstSessionDate:  dated.length ? dated[0].date : null,
+      lastSessionDate:   dated.length ? dated[dated.length - 1].date : null,
+      updatedAt:         serverTimestamp(),
+    });
+  } catch (_) {}
+}
+
 async function saveFollowUp() {
   if (!_followUpClientId) return;
   const modal   = document.getElementById('followUpModal');
@@ -1173,13 +1188,8 @@ async function saveFollowUp() {
       createdAt:    serverTimestamp(),
     });
 
-    // Update lastSessionDate + increment sessionCount on client doc
-    const clientDoc = allClients.find(c => c.id === _followUpClientId);
-    const newCount  = ((clientDoc?.sessionCount) || 0) + 1;
-    await updateDoc(clientRef, {
-      lastSessionDate: dateVal,
-      sessionCount:    newCount,
-    });
+    // Full denorm refresh — recompute from Firestore to avoid stale cache drift
+    await refreshClientDenorm(_followUpClientId);
 
     modal.classList.add('hidden');
     _followUpClientId = null;

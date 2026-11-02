@@ -10,8 +10,9 @@
     .ws-bar { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.25rem; }
     .ws-bar select { min-width:240px; }
     .ws-bar .ws-status { font-size:0.78rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:999px; }
-    .ws-status.open  { background:#dcfce7; color:#166534; }
+    .ws-status.open   { background:#dcfce7; color:#166534; }
     .ws-status.closed { background:#f1f5f9; color:var(--text-muted); }
+    .ws-status.legacy { background:#fef3c7; color:#92400e; }
 
     /* ── Seat summary cards ─────────────────────────────────────── */
     .seat-cards { display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.25rem; }
@@ -184,10 +185,17 @@
       </div>
       <span id="wsStatusChip" class="ws-status" style="display:none;"></span>
       <button id="toggleActiveBtn" class="btn btn-sm" style="display:none;"></button>
+      <button id="newWorkshopBtn" class="btn btn-sm btn-primary" style="margin-left:auto;">+ New Workshop</button>
     </div>
 
     <!-- Seat summary -->
     <div id="seatCards" class="seat-cards" style="display:none;"></div>
+
+    <!-- Legacy workshop banner -->
+    <div id="legacyBanner" style="display:none;margin-bottom:1rem;padding:0.65rem 1rem;background:var(--surface-2,#f1f5f9);border:1px solid var(--border);border-left:4px solid var(--text-muted);border-radius:var(--radius);font-size:0.875rem;color:var(--text-muted);">
+      <strong style="color:var(--text);">Historical record</strong> — This workshop was entered retroactively from sign-in sheets.
+      Use the registrants tab to enter attendees manually. No public registration link is available.
+    </div>
 
     <!-- Share link -->
     <div id="shareLinkRow" class="card" style="display:none; margin-bottom:1rem; padding:0.85rem 1rem;">
@@ -234,12 +242,6 @@
       <button class="ws-tab" data-tab="raffle" id="raffleTabBtn" style="display:none;">🎟️ Raffle</button>
       <button class="ws-tab" data-tab="sessions">📋 Sessions</button>
       <button class="ws-tab" data-tab="survey">📊 Survey</button>
-      <button class="ws-tab" data-tab="new">+ New Workshop</button>
-    </div>
-
-    <!-- Show tabs always for New Workshop -->
-    <div class="ws-tabs" id="wsTabsNew" style="display:none;">
-      <button class="ws-tab active" data-tab="new">+ New Workshop</button>
     </div>
 
     <!-- Registrants panel -->

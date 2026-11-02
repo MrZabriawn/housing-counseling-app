@@ -4,6 +4,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+const WORKSHOP_TYPES_HUD = new Set(['Workshop', 'WORKSHOP', 'Group Education']);
+
 const AGENCY_NAME   = 'Housing Opportunities Inc.';
 const AGENCY_NUMBER = '101';
 const AUTH_NAME     = 'Zabriawn Smith';
@@ -182,7 +184,8 @@ function buildParDetailHtml(sessions, hudEvents, clientMap) {
     .map(s => {
       const nm  = (clientMap[s.clientId] || {}).clientName || s.clientName || s.clientId;
       const hrs = (parseFloat(s.hours) || 0).toFixed(2);
-      const tp  = s.hudType === 'case_management' ? 'Case Mgmt' : 'Counseling';
+      const isGroupEd = s.hudType === 'Group Education' || WORKSHOP_TYPES_HUD.has(s.counselingType);
+      const tp  = s.hudType === 'case_management' ? 'Case Mgmt' : isGroupEd ? 'Group Ed' : 'Counseling';
       return `<tr>
         <td ${DT}>${fmtDate(s.dateObj)}</td>
         <td ${DT}><a href="client.html?id=${escAttr(s.clientId)}" target="_blank" style="color:var(--accent)">${escHtml(nm)}</a></td>
@@ -583,8 +586,9 @@ async function buildPAR(counselor, data) {
     .filter(s => s.counselor === counselor.name && nofaRxSet.has((s.rxNumber || '').trim()))
     .forEach(s => {
       const day = s.dateObj.getDate();
-      // hudType 'case_management' → Processing-Intake (Section 1); default → Counseling
-      const row = s.hudType === 'case_management' ? 'Processing-Intake' : 'Counseling';
+      // hudType 'case_management' → Processing-Intake; Group Education types → Group Education; default → Counseling
+      const _isGroupEd = s.hudType === 'Group Education' || WORKSHOP_TYPES_HUD.has(s.counselingType);
+      const row = s.hudType === 'case_management' ? 'Processing-Intake' : _isGroupEd ? 'Group Education' : 'Counseling';
       s1DayTotals[row][day] = (s1DayTotals[row][day] || 0) + (parseFloat(s.hours) || 0);
     });
 

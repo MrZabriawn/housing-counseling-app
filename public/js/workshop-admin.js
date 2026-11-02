@@ -83,30 +83,56 @@ function showTab(tabId) {
   });
 }
 
+function _showNewWorkshopPanel() {
+  // Deactivate all workshop tabs and show the New Workshop panel
+  document.querySelectorAll('.ws-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ws-panel').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
+  qs('#panelNew').style.display = '';
+  // Clear workshop-specific chrome
+  qs('#wsStatusChip').style.display      = 'none';
+  qs('#toggleActiveBtn').style.display   = 'none';
+  qs('#seatCards').style.display         = 'none';
+  qs('#shareLinkRow').style.display      = 'none';
+  qs('#bannerCard').style.display        = 'none';
+  const legacyBanner = qs('#legacyBanner');
+  if (legacyBanner) legacyBanner.style.display = 'none';
+}
+
 // ── Workshop list ─────────────────────────────────────────────────────────────
 async function loadWorkshopList() {
   const snap = await getDocs(query(collection(db, 'workshops'), orderBy('createdAt', 'desc')));
   _workshops = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderWorkshopSelect();
 
-  // Show tabs area — at minimum for creating new workshop
-  qs('#wsTabsNew').style.display = 'flex';
-  showTab('new');
-  qs('#panelNew').style.display = '';
-
   if (_workshops.length > 0) {
     qs('#wsTabs').style.display = 'flex';
-    qs('#wsTabsNew').style.display = 'none';
-    selectWorkshop(_workshops[0].id);
+    const first = _workshops.find(w => !w.legacy) || _workshops[0];
+    selectWorkshop(first.id);
+  } else {
+    // No workshops yet — open the New Workshop form immediately
+    _showNewWorkshopPanel();
   }
+
+  qs('#newWorkshopBtn').addEventListener('click', _showNewWorkshopPanel);
 }
 
 function renderWorkshopSelect() {
   const sel = qs('#workshopSelect');
-  const opts = _workshops.map(w =>
-    `<option value="${w.id}">${escHtml(w.title || 'Untitled')} — ${formatShort(w.date)}</option>`
-  ).join('');
-  sel.innerHTML = `<option value="">— Select a workshop —</option>${opts}`;
+  const current = _workshops.filter(w => !w.legacy);
+  const legacy  = _workshops.filter(w =>  w.legacy)
+    .sort((a, b) => (b.date?.toDate?.() || b.date || 0) - (a.date?.toDate?.() || a.date || 0));
+
+  const makeOpt = w =>
+    `<option value="${w.id}">${escHtml(w.title || 'Untitled')} — ${formatShort(w.date)}</option>`;
+
+  let html = '<option value="">— Select a workshop —</option>';
+  if (current.length) html += current.map(makeOpt).join('');
+  if (legacy.length) {
+    html += `<optgroup label="─── Legacy (Historical) ───">`;
+    html += legacy.map(makeOpt).join('');
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
   sel.addEventListener('change', () => {
     if (sel.value) selectWorkshop(sel.value);
   });
@@ -131,7 +157,6 @@ async function selectWorkshop(id) {
     renderWorkshopChrome(_currentWs);
 
     qs('#wsTabs').style.display = 'flex';
-    qs('#wsTabsNew').style.display = 'none';
 
     // Show/hide raffle tab
     qs('#raffleTabBtn').style.display = _currentWs.hasRaffle ? '' : 'none';
@@ -142,7 +167,9 @@ async function selectWorkshop(id) {
     showTab('registrants');
     qs('#panelRegistrants').style.display = '';
     qs('#seatCards').style.display = '';
-    qs('#shareLinkRow').style.display = '';
+    qs('#shareLinkRow').style.display    = _currentWs.legacy ? 'none' : '';
+    const legacyBanner = qs('#legacyBanner');
+    if (legacyBanner) legacyBanner.style.display = _currentWs.legacy ? '' : 'none';
 
     renderBannerSection(_currentWs);
     qs('#bannerCard').style.display = '';
@@ -154,10 +181,14 @@ async function selectWorkshop(id) {
 
 function renderWorkshopChrome(ws) {
   const toggleBtn = qs('#toggleActiveBtn');
-  toggleBtn.style.display = '';
-  toggleBtn.textContent = ws.active ? 'Close Registration' : 'Reopen Registration';
-  toggleBtn.className = ws.active ? 'btn btn-sm btn-secondary' : 'btn btn-sm btn-primary';
-  toggleBtn.onclick = () => toggleActive(ws.active);
+  if (ws.legacy) {
+    toggleBtn.style.display = 'none';
+  } else {
+    toggleBtn.style.display = '';
+    toggleBtn.textContent = ws.active ? 'Close Registration' : 'Reopen Registration';
+    toggleBtn.className = ws.active ? 'btn btn-sm btn-secondary' : 'btn btn-sm btn-primary';
+    toggleBtn.onclick = () => toggleActive(ws.active);
+  }
 }
 
 async function toggleActive(currentlyActive) {
@@ -209,8 +240,13 @@ function renderShareLink(id) {
 function renderStatusChip(ws) {
   const chip = qs('#wsStatusChip');
   chip.style.display = '';
-  chip.textContent = ws.active ? 'Open' : 'Closed';
-  chip.className = `ws-status ${ws.active ? 'open' : 'closed'}`;
+  if (ws.legacy) {
+    chip.textContent = 'Legacy';
+    chip.className = 'ws-status legacy';
+  } else {
+    chip.textContent = ws.active ? 'Open' : 'Closed';
+    chip.className = `ws-status ${ws.active ? 'open' : 'closed'}`;
+  }
 }
 
 // ── Location filters ──────────────────────────────────────────────────────────

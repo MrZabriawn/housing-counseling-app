@@ -183,6 +183,7 @@
             <option value="">All types</option>
             <option value="client">Client</option>
             <option value="prospect">Prospect</option>
+            <option value="organizational">Organization</option>
           </select>
           <button id="callMineBtn" type="button" class="btn btn-secondary btn-sm">My calls</button>
           <button id="callFilterClear" type="button" class="btn btn-secondary btn-sm">Clear</button>
@@ -199,10 +200,11 @@
                 <th>Outcome</th>
                 <th>Notes</th>
                 <th>Linked Client</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="callLogBody">
-              <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
+              <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -235,6 +237,7 @@
           <div class="call-type-toggle">
             <button class="call-type-btn active" data-type="client">Existing Client</button>
             <button class="call-type-btn" data-type="prospect">Prospect</button>
+            <button class="call-type-btn" data-type="organizational">Organization</button>
           </div>
         </div>
 
@@ -251,7 +254,7 @@
           </div>
         </div>
 
-        <div id="prospectSection" class="hidden" style="display:contents;">
+        <div id="prospectSection" class="hidden" style="display:none;">
           <div class="form-group">
             <label for="prospectName">Prospect Name *</label>
             <input type="text" id="prospectName" placeholder="Full name">
@@ -259,6 +262,17 @@
           <div class="form-group">
             <label for="prospectPhone">Phone Number</label>
             <input type="text" id="prospectPhone" placeholder="555-555-5555">
+          </div>
+        </div>
+
+        <div id="organizationalSection" class="hidden" style="display:none;">
+          <div class="form-group">
+            <label for="orgName">Organization Name *</label>
+            <input type="text" id="orgName" placeholder="e.g. Habitat for Humanity">
+          </div>
+          <div class="form-group">
+            <label for="orgContact">Contact Person</label>
+            <input type="text" id="orgContact" placeholder="Name of contact">
           </div>
         </div>
 

@@ -102,6 +102,14 @@
       <a href="clients.html" class="btn btn-secondary btn-sm">← Back to Counseling Log</a>
     </div>
 
+    <!-- Pending court status banner -->
+    <div id="pendingStatusBanner" style="display:none;background:#fefce8;border:1px solid #fde047;border-radius:var(--radius);padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.875rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+        <span>⚠️ <strong>Court statuses pending:</strong> <span id="pendingStatusMsg"></span></span>
+        <button id="resolveInferredBtn" class="btn btn-secondary btn-sm" style="display:none;">Auto-resolve Continued</button>
+      </div>
+    </div>
+
     <!-- Edit mode banner -->
     <div id="editModeBanner" style="display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius);padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.875rem;">
       ✏️ <strong>Edit mode</strong> — existing session loaded. Add or remove clients and update notes, then click <strong>Update Court Appearances</strong>.
