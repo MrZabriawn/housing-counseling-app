@@ -181,6 +181,24 @@ function toDateInputValue(ts) {
   return d.toISOString().split('T')[0];
 }
 
+// Legacy counselingLog entries carry only a client NAME (no clientId). When that
+// name uniquely matches a client record, inherit that client's AMI % so the legacy
+// entry stays consistent with the authoritative profile. Prefill only (still
+// editable); a non-unique or missing match leaves whatever was there.
+async function inheritAmiFromClient(name) {
+  const nm = (name || '').trim();
+  if (!nm) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'clients'), where('clientName', '==', nm)));
+    if (snap.size !== 1) return;
+    const c = snap.docs[0].data();
+    if (c.amiPercent == null || c.amiPercent === '') return;
+    setAmiField(c.amiPercent, c.amiLabel);
+    const lbl = document.getElementById('amiLabel');
+    if (lbl) lbl.textContent = amiDisplayLabel(c.amiPercent) + ' · from client profile';
+  } catch (_) { /* leave manual value on any lookup failure */ }
+}
+
 function populateForm(r) {
   setValue('rxNumber',         r.rxNumber);
   setValue('clientName',     r.clientName);
@@ -193,6 +211,7 @@ function populateForm(r) {
   setValue('caseStatus',     r.caseStatus);
   setValue('outcome',        r.outcome);
   setAmiField(r.amiPercent, r.amiLabel);
+  inheritAmiFromClient(r.clientName);   // override with the client's AMI when uniquely matched
   setSelectValue('reCode',     r.reCode);
   setValue('hours',          r.hours);
   setValue('ratePerHour',    r.ratePerHour);

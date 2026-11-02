@@ -1,5 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
+import { initWorkshopLog } from './workshop-log.js';
 import {
   collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
   query, orderBy, where, serverTimestamp, Timestamp,
@@ -31,6 +32,7 @@ let _sqCount            = 0;     // counter for new question id generation
 requireAuth(async (user, profile) => {
   _user = user;
   setupNav(profile, 'workshops');
+  initWorkshopLog(profile);
   initTabs();
   initNewWsForm();
   addDefaultLocation();

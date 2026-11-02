@@ -296,9 +296,11 @@ async function submitBatch() {
     await Promise.all(_selected.filter(c => c.sessionId).map(c => {
       const extras = perClient[c.id] || {};
       return updateDoc(doc(db, 'clients', c.id, 'sessions', c.sessionId), {
-        date:       sessionDate,
-        counselor:  counselor || c.counselor || '',
-        rxNumber:   extras.rx || c.savedRx || '',
+        date:           sessionDate,
+        counselor:      counselor || c.counselor || '',
+        rxNumber:       extras.rx || c.savedRx || '',
+        counselingType: 'COURT',
+        billingType:    'Court',
         hours,
         caseStatus,
         notes:      extras.notes || '',
@@ -311,9 +313,11 @@ async function submitBatch() {
     await Promise.all(_selected.filter(c => !c.sessionId).map(c => {
       const extras = perClient[c.id] || {};
       return addDoc(collection(db, 'clients', c.id, 'sessions'), {
-        date:       sessionDate,
-        counselor:  counselor || c.counselor || '',
-        rxNumber:   extras.rx || (c.rxNumbers[0] || ''),
+        date:           sessionDate,
+        counselor:      counselor || c.counselor || '',
+        rxNumber:       extras.rx || (c.rxNumbers[0] || ''),
+        counselingType: 'COURT',
+        billingType:    'Court',
         hours,
         dollarsFor: '',
         caseStatus,

@@ -1,8 +1,8 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
-import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel, amiCategory } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, amiDisplayLabel, amiCategory, computeAmiPercent } from './data.js';
 import {
-  collection, addDoc, getDocs, query, orderBy, serverTimestamp
+  collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const HOUSING_EXP_IDS = [
@@ -27,6 +27,36 @@ function numVal(id) {
   return parseFloat(document.getElementById(id)?.value || '0') || 0;
 }
 
+// Additional household members table (simplified vs. the profile — plain SSN entry;
+// viewing/redaction is handled on the client profile).
+const RELATIONSHIPS = ['Spouse', 'Partner', 'Co-Borrower', 'Dependent', 'Other Adult'];
+
+function makeHouseholdRow() {
+  const tr = document.createElement('tr');
+  const relOpts = RELATIONSHIPS.map(v => `<option value="${escAttr(v)}">${v}</option>`).join('');
+  tr.innerHTML = `
+    <td><input type="text" class="hh-name" style="width:100%;"></td>
+    <td><select class="hh-rel" style="width:100%;"><option value="">— Select —</option>${relOpts}</select></td>
+    <td><input type="date" class="hh-dob" style="width:100%;"></td>
+    <td><input type="text" class="hh-ssn" autocomplete="off" maxlength="11" placeholder="XXX-XX-XXXX" style="width:100%;"></td>
+    <td><input type="number" class="hh-income" min="0" step="0.01" style="width:100%;"></td>
+    <td><input type="text" class="hh-source" style="width:100%;"></td>
+    <td style="text-align:center;"><button type="button" class="del-btn" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.2rem;line-height:1;">&times;</button></td>`;
+  tr.querySelector('.del-btn').addEventListener('click', () => tr.remove());
+  return tr;
+}
+
+function readHouseholdRows() {
+  return [...document.querySelectorAll('#householdBody tr')].map(row => ({
+    name:          row.querySelector('.hh-name')?.value.trim()   || '',
+    relationship:  row.querySelector('.hh-rel')?.value           || '',
+    dateOfBirth:   row.querySelector('.hh-dob')?.value           || '',
+    ssn:           row.querySelector('.hh-ssn')?.value.trim()    || '',
+    monthlyIncome: parseFloat(row.querySelector('.hh-income')?.value) || 0,
+    incomeSource:  row.querySelector('.hh-source')?.value.trim() || '',
+  })).filter(m => m.name || m.relationship || m.monthlyIncome);
+}
+
 function fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -37,6 +67,45 @@ function escAttr(str) {
 
 let _user           = null;
 let _counselorUids  = {}; // name (lowercase) → uid
+let _amiLimits      = null; // settings/amiLimits counties map
+
+async function loadAmiLimits() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'amiLimits'));
+    _amiLimits = snap.exists() ? (snap.data().counties || {}) : {};
+  } catch (_) {
+    _amiLimits = {};
+  }
+}
+
+// Same formula as the client profile (shared computeAmiPercent) — income vs.
+// the county's HUD 100% limit for the household size. Returns null if inputs missing.
+function computeNewClientAmi() {
+  const grossMonthly =
+    [...document.querySelectorAll('.emp-gross')].reduce((s, el) => s + (parseFloat(el.value) || 0), 0) +
+    [...document.querySelectorAll('.inc-amount')].reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+  const hhSize =
+    (parseInt(document.getElementById('adultsInHousehold')?.value) || 0) +
+    (parseInt(document.getElementById('childrenInHousehold')?.value) || 0);
+  return computeAmiPercent({
+    limits:       _amiLimits,
+    county:       document.getElementById('county')?.value,
+    hhSize,
+    grossMonthly,
+  });
+}
+
+function recalcNewClientAmi() {
+  const pct = computeNewClientAmi();
+  const inp = document.getElementById('amiPercent');
+  const lbl = document.getElementById('amiLabel');
+  if (pct !== null) {
+    inp.value = pct;
+    if (lbl) lbl.textContent = amiCategory(pct);
+  } else {
+    alert('Cannot calculate AMI yet — need County, Household size, Income (Employment / Other Income rows), and the AMI chart in Settings.');
+  }
+}
 
 requireAuth(async (user, profile) => {
   _user = user;
@@ -47,9 +116,13 @@ requireAuth(async (user, profile) => {
   appendOptions('awardType',      AWARD_TYPES);
   appendOptions('billingType',    BILLING_TYPES);
   wireAmiLabel('amiPercent', 'amiLabel');
+  document.getElementById('recalcAmiBtn')?.addEventListener('click', recalcNewClientAmi);
+  document.getElementById('addHouseholdRowBtn')?.addEventListener('click', () =>
+    document.getElementById('householdBody').appendChild(makeHouseholdRow()));
   await Promise.all([
     loadCounselorOptions('counselor', profile.name),
     loadCounselorUids(),
+    loadAmiLimits(),
   ]);
 
   document.getElementById('sessionDate').value = new Date().toISOString().split('T')[0];
@@ -276,11 +349,14 @@ async function handleSubmit(e) {
     const dollarsAwarded = parseFloat(document.getElementById('dollarsAwarded').value) || 0;
 
     const sessionData = {
+      clientName:     toTitleCase(document.getElementById('clientName').value.trim()),
       date:           dateVal ? new Date(dateVal + 'T12:00:00') : null,
       counselor:      document.getElementById('counselor').value,
       counselingType: document.getElementById('counselingType').value,
       billingType:    document.getElementById('billingType').value,
       rxNumber:       document.getElementById('rxNumber').value.trim(),
+      rxGuarantor:    document.getElementById('guarantor').value.trim(),  // guarantor lives on the session
+      hudType:        '',
       hours,
       dollarsAwarded,
       awardType:      document.getElementById('awardType').value,
@@ -298,6 +374,8 @@ async function handleSubmit(e) {
     const scoreEq  = parseFloat(document.getElementById('finScoreEq').value)  || null;
     const scoreEx  = parseFloat(document.getElementById('finScoreEx').value)  || null;
     const scoreTu  = parseFloat(document.getElementById('finScoreTu').value)  || null;
+    // Prefer the calculated AMI (income ÷ county limit); fall back to a manual entry
+    const finalAmi = computeNewClientAmi() ?? (Number(document.getElementById('amiPercent').value) || null);
 
     const clientData = {
       clientName:        toTitleCase(document.getElementById('clientName').value.trim()),
@@ -306,11 +384,36 @@ async function handleSubmit(e) {
       counselingType:    document.getElementById('counselingType').value,
       billingType:       document.getElementById('billingType').value,
       counselor:         document.getElementById('counselor').value,
-      guarantor:         document.getElementById('guarantor').value.trim(),
       zipCode:           document.getElementById('zipCode').value.trim(),
+      county:              toTitleCase(document.getElementById('county').value.trim()),
+      adultsInHousehold:   parseInt(document.getElementById('adultsInHousehold').value) || null,
+      childrenInHousehold: parseInt(document.getElementById('childrenInHousehold').value) || null,
+      // Intake — Contact
+      streetAddress:     toTitleCase(document.getElementById('streetAddress').value.trim()),
+      city:              toTitleCase(document.getElementById('city').value.trim()),
+      email:             document.getElementById('email').value.trim(),
+      homePhone:         document.getElementById('homePhone').value.trim(),
+      workPhone:         document.getElementById('workPhone').value.trim(),
+      cellPhone:         document.getElementById('cellPhone').value.trim(),
+      // Intake — Co-Applicant
+      coApplicantName:      document.getElementById('coApplicantName').value.trim(),
+      coApplicantDob:       document.getElementById('coApplicantDob').value,
+      coApplicantSsn:       document.getElementById('coApplicantSsn').value.trim(),
+      coApplicantEmail:     document.getElementById('coApplicantEmail').value.trim(),
+      coApplicantHomePhone: document.getElementById('coApplicantHomePhone').value.trim(),
+      coApplicantWorkPhone: document.getElementById('coApplicantWorkPhone').value.trim(),
+      coApplicantCellPhone: document.getElementById('coApplicantCellPhone').value.trim(),
+      // Intake — Household
+      maritalStatus:        document.getElementById('maritalStatus').value,
+      householdMembers:     readHouseholdRows(),
+      // Intake — Notes
+      intakeDate:           document.getElementById('intakeDate').value,
+      conciliationStampDate: document.getElementById('conciliationStampDate').value,
+      homeSearchNotes:      document.getElementById('homeSearchNotes').value.trim(),
+      intakeNotes:          document.getElementById('intakeNotes').value.trim(),
       rxNumbers,
-      amiPercent:        Number(document.getElementById('amiPercent').value) || null,
-      amiLabel:          (() => { const v = Number(document.getElementById('amiPercent').value); return v ? amiCategory(v) : null; })(),
+      amiPercent:        finalAmi,
+      amiLabel:          finalAmi ? amiCategory(finalAmi) : null,
       reCode:            document.getElementById('reCode').value,
       hispanic:          document.getElementById('hispanic').checked,
       femaleHeaded:      document.getElementById('femaleHeaded').checked,

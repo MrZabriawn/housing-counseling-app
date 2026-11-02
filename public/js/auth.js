@@ -42,7 +42,7 @@ export function requireAdmin(callback) {
   requireAuth((user, profile) => {
     if (!isAdmin(profile)) {
       if (profile.role !== 'demo') alert('Access denied. Admins only.');
-      window.location.href = 'log.html';
+      window.location.href = 'clients.html';
       return;
     }
     callback(user, profile);
@@ -53,7 +53,7 @@ export function requireED(callback) {
   requireAuth((user, profile) => {
     if (profile.role !== 'executive_director') {
       if (profile.role !== 'demo') alert('Access denied. Executive Director only.');
-      window.location.href = 'log.html';
+      window.location.href = 'clients.html';
       return;
     }
     callback(user, profile);
@@ -68,7 +68,7 @@ export async function logout() {
 export function setupNav(profile, activePage) {
   const nav = document.querySelector('nav.nav');
   if (nav) {
-    // Admin-only items hidden by default; revealed below when isAdmin()
+    // All office staff see the same menu (Settings is no longer admin-gated)
     nav.innerHTML = `
       <a class="nav-brand" href="clients.html"><img src="img/logo.png" alt="Housing Opportunities"></a>
       <div class="nav-links">
@@ -78,6 +78,7 @@ export function setupNav(profile, activePage) {
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">Clients</button>
           <div class="nav-dropdown-menu">
+            <a href="new-client.html" data-page="new-client">New Client</a>
             <a href="intake.html"     data-page="intake">Intake</a>
             <a href="duplicates.html" data-page="duplicates">Duplicates</a>
           </div>
@@ -99,7 +100,8 @@ export function setupNav(profile, activePage) {
           <div class="nav-dropdown-menu">
             <a href="reports.html"     data-page="reports">CDBG / CHCI</a>
             <a href="hud.html"         data-page="hud">HUD</a>
-            <a href="operations.html"  data-page="operations">Operations</a>
+            <a href="dashboard.html"   data-page="dashboard">Metrics</a>
+            <a href="operations.html"  data-page="operations">Guidance</a>
           </div>
         </div>
 
@@ -107,7 +109,8 @@ export function setupNav(profile, activePage) {
           <button class="nav-dropdown-btn" type="button">Admin</button>
           <div class="nav-dropdown-menu">
             <a href="training.html"  data-page="training">Training</a>
-            <a href="settings.html"  data-page="settings" class="admin-only hidden">Settings</a>
+            <a href="settings.html"  data-page="settings">Settings</a>
+            <a href="import.html"    data-page="import">Import</a>
           </div>
         </div>
 
@@ -150,12 +153,8 @@ export function setupNav(profile, activePage) {
     }
   }
 
-  if (isAdmin(profile)) {
-    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-  }
-  if (profile.role === 'executive_director') {
-    document.querySelectorAll('.ed-only').forEach(el => el.classList.remove('hidden'));
-  }
+  // Legacy role-gated elements (kept working, just always shown now)
+  document.querySelectorAll('.admin-only, .ed-only').forEach(el => el.classList.remove('hidden'));
 
   if (activePage) {
     // Mark the matching link active, and also highlight the parent dropdown button

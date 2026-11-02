@@ -407,7 +407,6 @@ async function performMerge() {
       firstSessionDate: firstSessionDate || null,
       lastSessionDate:  lastSessionDate  || null,
       counselingType: activeCounselingType,
-      guarantor:  keep.guarantor  || drop.guarantor  || '',
       zipCode:    keep.zipCode    || drop.zipCode    || '',
       counselor:  keep.counselor  || drop.counselor  || '',
       updatedAt: now,

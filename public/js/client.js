@@ -1,7 +1,7 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
-import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel, amiCategory } from './data.js';
+import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel, amiCategory, computeAmiPercent } from './data.js';
 import { openDrivePicker } from './picker.js';
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc, deleteDoc,
@@ -793,6 +793,9 @@ function wireClientForm() {
   document.getElementById('printIntakeBtn').addEventListener('click', printIntakeForm);
   document.getElementById('printIntakeBtn2').addEventListener('click', printIntakeForm);
 
+  // AMI recalculation from income/household/county
+  document.getElementById('recalcAmiBtn')?.addEventListener('click', recalcAmiFromButton);
+
   // Financials save
   document.getElementById('saveFinancialsBtn').addEventListener('click', saveFinancials);
 
@@ -1218,11 +1221,12 @@ function readSessionForm() {
     ? (document.getElementById('sNewRxGuarantor')?.value || '')
     : (rxSel?.options[rxSel?.selectedIndex]?.dataset?.guarantor || '');
   return {
+    clientName: _client?.clientName || '',   // denormalized so reports don't fall back to the doc id
     counselingType: document.getElementById('sCounselingType').value,
     date:       dateVal ? new Date(dateVal + 'T12:00:00') : null,
     counselor:  document.getElementById('sCounselor').value,
     rxNumber,
-    rxGuarantor,
+    rxGuarantor,   // guarantor is session-level (per individual session)
     hudType:    document.getElementById('sHudType').value,
     hours:      parseFloat(document.getElementById('sHours').value) || 0,
     dollarsFor: document.getElementById('sDollarsFor').value.trim(),
@@ -2866,28 +2870,45 @@ async function loadAmiLimits() {
   }
 }
 
-function computeAmiFromChart() {
-  if (!_amiLimits) return null;
-  const rawCounty  = (_client?.county || '').replace(/\s*county\s*$/i, '').trim();
-  const countyKey  = Object.keys(_amiLimits).find(k => k.toLowerCase() === rawCounty.toLowerCase());
-  const countyData = countyKey ? _amiLimits[countyKey] : null;
-  if (!rawCounty || !countyData) return null;
+function currentGrossMonthly() {
+  return [...document.querySelectorAll('.emp-gross')]
+      .reduce((s, el) => s + (parseFloat(el.value) || 0), 0)
+    + [...document.querySelectorAll('.inc-amount')]
+      .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+}
 
+function currentHouseholdSize() {
   const adults   = parseInt(document.getElementById('adultsInHousehold')?.value)   || 0;
   const children = parseInt(document.getElementById('childrenInHousehold')?.value) || 0;
-  if (adults + children === 0) return null;
+  return adults + children;
+}
 
-  const hhSize = Math.max(1, Math.min(8, adults + children));
-  const base   = countyData['100']?.[hhSize - 1] || 0;
-  if (!base) return null;
+// Uses the shared computeAmiPercent() so the client profile and New Client
+// stay in lockstep. Inputs come from Intake (county, household) + Financials (income).
+function computeAmiFromChart() {
+  return computeAmiPercent({
+    limits:       _amiLimits,
+    county:       _client?.county,
+    hhSize:       currentHouseholdSize(),
+    grossMonthly: currentGrossMonthly(),
+  });
+}
 
-  const gross = [...document.querySelectorAll('.emp-gross')]
-    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0)
-    + [...document.querySelectorAll('.inc-amount')]
-    .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
-
-  if (gross <= 0) return null;
-  return Math.round((gross * 12 / base) * 100);
+// "Calculate from income" button on the Overview AMI field. Fills the field
+// when the math can run, otherwise explains which input is missing.
+function recalcAmiFromButton() {
+  const pct = computeAmiFromChart();
+  if (pct !== null) {
+    setAmiField(pct);
+    return;
+  }
+  const missing = [];
+  if (!(_client?.county || '').trim())                    missing.push('County (Intake tab)');
+  if (currentHouseholdSize() === 0)                       missing.push('Household size (Intake tab)');
+  if (currentGrossMonthly() <= 0)                         missing.push('Income (Financials tab)');
+  if (!_amiLimits || !Object.keys(_amiLimits).length)     missing.push('AMI chart (Settings)');
+  alert('Cannot calculate AMI yet — still need:\n• ' +
+    (missing.length ? missing.join('\n• ') : 'AMI limits for this county in Settings'));
 }
 
 function updateAmiPreview(grossMonthly) {
