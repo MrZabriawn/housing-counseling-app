@@ -15,11 +15,13 @@
       "scripts/**"
     ],
     "rewrites": [
+      { "source": "/api/public-stats",        "function": "publicStats" },
       { "source": "/api/qrew-status-update", "function": "qrewStatusUpdate" }
     ]
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "storage": {
     "rules": "storage.rules"

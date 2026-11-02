@@ -7,6 +7,78 @@ const https = require('https');
 admin.initializeApp();
 const db = admin.firestore();
 
+// ── Public stats endpoint ──────────────────────────────────────────────────────
+
+const STATS_ALLOWED_ORIGINS = [
+  'https://housingopps.org',
+  'https://www.housingopps.org',
+  'https://housingopps.webflow.io',
+];
+
+// Per-months cache: months → { data, computedAt }
+const _statsCache = new Map();
+const STATS_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * GET /api/public-stats?months=12
+ * Returns aggregate counseling stats for the rolling window ending today.
+ * Public, read-only, no auth required. No personal data returned.
+ */
+exports.publicStats = onRequest(
+  { cors: STATS_ALLOWED_ORIGINS, invoker: 'public' },
+  async (req, res) => {
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+    const raw    = parseInt(req.query.months, 10);
+    const months = Number.isFinite(raw) && raw >= 1 && raw <= 36 ? raw : 12;
+
+    const now = Date.now();
+    const cached = _statsCache.get(months);
+    if (cached && (now - cached.computedAt) < STATS_CACHE_TTL_MS) {
+      return res.json(cached.data);
+    }
+
+    try {
+      const periodEnd   = new Date();
+      const periodStart = new Date(periodEnd);
+      periodStart.setMonth(periodStart.getMonth() - months);
+
+      const { Timestamp } = admin.firestore;
+      const snap = await db.collectionGroup('sessions')
+        .where('date', '>=', Timestamp.fromDate(periodStart))
+        .where('date', '<=', Timestamp.fromDate(periodEnd))
+        .get();
+
+      let sessionCount = 0;
+      const households = new Set();
+      let outcomeValue = 0;
+
+      for (const docSnap of snap.docs) {
+        const s = docSnap.data();
+        if (s.deleted) continue;
+        sessionCount++;
+        households.add(docSnap.ref.parent.parent.id);
+        outcomeValue += Number(s.dollarsAwarded) || 0;
+      }
+
+      const data = {
+        sessions:     sessionCount,
+        households:   households.size,
+        outcomeValue: Math.round(outcomeValue * 100) / 100,
+        periodStart:  periodStart.toISOString().split('T')[0],
+        periodEnd:    periodEnd.toISOString().split('T')[0],
+        updatedAt:    new Date().toISOString(),
+      };
+
+      _statsCache.set(months, { data, computedAt: now });
+      return res.json(data);
+    } catch (err) {
+      console.error('publicStats query failed:', err.message, err.code);
+      return res.status(500).json({ error: 'Stats unavailable' });
+    }
+  }
+);
+
 /**
  * Fires when a new workshopRegistration document is created.
  * Posts a summary card to the Google Chat space via webhook.
