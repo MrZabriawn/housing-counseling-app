@@ -219,11 +219,17 @@ async function loadClient() {
 }
 
 async function loadSessions() {
-  const snap = await getDocs(
-    query(collection(db, 'clients', clientId, 'sessions'), orderBy('date', 'desc'))
-  );
-  _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
-  renderSessionsTable(_sessions);
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'clients', clientId, 'sessions'), orderBy('date', 'desc'))
+    );
+    _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
+    renderSessionsTable(_sessions);
+  } catch (err) {
+    console.error('loadSessions failed:', err.code, err.message);
+    _sessions = [];
+    renderSessionsTable([]);
+  }
 }
 
 // Check cmcLog for any letter linked to this client and show the banner.
