@@ -65,11 +65,13 @@ exports.publicStats = onRequest(
         households.add(docSnap.ref.parent.parent.id);
       }
 
-      // Sum closure outcome values for cases closed within the window
+      // Sum direct assistance (grants, forgivable loans, etc.) — exclude purchase prices
       let outcomeValue = 0;
       for (const docSnap of clientSnap.docs) {
         const c = docSnap.data();
         if (c.deleted || c.status !== 'closed') continue;
+        if (c.closureAwardType !== 'Direct Assistance') continue;
+        if ((c.closureOutcome || '').startsWith('Purchased')) continue;
         outcomeValue += Number(c.closureOutcomeValue) || 0;
       }
 

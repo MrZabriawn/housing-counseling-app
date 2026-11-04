@@ -1,0 +1,36 @@
+<!-- Housing Opportunities — Live Impact Stats
+     Place in Webflow page settings → Custom Code → Before </body> tag
+     (or in a Custom Embed element on the page)
+
+     To display a stat, add a data-stat attribute to any text element:
+       data-stat="sessions"      → number of counseling sessions
+       data-stat="households"    → unique households served
+       data-stat="outcomeValue"  → direct assistance total (formatted as $1,234,567)
+
+     Example Webflow text element: <span data-stat="households">—</span>
+-->
+<script>
+(function () {
+  var API = 'https://counseling.housingopps.org/api/public-stats?months=12';
+
+  function fmt(key, val) {
+    if (key === 'outcomeValue') {
+      return '$' + Math.round(val).toLocaleString('en-US');
+    }
+    return Math.round(val).toLocaleString('en-US');
+  }
+
+  function fill(data) {
+    ['sessions', 'households', 'outcomeValue'].forEach(function (key) {
+      document.querySelectorAll('[data-stat="' + key + '"]').forEach(function (el) {
+        el.textContent = fmt(key, data[key]);
+      });
+    });
+  }
+
+  fetch(API)
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(fill)
+    .catch(function () { /* silently leave placeholder text in place */ });
+})();
+</script>
