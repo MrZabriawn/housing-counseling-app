@@ -1401,7 +1401,8 @@ function renderMetrics() {
   document.getElementById('mxOverviewBody').innerHTML = overviewHtml + '</div>';
 
   // ── Closures ─────────────────────────────────────────────────────────────
-  const closedClients = clients.filter(c => {
+  // Use allClients so this section works regardless of the status filter.
+  const closedClients = allClients.filter(c => {
     if (c.status !== 'closed' || !c.closureDate) return false;
     const d = toDate(c.closureDate);
     if (start && d < start) return false;
