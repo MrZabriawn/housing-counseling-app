@@ -1,6 +1,6 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav } from './auth.js?v=2';
-import { MONTHS, amiCategory } from './data.js';
+import { MONTHS, amiCategory, reCodeDisplay } from './data.js';
 import {
   collection, collectionGroup, getDocs, query, orderBy, where
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -201,10 +201,27 @@ async function loadDashboard() {
     return name && !sessionNames.has(name);
   });
 
-  renderStats([...sessionRows, ...legacyOnly], totalHours);
+  // Compute closed clients, filtered by the same date range applied to closureDate
+  const closedClients = clientsSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(c => {
+      if (c.status !== 'closed' || !c.closureDate) return false;
+      const d = toDate(c.closureDate);
+      if (hasDateRange) {
+        if (start && d < start) return false;
+        if (end   && d > end)   return false;
+      } else if (monthVal || yearVal) {
+        if (monthVal && MONTHS[d.getMonth()] !== monthVal) return false;
+        if (yearVal  && d.getFullYear() !== yearVal) return false;
+      }
+      if (counselorVal && (c.counselor || '').trim().toLowerCase() !== counselorVal.toLowerCase()) return false;
+      return true;
+    });
+
+  renderStats([...sessionRows, ...legacyOnly], totalHours, closedClients);
 }
 
-function renderStats(rows, totalHours) {
+function renderStats(rows, totalHours, closedClients = []) {
   const unique = uniqueHouseholds(rows);
 
   document.getElementById('statHouseholds').textContent = unique.length;
@@ -222,9 +239,26 @@ function renderStats(rows, totalHours) {
   document.getElementById('statHispanic').textContent = unique.filter(r => r.hispanic).length;
 
   renderBreakdown('amiTable',       'amiPercent',     unique.map(r => ({ ...r, amiPercent: amiCategory(r.amiPercent) })));
-  renderBreakdown('reTable',        'reCode',         unique);
+  renderBreakdown('reTable',        'reCode',         unique.map(r => ({ ...r, reCode: reCodeDisplay(r.reCode) })));
   renderBreakdown('typeTable',      'counselingType', rows);
   renderBreakdown('counselorTable', 'counselor',      rows);
+
+  // Closures stats
+  const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const directAmt = closedClients.reduce((s, c) => {
+    if (c.closureAwardType !== 'Direct Assistance') return s;
+    if ((c.closureOutcome || '').startsWith('Purchased')) return s;
+    return s + (Number(c.closureOutcomeValue) || 0);
+  }, 0);
+  const totalAmt = closedClients.reduce((s, c) => s + (Number(c.closureOutcomeValue) || 0), 0);
+
+  document.getElementById('statClosures').textContent   = closedClients.length;
+  document.getElementById('statDirectAmt').textContent  = fmt(directAmt);
+  document.getElementById('statOutcomeAmt').textContent = fmt(totalAmt);
+
+  renderBreakdown('closureTypeTable',    'counselingType',    closedClients);
+  renderBreakdown('closureAwardTable',   'closureAwardType',  closedClients);
+  renderBreakdown('closureOutcomeTable', 'closureOutcome',    closedClients);
 }
 
 function renderBreakdown(tableId, field, rows) {

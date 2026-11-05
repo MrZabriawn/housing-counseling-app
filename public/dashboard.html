@@ -109,6 +109,45 @@
         </table>
       </div>
     </div>
+
+    <!-- Closures section -->
+    <div style="margin-top:1.75rem;">
+      <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0 0 0.75rem;">Closures</h3>
+      <div class="stat-grid" style="margin-bottom:1rem;">
+        <div class="stat-card">
+          <div class="stat-label">Files Closed</div>
+          <div class="stat-value" id="statClosures">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Direct Assistance</div>
+          <div class="stat-value" id="statDirectAmt">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Outcome Value</div>
+          <div class="stat-value" id="statOutcomeAmt">—</div>
+        </div>
+      </div>
+      <div class="breakdown-grid">
+        <div class="breakdown-card">
+          <h4>Closures by Counseling Type</h4>
+          <table id="closureTypeTable">
+            <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="breakdown-card">
+          <h4>Closures by Award Type</h4>
+          <table id="closureAwardTable">
+            <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="breakdown-card">
+          <h4>Closures by Outcome</h4>
+          <table id="closureOutcomeTable">
+            <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script type="module" src="js/dashboard.js"></script>
