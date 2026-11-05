@@ -1400,6 +1400,61 @@ function renderMetrics() {
 
   document.getElementById('mxOverviewBody').innerHTML = overviewHtml + '</div>';
 
+  // ── Closures ─────────────────────────────────────────────────────────────
+  const closedClients = clients.filter(c => {
+    if (c.status !== 'closed' || !c.closureDate) return false;
+    const d = toDate(c.closureDate);
+    if (start && d < start) return false;
+    if (end   && d > end)   return false;
+    return true;
+  });
+  const closureTotal = closedClients.length;
+
+  // By counseling type
+  const closureByType = {};
+  closedClients.forEach(c => {
+    const k = c.counselingType || '(none)';
+    closureByType[k] = (closureByType[k] || 0) + 1;
+  });
+
+  // By award type
+  const closureByAward = {};
+  closedClients.forEach(c => {
+    const k = c.closureAwardType || '(none)';
+    closureByAward[k] = (closureByAward[k] || 0) + 1;
+  });
+
+  // Outcome value from closed cases in period
+  const closureValue = closedClients.reduce((s, c) => s + (Number(c.closureOutcomeValue) || 0), 0);
+  const directValue  = closedClients
+    .filter(c => c.closureAwardType === 'Direct Assistance' && !(c.closureOutcome || '').startsWith('Purchased'))
+    .reduce((s, c) => s + (Number(c.closureOutcomeValue) || 0), 0);
+
+  const fmtMoney = n => '$' + Math.round(n).toLocaleString('en-US');
+
+  let closuresHtml = `<div class="mx-stat-row">${
+    mxStat('Files Closed', closureTotal) +
+    (directValue > 0 ? mxStat('Direct Assistance', fmtMoney(directValue)) : '') +
+    (closureValue > 0 && closureValue !== directValue ? mxStat('Total Outcome Value', fmtMoney(closureValue)) : '')
+  }</div>`;
+
+  if (closureTotal > 0) {
+    closuresHtml += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:0.75rem;">
+      <div>
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.4rem;">By Counseling Type</div>
+        ${mxBarTable(Object.entries(closureByType).sort((a,b) => b[1]-a[1]), closureTotal)}
+      </div>
+      <div>
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.4rem;">By Award Type</div>
+        ${mxBarTable(Object.entries(closureByAward).sort((a,b) => b[1]-a[1]), closureTotal)}
+      </div>
+    </div>`;
+  } else {
+    closuresHtml += `<p style="color:var(--text-muted);font-size:0.875rem;margin-top:0.5rem;">No closures in this period.</p>`;
+  }
+
+  document.getElementById('mxClosuresBody').innerHTML = closuresHtml;
+
   // ── Sessions & Hours ─────────────────────────────────────────────────────
   const totalSessions = sessions.length;
   const totalHours    = sessions.reduce((s, r) => s + (Number(r.hours) || 0), 0);
