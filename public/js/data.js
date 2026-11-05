@@ -21,17 +21,29 @@ export function amiCategory(val) {
   const legacyMap = {
     'extremely low':        'Extremely Low Income',
     'extremely low income': 'Extremely Low Income',
+    '0-30%':                'Extremely Low Income',
+    '<30%':                 'Extremely Low Income',
     'very low':             'Very Low Income',
     'very low income':      'Very Low Income',
     'low':                  'Very Low Income',    // old ≤50% bucket
+    '30-49%':               'Very Low Income',
+    '30-50%':               'Very Low Income',
+    '31-50%':               'Very Low Income',
     'low income':           'Low Income',
     'moderate':             'Low Income',         // old ≤80% bucket
     'low-moderate':         'Low Income',
+    '50-79%':               'Low Income',
+    '51-80%':               'Low Income',
+    '50-80%':               'Low Income',
     'non low-moderate':     'Non Low-Moderate',
     'non low moderate':     'Non Low-Moderate',
     'non-moderate':         'Non Low-Moderate',
     'non moderate':         'Non Low-Moderate',
     'above moderate':       'Non Low-Moderate',
+    '80-100%':              'Non Low-Moderate',
+    '100+%':                'Non Low-Moderate',
+    '>80%':                 'Non Low-Moderate',
+    'above 80%':            'Non Low-Moderate',
   };
   return legacyMap[s] || String(val);
 }
