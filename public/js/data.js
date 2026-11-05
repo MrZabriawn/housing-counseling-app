@@ -108,6 +108,11 @@ export const RE_CODE_LABELS = {
   'Other Multi-Racial (Code 20)':                       'Other Multi-Racial (Code 20)'
 };
 
+// Strip " (Code XX)" suffix for display — stored values keep the full string
+export function reCodeDisplay(val) {
+  return (val || '').replace(/\s*\(Code\s*\d+\)\s*$/i, '').trim() || val;
+}
+
 export const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'

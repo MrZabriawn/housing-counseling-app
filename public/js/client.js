@@ -1158,8 +1158,10 @@ function openEditSession(sessionId) {
   document.getElementById('sCounselor').value    = session.counselor || '';
   populateRxDropdown(session.rxNumber || '', session.rxGuarantor || '');
   document.getElementById('sHudType').value      = session.hudType   || 'counseling';
-  document.getElementById('sHours').value        = session.hours     || '';
-  document.getElementById('sDollarsFor').value   = session.dollarsFor  || '';
+  document.getElementById('sHours').value          = session.hours          || '';
+  document.getElementById('sDollarsAwarded').value = session.dollarsAwarded > 0 ? session.dollarsAwarded : '';
+  document.getElementById('sAwardType').value      = session.awardType      || '';
+  document.getElementById('sDollarsFor').value     = session.dollarsFor     || '';
   document.getElementById('sCaseStatus').value   = session.caseStatus  || '';
   document.getElementById('sOutcome').value      = session.outcome     || '';
   document.getElementById('sNotes').value        = session.notes       || '';
@@ -1171,7 +1173,7 @@ function openEditSession(sessionId) {
 
 function clearSessionModal() {
   ['sCounselingType','sDate','sCounselor','sHours',
-   'sDollarsFor','sCaseStatus','sOutcome','sNotes'].forEach(id => {
+   'sDollarsAwarded','sAwardType','sDollarsFor','sCaseStatus','sOutcome','sNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1254,8 +1256,10 @@ function readSessionForm() {
     rxNumber,
     rxGuarantor,   // guarantor is session-level (per individual session)
     hudType:    document.getElementById('sHudType').value,
-    hours:      parseFloat(document.getElementById('sHours').value) || 0,
-    dollarsFor: document.getElementById('sDollarsFor').value.trim(),
+    hours:          parseFloat(document.getElementById('sHours').value) || 0,
+    dollarsAwarded: parseFloat(document.getElementById('sDollarsAwarded').value) || 0,
+    awardType:      document.getElementById('sAwardType').value,
+    dollarsFor:     document.getElementById('sDollarsFor').value.trim(),
     caseStatus: document.getElementById('sCaseStatus').value.trim(),
     outcome:    document.getElementById('sOutcome').value.trim(),
     notes:      document.getElementById('sNotes').value.trim(),

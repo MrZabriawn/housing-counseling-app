@@ -1,7 +1,7 @@
 ﻿import { db } from './firebase-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
-import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, BILLING_TYPES, RX_GUARANTORS, amiCategory, amiDisplayLabel } from './data.js';
+import { COUNSELING_TYPES, AMI_LEVELS, RE_CODES, MONTHS, BILLING_TYPES, RX_GUARANTORS, amiCategory, amiDisplayLabel, reCodeDisplay } from './data.js';
 import {
   collection, collectionGroup, getDocs, addDoc, query, orderBy, serverTimestamp,
   writeBatch, doc, updateDoc,
@@ -650,7 +650,7 @@ function renderStats(clients) {
     '$' + dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   renderBreakdown('amiTable',      'amiLabel',       clients.map(c => ({ ...c, amiLabel: c.amiLabel || amiCategory(c.amiPercent) })));
-  renderBreakdown('reTable',       'reCode',         clients);
+  renderBreakdown('reTable',       'reCode',         clients.map(c => ({ ...c, reCode: reCodeDisplay(c.reCode) })));
   renderBreakdown('typeTable',     'counselingType', clients);
   renderCounselorSessionBreakdown(clients);
 }
