@@ -73,6 +73,11 @@
         </div>
       </div>
 
+      <div style="margin-bottom:1rem;">
+        <p style="font-size:0.8rem;font-weight:700;margin:0 0 0.5rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Notes / Additional Instructions</p>
+        <textarea id="intakeNotes" rows="3" placeholder="Any additional instructions or notes for the client…" style="width:100%;font-size:0.875rem;resize:vertical;"></textarea>
+      </div>
+
       <div style="display:flex;gap:0.5rem;">
         <button class="btn btn-primary" id="printConfirmBtn">Print Confirmation Letter</button>
       </div>
@@ -124,6 +129,8 @@
         : '_______________';
       const todayStr = new Date().toLocaleDateString('en-US');
 
+      const notesText = document.getElementById('intakeNotes').value.trim();
+
       const checkedItems = [...document.querySelectorAll('#intakeChecklist input[type="checkbox"]')]
         .map(cb => ({ checked: cb.checked, text: cb.dataset.item }));
 
@@ -171,7 +178,8 @@
 <table style="margin-bottom:20px;">
   ${checklistRows}
 </table>
-<p><strong>Housing Opportunities of Beaver County does not charge a fee for counseling services.*</strong></p>
+${notesText ? `<p><strong>Additional Instructions:</strong> ${notesText}</p><br>` : ''}
+<p><strong>Housing Opportunities does not charge a fee for counseling services.*</strong></p>
 <p>* If applicable a $5 fee would apply to notarized documents.</p>
 <br><br>
 <p>Sincerely,</p>
