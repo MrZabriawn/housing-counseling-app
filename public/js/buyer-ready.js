@@ -15,6 +15,10 @@ let _editingRecord = null;
 let _editingAreas  = [];
 let _workshops       = [];
 let _workshopsLoaded = false;
+let _clientSig       = null;  // base64 PNG data URL or null
+let _repSig          = null;
+let _clientSigDate   = null;  // ISO timestamp when first signed
+let _repSigDate      = null;
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'buyer-ready');
@@ -81,6 +85,15 @@ requireAuth(async (user, profile) => {
   });
 
   document.getElementById('ccaPrintDpaBtn').addEventListener('click', printDpaApplication);
+
+  initSigPad('clientSigCanvas', 'clearClientSigBtn',
+    sig  => { _clientSig = sig; if (!_clientSigDate) _clientSigDate = new Date().toISOString(); updateSigDateLabel('clientSigDateLabel', _clientSigDate); },
+    ()   => { _clientSig = null; _clientSigDate = null; updateSigDateLabel('clientSigDateLabel', null); }
+  );
+  initSigPad('repSigCanvas', 'clearRepSigBtn',
+    sig  => { _repSig = sig; if (!_repSigDate) _repSigDate = new Date().toISOString(); updateSigDateLabel('repSigDateLabel', _repSigDate); },
+    ()   => { _repSig = null; _repSigDate = null; updateSigDateLabel('repSigDateLabel', null); }
+  );
 });
 
 // ── Render table ──────────────────────────────────────────────────────────────
@@ -169,6 +182,79 @@ function render() {
   });
 }
 
+// ── Signature pad ─────────────────────────────────────────────────────────────
+
+function initSigPad(canvasId, clearBtnId, onSign, onClear) {
+  const canvas = document.getElementById(canvasId);
+  const ctx    = canvas.getContext('2d');
+  let drawing  = false;
+
+  function pos(e) {
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src    = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+
+  function start(e) { e.preventDefault(); drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+
+  function draw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+    ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  }
+
+  function end(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    drawing = false;
+    ctx.beginPath();
+    // Capture with white background
+    const tmp = document.createElement('canvas');
+    tmp.width = canvas.width; tmp.height = canvas.height;
+    const tCtx = tmp.getContext('2d');
+    tCtx.fillStyle = '#fff';
+    tCtx.fillRect(0, 0, tmp.width, tmp.height);
+    tCtx.drawImage(canvas, 0, 0);
+    onSign(tmp.toDataURL('image/png'));
+  }
+
+  canvas.addEventListener('mousedown',  start);
+  canvas.addEventListener('mousemove',  draw);
+  canvas.addEventListener('mouseup',    end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove',  draw,  { passive: false });
+  canvas.addEventListener('touchend',   end,   { passive: false });
+
+  document.getElementById(clearBtnId).addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onClear();
+  });
+}
+
+function loadSigToCanvas(canvasId, dataUrl) {
+  const canvas = document.getElementById(canvasId);
+  const ctx    = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!dataUrl) return;
+  const img = new Image();
+  img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.src = dataUrl;
+}
+
+function updateSigDateLabel(elId, isoDate) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = isoDate
+    ? 'Signed ' + new Date(isoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+}
+
 // ── Workshops loader ──────────────────────────────────────────────────────────
 
 async function loadWorkshops() {
@@ -253,6 +339,16 @@ function openEditModal(id) {
   document.getElementById('editWorkshopId').value          = r.dpaWorkshopId   || '';
   document.getElementById('editWorkshopDateManual').value  = r.dpaWorkshopDate || '';
   document.getElementById('editLoanType').value            = r.dpaLoanType     || '';
+
+  // Signatures
+  _clientSig     = r.dpaClientSig     || null;
+  _repSig        = r.dpaRepSig        || null;
+  _clientSigDate = r.dpaClientSigDate || null;
+  _repSigDate    = r.dpaRepSigDate    || null;
+  loadSigToCanvas('clientSigCanvas', _clientSig);
+  loadSigToCanvas('repSigCanvas',    _repSig);
+  updateSigDateLabel('clientSigDateLabel', _clientSigDate);
+  updateSigDateLabel('repSigDateLabel',    _repSigDate);
 
   if (r.clientId) {
     const anchor = document.getElementById('ccaClientAnchor');
@@ -351,6 +447,10 @@ async function saveEdit() {
       dpaWorkshopDate:     document.getElementById('editWorkshopDateManual').value || '',
       dpaWorkshopName:     (() => { const ws = _workshops.find(w => w.id === document.getElementById('editWorkshopId').value); return ws?.title || ''; })(),
       dpaLoanType:         document.getElementById('editLoanType').value || '',
+      dpaClientSig:        _clientSig     || null,
+      dpaRepSig:           _repSig        || null,
+      dpaClientSigDate:    _clientSigDate || null,
+      dpaRepSigDate:       _repSigDate    || null,
       updatedAt:       serverTimestamp(),
       ...closureFields,
     };
@@ -689,6 +789,13 @@ async function printDpaApplication() {
 
   const blank = (w = 180) => `<span style="display:inline-block;border-bottom:1px solid #000;min-width:${w}px;">&nbsp;</span>`;
 
+  const sigImg = (dataUrl, w = 180) => dataUrl
+    ? `<img src="${dataUrl}" style="max-width:${w}px;max-height:50px;vertical-align:bottom;border-bottom:1px solid #000;">`
+    : blank(w);
+  const sigDate = isoDate => isoDate
+    ? new Date(isoDate).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+    : '';
+
   const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <title>DPA Application — ${name}</title>
@@ -764,9 +871,9 @@ async function printDpaApplication() {
 <p>This serves as an acknowledgment by the Client of all the requirements and conditions of the Home Ownership Initiative. Client's participation is contingent upon meeting these requirements and conditions. HOI reserves the right to make final decisions regarding grant allocation and program eligibility.</p>
 
 <div class="sig-block">
-  <p>Client Signature: ${blank(220)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+  <p>Client Signature: ${sigImg(_clientSig, 220)} &nbsp;&nbsp; Date: ${sigDate(_clientSigDate) || blank(100)}</p>
   <br>
-  <p>HOI Representative Signature: ${blank(200)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+  <p>HOI Representative Signature: ${sigImg(_repSig, 200)} &nbsp;&nbsp; Date: ${sigDate(_repSigDate) || blank(100)}</p>
 </div>
 
 <div class="page-break"></div>
@@ -794,7 +901,7 @@ async function printDpaApplication() {
 <p style="margin-top:0.75rem;">By signing below, I, ${blank(160)}, consent to be featured in marketing materials if chosen as a grant recipient, and authorize the use of my name, image, &amp; story.</p>
 
 <div class="sig-block">
-  <p>Applicant Signature: ${blank(220)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+  <p>Applicant Signature: ${sigImg(_clientSig, 220)} &nbsp;&nbsp; Date: ${sigDate(_clientSigDate) || blank(100)}</p>
 </div>
 
 <script>window.addEventListener('load', () => window.print());<\/script>

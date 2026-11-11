@@ -236,6 +236,29 @@
                 <option value="Other">Other</option>
               </select>
             </div>
+
+            <!-- Signature pads -->
+            <div style="padding-top:0.75rem;border-top:1px solid var(--border);">
+              <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin:0 0 0.5rem;">Signatures</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div>
+                  <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Client</label>
+                  <canvas id="clientSigCanvas" width="400" height="120" style="border:1px solid var(--border);border-radius:4px;display:block;width:100%;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
+                  <div style="display:flex;gap:0.5rem;margin-top:0.3rem;align-items:center;">
+                    <button type="button" id="clearClientSigBtn" class="btn btn-secondary btn-sm">Clear</button>
+                    <span id="clientSigDateLabel" style="font-size:0.75rem;color:var(--text-muted);"></span>
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">HOI Representative</label>
+                  <canvas id="repSigCanvas" width="400" height="120" style="border:1px solid var(--border);border-radius:4px;display:block;width:100%;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
+                  <div style="display:flex;gap:0.5rem;margin-top:0.3rem;align-items:center;">
+                    <button type="button" id="clearRepSigBtn" class="btn btn-secondary btn-sm">Clear</button>
+                    <span id="repSigDateLabel" style="font-size:0.75rem;color:var(--text-muted);"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
