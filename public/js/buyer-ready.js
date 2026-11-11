@@ -13,6 +13,8 @@ let _allClients  = [];
 let editingId    = null;
 let _editingRecord = null;
 let _editingAreas  = [];
+let _workshops       = [];
+let _workshopsLoaded = false;
 
 requireAuth(async (user, profile) => {
   setupNav(profile, 'buyer-ready');
@@ -65,6 +67,20 @@ requireAuth(async (user, profile) => {
     dateInput.disabled = e.target.checked;
     if (e.target.checked) dateInput.value = '';
   });
+
+  document.getElementById('editWorkshopAttended').addEventListener('change', e => {
+    document.getElementById('workshopSection').classList.toggle('hidden', !e.target.checked);
+  });
+
+  document.getElementById('editWorkshopId').addEventListener('change', e => {
+    const ws = _workshops.find(w => w.id === e.target.value);
+    if (ws?.date) {
+      const d = ws.date.toDate ? ws.date.toDate() : new Date(ws.date);
+      document.getElementById('editWorkshopDateManual').value = d.toISOString().split('T')[0];
+    }
+  });
+
+  document.getElementById('ccaPrintDpaBtn').addEventListener('click', printDpaApplication);
 });
 
 // ── Render table ──────────────────────────────────────────────────────────────
@@ -153,6 +169,27 @@ function render() {
   });
 }
 
+// ── Workshops loader ──────────────────────────────────────────────────────────
+
+async function loadWorkshops() {
+  if (_workshopsLoaded) return;
+  _workshopsLoaded = true;
+  try {
+    const snap = await getDocs(query(collection(db, 'workshops'), orderBy('date', 'desc')));
+    _workshops = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (_) { _workshops = []; }
+
+  const sel = document.getElementById('editWorkshopId');
+  sel.innerHTML = '<option value="">— Select —</option>';
+  _workshops.forEach(w => {
+    const d = w.date?.toDate ? w.date.toDate() : (w.date ? new Date(w.date) : null);
+    const label = w.title + (d ? ' — ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+    const o = document.createElement('option');
+    o.value = w.id; o.textContent = label;
+    sel.appendChild(o);
+  });
+}
+
 // ── Edit modal ────────────────────────────────────────────────────────────────
 
 function toggleClosureSection() {
@@ -207,6 +244,15 @@ function openEditModal(id) {
   document.getElementById('editClosingDate').value    = naChecked ? '' : toDateInput(r.closingDate);
 
   renderEditingChips();
+
+  // DPA fields
+  loadWorkshops();
+  const wsAttended = !!r.dpaWorkshopAttended;
+  document.getElementById('editWorkshopAttended').checked = wsAttended;
+  document.getElementById('workshopSection').classList.toggle('hidden', !wsAttended);
+  document.getElementById('editWorkshopId').value          = r.dpaWorkshopId   || '';
+  document.getElementById('editWorkshopDateManual').value  = r.dpaWorkshopDate || '';
+  document.getElementById('editLoanType').value            = r.dpaLoanType     || '';
 
   if (r.clientId) {
     const anchor = document.getElementById('ccaClientAnchor');
@@ -300,6 +346,11 @@ async function saveEdit() {
       closingDate:     (!naChecked && dateVal) ? new Date(dateVal + 'T12:00:00') : null,
       ccaAmount:       parseFloat(document.getElementById('editCcaAmount').value) || 0,
       notes:           document.getElementById('editCcaNotes').value.trim(),
+      dpaWorkshopAttended: document.getElementById('editWorkshopAttended').checked,
+      dpaWorkshopId:       document.getElementById('editWorkshopId').value || '',
+      dpaWorkshopDate:     document.getElementById('editWorkshopDateManual').value || '',
+      dpaWorkshopName:     (() => { const ws = _workshops.find(w => w.id === document.getElementById('editWorkshopId').value); return ws?.title || ''; })(),
+      dpaLoanType:         document.getElementById('editLoanType').value || '',
       updatedAt:       serverTimestamp(),
       ...closureFields,
     };
@@ -598,4 +649,159 @@ function esc(str) {
 function toTitleCase(str) {
   if (!str) return str;
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// ── Print DPA Application ─────────────────────────────────────────────────────
+
+async function printDpaApplication() {
+  if (!editingId) return;
+  const r = _editingRecord || {};
+
+  // Pull extra fields from linked client profile
+  let client = {};
+  if (r.clientId) {
+    try {
+      const snap = await getDoc(doc(db, 'clients', r.clientId));
+      if (snap.exists()) client = snap.data();
+    } catch (_) {}
+  }
+
+  const name    = toTitleCase(r.clientName || '');
+  const addr    = esc(client.streetAddress || '');
+  const city    = esc(client.city          || '');
+  const zip     = esc(client.zipCode       || '');
+  const phone   = esc(client.homePhone || client.cellPhone || client.workPhone || '');
+  const email   = esc(client.email         || '');
+
+  const wsDate  = r.dpaWorkshopAttended && r.dpaWorkshopDate
+    ? new Date(r.dpaWorkshopDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+    : '';
+
+  const loanType  = r.dpaLoanType || '';
+  const loanTypes = ['Conventional','FHA','VA','USDA','Other'];
+  const loanBoxes = loanTypes.map(t =>
+    `<span style="margin-right:1.2rem;">[${t === loanType ? 'X' : '&nbsp;'}] ${t}</span>`
+  ).join('');
+
+  const purchasePrice = r.closureOutcomeValue ? '$' + Number(r.closureOutcomeValue).toLocaleString('en-US') : '';
+  const loanAmt       = r.loanAmount          ? '$' + Number(r.loanAmount).toLocaleString('en-US')          : '';
+  const lender        = esc(r.lenderName      || '');
+
+  const blank = (w = 180) => `<span style="display:inline-block;border-bottom:1px solid #000;min-width:${w}px;">&nbsp;</span>`;
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>DPA Application — ${name}</title>
+<style>
+  @page { margin: 0.75in; size: letter portrait; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; }
+  h2 { font-size: 10.5pt; font-weight: bold; margin: 1rem 0 0.3rem; }
+  p { margin: 0.35rem 0; line-height: 1.5; }
+  .page-break { page-break-after: always; height: 0; }
+  table.hh { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+  table.hh th, table.hh td { border: 1px solid #000; padding: 0.3rem 0.5rem; }
+  table.hh th { background: #f0f0f0; font-weight: bold; text-align: left; }
+  .sig-block { margin-top: 2rem; }
+  .req-para { margin: 0.6rem 0; }
+  .req-para strong { font-weight: bold; }
+  ul { margin: 0.4rem 0 0.4rem 1.5rem; }
+  ul li { margin: 0.2rem 0; }
+</style>
+</head><body>
+
+<!-- ══ Page 1: Applicant Information ══ -->
+<div style="text-align:center;margin-bottom:0.75rem;border-bottom:2px solid #000;padding-bottom:0.5rem;">
+  <div style="font-size:20pt;font-weight:900;letter-spacing:0.02em;line-height:1.1;">HOUSING</div>
+  <div style="font-size:12pt;letter-spacing:0.08em;">OPPORTUNITIES INC.</div>
+</div>
+<p style="text-align:center;font-weight:bold;text-decoration:underline;font-size:11pt;margin-bottom:1rem;">
+  Home Ownership Initiative Down Payment Assistance Application Form
+</p>
+
+<h2>Applicant Information:</h2>
+<p style="font-size:9pt;font-style:italic;">(All information provided will be kept confidential.)</p>
+
+<p>Full Name: ${name ? `<strong>${name}</strong>` : blank(280)}</p>
+<p>Date of Birth (MM/DD/YYYY): ${blank(130)} &nbsp;&nbsp;&nbsp; Social Security Number: ${blank(130)}</p>
+<p>Current Address: ${addr ? `<strong>${addr}</strong>` : blank(300)}</p>
+<p>City: ${city ? `<strong>${city}</strong>` : blank(130)} &nbsp; State: ${blank(50)} &nbsp; Zip Code: ${zip ? `<strong>${zip}</strong>` : blank(80)}</p>
+<p>Phone Number: ${phone ? `<strong>${phone}</strong>` : blank(140)} &nbsp;&nbsp;&nbsp; Email Address: ${email ? `<strong>${email}</strong>` : blank(160)}</p>
+<p>Marital Status: &nbsp; [ ] Single &nbsp; [ ] Married &nbsp; [ ] Divorced &nbsp; [ ] Widowed</p>
+<p>Number of Dependents (including yourself): ${blank(70)}</p>
+
+<h2>Household Information:</h2>
+<p style="font-size:9pt;font-style:italic;">(Please list all individuals who will be living in the home, including yourself.)</p>
+<table class="hh">
+  <thead><tr><th style="width:42%;">Name</th><th style="width:36%;">Relationship</th><th style="width:22%;">Age</th></tr></thead>
+  <tbody>
+    ${Array(5).fill('<tr><td style="height:1.4em;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>').join('')}
+  </tbody>
+</table>
+<p style="font-size:9pt;font-style:italic;">(Attach an additional sheet if necessary.)</p>
+<p>Total Annual Household Income: $${blank(150)}</p>
+
+<div class="page-break"></div>
+
+<!-- ══ Page 2: Program Requirements ══ -->
+<h2>Program Requirements</h2>
+
+<p class="req-para"><strong>Mandatory Counseling and Workshop Attendance:</strong> Client agrees to attend mandatory counseling sessions and workshops as outlined by HOI, understanding these are essential for program eligibility.</p>
+<p>Date of Workshop Attended: ${wsDate ? `<strong>${wsDate}</strong>` : blank(180)}</p>
+
+<p class="req-para"><strong>Application and Documentation:</strong> Client will complete all necessary applications and provide required documentation to support their eligibility for the Home Ownership Initiative.</p>
+
+<p class="req-para"><strong>Asset Test Compliance:</strong> Client will comply with the asset test, ensuring liquid assets do not exceed the specified limit post-closing.</p>
+
+<p class="req-para"><strong>Mandatory Home Inspections:</strong> Client agrees to arrange and complete mandatory home inspections within the stipulated time constraints.</p>
+
+<p class="req-para"><strong>Understanding of Financial Assistance:</strong> Client acknowledges that financial assistance through the Home Ownership Initiative includes grants that are subject to specific criteria.</p>
+
+<p class="req-para"><strong>No Guarantee of Funds:</strong> Client understands that applying for and meeting the eligibility criteria does not guarantee the receipt of funds. Availability of funds can fluctuate based on a number of factors including, but not limited to, funding cycles.</p>
+
+<p class="req-para"><strong>Closing Process Compliance:</strong> Client agrees to comply with the closing process requirements, including signing necessary documents.</p>
+
+<h2>Acknowledgment:</h2>
+<p>This serves as an acknowledgment by the Client of all the requirements and conditions of the Home Ownership Initiative. Client's participation is contingent upon meeting these requirements and conditions. HOI reserves the right to make final decisions regarding grant allocation and program eligibility.</p>
+
+<div class="sig-block">
+  <p>Client Signature: ${blank(220)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+  <br>
+  <p>HOI Representative Signature: ${blank(200)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ══ Page 3: Home Purchase Information ══ -->
+<h2>Home Purchase Information:</h2>
+
+<p>Property Address: ${blank(340)}</p>
+<p>City: ${blank(130)} &nbsp; State: ${blank(50)} &nbsp; Zip Code: ${blank(80)}</p>
+<p>Purchase Price: ${purchasePrice ? `<strong>${purchasePrice}</strong>` : blank(130)} &nbsp;&nbsp;&nbsp; Loan Amount: ${loanAmt ? `<strong>${loanAmt}</strong>` : blank(130)}</p>
+<p>Loan Type: ${loanBoxes}</p>
+<p>Mortgage Lender: ${lender ? `<strong>${lender}</strong>` : blank(280)}</p>
+
+<h2>Required Documentation:</h2>
+<p>Please attach the following documents to your application:</p>
+<ul>
+  <li>Proof of income for all household members</li>
+  <li>Mortgage pre-approval letter from a qualified lender</li>
+  <li>Copy of signed Purchase and Sales Agreement</li>
+  <li>Certificate of completion for a homeownership education course</li>
+</ul>
+
+<p style="margin-top:1rem;">By signing below, I, ${blank(220)} affirm that all information provided in this application and attached documentation is true and accurate to the best of my knowledge. I understand that any false or misleading information may result in disqualification from the Home Ownership Initiative Down Payment Assistance Program.</p>
+
+<p style="margin-top:0.75rem;">By signing below, I, ${blank(160)}, consent to be featured in marketing materials if chosen as a grant recipient, and authorize the use of my name, image, &amp; story.</p>
+
+<div class="sig-block">
+  <p>Applicant Signature: ${blank(220)} &nbsp;&nbsp; Date: ${blank(100)}</p>
+</div>
+
+<script>window.addEventListener('load', () => window.print());<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups to print.'); return; }
+  win.document.write(html);
+  win.document.close();
 }
