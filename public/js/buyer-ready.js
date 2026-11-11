@@ -86,11 +86,11 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('ccaPrintDpaBtn').addEventListener('click', printDpaApplication);
 
-  initSigPad('clientSigCanvas', 'clearClientSigBtn',
+  initSigPad('clientSigCanvas', 'clientSigText', 'clearClientSigBtn',
     sig  => { _clientSig = sig; if (!_clientSigDate) _clientSigDate = new Date().toISOString(); updateSigDateLabel('clientSigDateLabel', _clientSigDate); },
     ()   => { _clientSig = null; _clientSigDate = null; updateSigDateLabel('clientSigDateLabel', null); }
   );
-  initSigPad('repSigCanvas', 'clearRepSigBtn',
+  initSigPad('repSigCanvas', 'repSigText', 'clearRepSigBtn',
     sig  => { _repSig = sig; if (!_repSigDate) _repSigDate = new Date().toISOString(); updateSigDateLabel('repSigDateLabel', _repSigDate); },
     ()   => { _repSig = null; _repSigDate = null; updateSigDateLabel('repSigDateLabel', null); }
   );
@@ -184,10 +184,32 @@ function render() {
 
 // ── Signature pad ─────────────────────────────────────────────────────────────
 
-function initSigPad(canvasId, clearBtnId, onSign, onClear) {
-  const canvas = document.getElementById(canvasId);
-  const ctx    = canvas.getContext('2d');
-  let drawing  = false;
+function captureSig(canvas) {
+  const tmp = document.createElement('canvas');
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  const tCtx = tmp.getContext('2d');
+  tCtx.fillStyle = '#fff';
+  tCtx.fillRect(0, 0, tmp.width, tmp.height);
+  tCtx.drawImage(canvas, 0, 0);
+  return tmp.toDataURL('image/png');
+}
+
+function renderTextToCanvas(canvas, text) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!text) return;
+  const fontSize = Math.min(canvas.height * 0.52, 56);
+  ctx.font = `italic ${fontSize}px 'Brush Script MT', 'Comic Sans MS', cursive`;
+  ctx.fillStyle = '#111';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 12, canvas.height / 2);
+}
+
+function initSigPad(canvasId, textInputId, clearBtnId, onSign, onClear) {
+  const canvas    = document.getElementById(canvasId);
+  const textInput = document.getElementById(textInputId);
+  const ctx       = canvas.getContext('2d');
+  let drawing     = false;
 
   function pos(e) {
     const rect   = canvas.getBoundingClientRect();
@@ -197,7 +219,13 @@ function initSigPad(canvasId, clearBtnId, onSign, onClear) {
     return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
   }
 
-  function start(e) { e.preventDefault(); drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+  function start(e) {
+    e.preventDefault();
+    // Clear typed name when user starts drawing
+    if (textInput.value) { textInput.value = ''; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    drawing = true;
+    const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  }
 
   function draw(e) {
     if (!drawing) return;
@@ -213,14 +241,7 @@ function initSigPad(canvasId, clearBtnId, onSign, onClear) {
     e.preventDefault();
     drawing = false;
     ctx.beginPath();
-    // Capture with white background
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width; tmp.height = canvas.height;
-    const tCtx = tmp.getContext('2d');
-    tCtx.fillStyle = '#fff';
-    tCtx.fillRect(0, 0, tmp.width, tmp.height);
-    tCtx.drawImage(canvas, 0, 0);
-    onSign(tmp.toDataURL('image/png'));
+    onSign(captureSig(canvas));
   }
 
   canvas.addEventListener('mousedown',  start);
@@ -231,8 +252,18 @@ function initSigPad(canvasId, clearBtnId, onSign, onClear) {
   canvas.addEventListener('touchmove',  draw,  { passive: false });
   canvas.addEventListener('touchend',   end,   { passive: false });
 
+  textInput.addEventListener('input', () => {
+    renderTextToCanvas(canvas, textInput.value.trim());
+    if (textInput.value.trim()) {
+      onSign(captureSig(canvas));
+    } else {
+      onClear();
+    }
+  });
+
   document.getElementById(clearBtnId).addEventListener('click', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    textInput.value = '';
     onClear();
   });
 }
@@ -347,6 +378,8 @@ function openEditModal(id) {
   _repSigDate    = r.dpaRepSigDate    || null;
   loadSigToCanvas('clientSigCanvas', _clientSig);
   loadSigToCanvas('repSigCanvas',    _repSig);
+  document.getElementById('clientSigText').value = '';
+  document.getElementById('repSigText').value    = '';
   updateSigDateLabel('clientSigDateLabel', _clientSigDate);
   updateSigDateLabel('repSigDateLabel',    _repSigDate);
 
