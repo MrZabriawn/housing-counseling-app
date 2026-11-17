@@ -209,69 +209,11 @@
           <textarea id="editCcaNotes" rows="3"></textarea>
         </div>
 
-        <!-- DPA Application -->
-        <div class="form-group full-width" style="margin-top:0.25rem;padding-top:1rem;border-top:1px solid var(--border);">
-          <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">DPA Application</p>
-          <div style="display:flex;flex-direction:column;gap:0.75rem;">
-            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.875rem;font-weight:500;">
-              <input type="checkbox" id="editWorkshopAttended"> Workshop Attended
-            </label>
-            <div id="workshopSection" class="hidden" style="padding-left:1.5rem;display:flex;flex-direction:column;gap:0.5rem;">
-              <div>
-                <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Select Workshop</label>
-                <select id="editWorkshopId" style="font-size:0.875rem;width:100%;">
-                  <option value="">— Select —</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;" for="editWorkshopDateManual">Or enter date manually</label>
-                <input type="date" id="editWorkshopDateManual" style="font-size:0.875rem;">
-              </div>
-            </div>
-            <div>
-              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;" for="editLoanType">Loan Type</label>
-              <select id="editLoanType" style="font-size:0.875rem;">
-                <option value="">—</option>
-                <option value="Conventional">Conventional</option>
-                <option value="FHA">FHA</option>
-                <option value="VA">VA</option>
-                <option value="USDA">USDA</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-
-            <!-- Signature pads -->
-            <div style="padding-top:0.75rem;border-top:1px solid var(--border);">
-              <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin:0 0 0.5rem;">Signatures</p>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                <div>
-                  <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Client</label>
-                  <canvas id="clientSigCanvas" width="400" height="120" style="border:1px solid var(--border);border-radius:4px;display:block;width:100%;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
-                  <input type="text" id="clientSigText" placeholder="Or type full name…" style="margin-top:0.35rem;width:100%;font-size:1.2rem;font-style:italic;font-family:'Brush Script MT',cursive;letter-spacing:0.03em;">
-                  <div style="display:flex;gap:0.5rem;margin-top:0.3rem;align-items:center;">
-                    <button type="button" id="clearClientSigBtn" class="btn btn-secondary btn-sm">Clear</button>
-                    <span id="clientSigDateLabel" style="font-size:0.75rem;color:var(--text-muted);"></span>
-                  </div>
-                </div>
-                <div>
-                  <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">HOI Representative</label>
-                  <canvas id="repSigCanvas" width="400" height="120" style="border:1px solid var(--border);border-radius:4px;display:block;width:100%;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
-                  <input type="text" id="repSigText" placeholder="Or type full name…" style="margin-top:0.35rem;width:100%;font-size:1.2rem;font-style:italic;font-family:'Brush Script MT',cursive;letter-spacing:0.03em;">
-                  <div style="display:flex;gap:0.5rem;margin-top:0.3rem;align-items:center;">
-                    <button type="button" id="clearRepSigBtn" class="btn btn-secondary btn-sm">Clear</button>
-                    <span id="repSigDateLabel" style="font-size:0.75rem;color:var(--text-muted);"></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
       <p id="ccaEditError" class="error-msg hidden"></p>
       <div class="form-actions">
         <button id="ccaEditSave" class="btn btn-primary">Save</button>
         <button id="ccaEditCancel" class="btn btn-secondary">Cancel</button>
-        <button id="ccaPrintDpaBtn" class="btn btn-secondary">Print DPA Application</button>
         <button id="ccaRemoveBtn" class="btn btn-secondary" style="margin-left:auto;color:var(--danger,#dc2626);">Remove from List</button>
       </div>
     </div>
