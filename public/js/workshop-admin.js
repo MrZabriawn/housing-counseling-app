@@ -574,14 +574,16 @@ async function createWorkshop(e) {
   try {
     const ref = await addDoc(collection(db, 'workshops'), {
       title,
-      subtitle: qs('#nwSubtitle').value.trim(),
-      date: Timestamp.fromDate(new Date(dateStr)),
+      subtitle:      qs('#nwSubtitle').value.trim(),
+      date:          Timestamp.fromDate(new Date(dateStr)),
+      durationHours:  parseFloat(qs('#nwDuration').value) || 1,
+      attendeeCount:  parseInt(qs('#nwAttendee').value, 10) || 0,
       locations,
-      hasRaffle: qs('#nwHasRaffle').checked,
-      askMortgage: qs('#nwAskMortgage').checked,
-      active: true,
-      createdAt: serverTimestamp(),
-      createdBy: _user?.displayName || _user?.email || 'Unknown',
+      hasRaffle:     qs('#nwHasRaffle').checked,
+      askMortgage:   qs('#nwAskMortgage').checked,
+      active:        true,
+      createdAt:     serverTimestamp(),
+      createdBy:     _user?.displayName || _user?.email || 'Unknown',
     });
 
     qs('#nwStatus').textContent = '✓ Workshop created!';

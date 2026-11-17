@@ -12,20 +12,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    /* ── Top-level tab bar ───────────────────────────────────────────────────── */
-    .hud-page-tabs {
-      display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
-    }
-    .hud-page-tab {
-      padding: 0.5rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer;
-      border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent;
-      margin-bottom: -2px; transition: color 0.15s;
-    }
-    .hud-page-tab:hover { color: var(--text); }
-    .hud-page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-    .hud-page-panel { display: none; }
-    .hud-page-panel.active { display: block; }
-
     /* ── HUD Reports styles ──────────────────────────────────────────────────── */
     .report-section { margin-bottom: 1.5rem; }
     .report-section-title {
@@ -147,14 +133,8 @@
       </div>
     </div>
 
-    <!-- Top-level tab bar -->
-    <div class="hud-page-tabs">
-      <button class="hud-page-tab active" data-panel="panel-time">My HUD Time</button>
-      <button class="hud-page-tab" data-panel="panel-reports">HUD Reports</button>
-    </div>
-
-    <!-- ══ My HUD Time panel ══════════════════════════════════════════════════ -->
-    <div id="panel-time" class="hud-page-panel active">
+    <!-- ══ PAR Calendar / My HUD Time ════════════════════════════════════════ -->
+    <div id="panel-time">
       <div class="page-header" style="padding:0;margin-bottom:1.25rem;">
         <div style="display:flex;align-items:center;gap:0.75rem;">
           <div class="form-group" style="margin:0;">
@@ -205,8 +185,8 @@
       </div>
     </div>
 
-    <!-- ══ HUD Reports panel ══════════════════════════════════════════════════ -->
-    <div id="panel-reports" class="hud-page-panel">
+    <!-- ══ HUD Reports (ED only) ════════════════════════════════════════════ -->
+    <div id="panel-reports" style="display:none;margin-top:2rem;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
         <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Generate monthly HUD submission files. Executive Director only.</p>
         <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -428,49 +408,18 @@
     import { initHudReports } from './js/hud-reports.js?v=2';
     import { initTmcrf }      from './js/tmcrf.js';
 
-    const params     = new URLSearchParams(window.location.search);
-    const startPanel = params.get('tab') === 'reports' ? 'panel-reports' : 'panel-time';
-
-    let _hudReportsInited = false;
-
-    function switchHudPanel(panelId) {
-      document.querySelectorAll('.hud-page-tab').forEach(t =>
-        t.classList.toggle('active', t.dataset.panel === panelId)
-      );
-      document.querySelectorAll('.hud-page-panel').forEach(p =>
-        p.classList.toggle('active', p.id === panelId)
-      );
-    }
-
     requireAuth(async (user, profile) => {
       setupNav(profile, 'hud');
 
-      // Wire top-level tab switching
-      document.querySelectorAll('.hud-page-tab').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          switchHudPanel(btn.dataset.panel);
-          if (btn.dataset.panel === 'panel-reports' && !_hudReportsInited) {
-            if (profile.role === 'executive_director') {
-              await initHudReports(user, profile);
-              initTmcrf();
-              _hudReportsInited = true;
-            }
-          }
-        });
-      });
-
-      // Always init HUD Time (available to all roles)
+      // Always init PAR calendar (all roles)
       await initHudTime(user, profile);
 
-      // If ED and starting on reports tab, init immediately
-      if (startPanel === 'panel-reports' && profile.role === 'executive_director') {
+      // Show and init reports section for EDs
+      if (profile.role === 'executive_director') {
+        document.getElementById('panel-reports').style.display = '';
         await initHudReports(user, profile);
         initTmcrf();
-        _hudReportsInited = true;
       }
-
-      // Switch to requested starting panel
-      if (startPanel !== 'panel-time') switchHudPanel(startPanel);
     });
   </script>
 </body>

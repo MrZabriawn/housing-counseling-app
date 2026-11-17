@@ -112,12 +112,13 @@ async function checkForExisting() {
       _selected.push({
         id:               clientId,
         clientName:       s.clientName || clientDoc?.clientName || '',
-        counselor:        s.counselor  || clientDoc?.counselor  || '',
-        rxNumbers:        clientDoc?.rxNumbers || [],
-        sessionId:        d.id,
-        savedRx:          s.rxNumber    || '',
-        savedNotes:       s.notes       || '',
-        savedCourtStatus: s.courtStatus || '',
+        counselor:          s.counselor    || clientDoc?.counselor  || '',
+        rxNumbers:          clientDoc?.rxNumbers || [],
+        sessionId:          d.id,
+        savedRx:            s.rxNumber     || '',
+        savedNotes:         s.notes        || '',
+        savedCourtStatus:   s.courtStatus  || '',
+        savedCourtOutcome:  s.courtOutcome || '',
       });
     }
 
@@ -251,7 +252,7 @@ function renderSelected() {
           <label style="font-size:0.75rem;">Session Notes (optional)</label>
           <textarea class="sc-notes" rows="2" placeholder="Brief update for this client…" style="font-size:0.8125rem;">${esc(c.savedNotes || '')}</textarea>
         </div>
-        <div class="form-group" style="margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0.4rem;">
           <label style="font-size:0.75rem;">Outcome *</label>
           <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">
             ${['continued','resolved','discontinued'].map(v => `
@@ -260,6 +261,23 @@ function renderSelected() {
               ${v.charAt(0).toUpperCase() + v.slice(1)}
             </label>`).join('')}
           </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="font-size:0.75rem;">Outcome Detail</label>
+          <select class="sc-court-outcome" style="font-size:0.8125rem;width:100%;max-width:300px;">
+            <option value="">— Select if applicable —</option>
+            <option value="Agreement to Reinstate" ${c.savedCourtOutcome === 'Agreement to Reinstate' ? 'selected' : ''}>Agreement to Reinstate</option>
+            <option value="Repayment Plan" ${c.savedCourtOutcome === 'Repayment Plan' ? 'selected' : ''}>Repayment Plan</option>
+            <option value="Forbearance Agreement" ${c.savedCourtOutcome === 'Forbearance Agreement' ? 'selected' : ''}>Forbearance Agreement</option>
+            <option value="Loan Modification" ${c.savedCourtOutcome === 'Loan Modification' ? 'selected' : ''}>Loan Modification</option>
+            <option value="Mediation Agreement" ${c.savedCourtOutcome === 'Mediation Agreement' ? 'selected' : ''}>Mediation Agreement</option>
+            <option value="Case Dismissed" ${c.savedCourtOutcome === 'Case Dismissed' ? 'selected' : ''}>Case Dismissed</option>
+            <option value="Short Sale" ${c.savedCourtOutcome === 'Short Sale' ? 'selected' : ''}>Short Sale</option>
+            <option value="Deed-in-Lieu" ${c.savedCourtOutcome === 'Deed-in-Lieu' ? 'selected' : ''}>Deed-in-Lieu</option>
+            <option value="Foreclosure Sale Scheduled" ${c.savedCourtOutcome === 'Foreclosure Sale Scheduled' ? 'selected' : ''}>Foreclosure Sale Scheduled</option>
+            <option value="Client Not Present" ${c.savedCourtOutcome === 'Client Not Present' ? 'selected' : ''}>Client Not Present</option>
+            <option value="Transferred to Another County" ${c.savedCourtOutcome === 'Transferred to Another County' ? 'selected' : ''}>Transferred to Another County</option>
+          </select>
         </div>
       </div>`;
   }).join('');
@@ -296,9 +314,10 @@ async function submitBatch() {
   document.querySelectorAll('.selected-client-card').forEach(card => {
     const statusInput = card.querySelector('.sc-court-status:checked');
     perClient[card.dataset.clientId] = {
-      notes:       card.querySelector('.sc-notes').value.trim(),
-      rx:          card.querySelector('.sc-rx').value.trim(),
-      courtStatus: statusInput ? statusInput.value : '',
+      notes:        card.querySelector('.sc-notes').value.trim(),
+      rx:           card.querySelector('.sc-rx').value.trim(),
+      courtStatus:  statusInput ? statusInput.value : '',
+      courtOutcome: card.querySelector('.sc-court-outcome')?.value || '',
     };
   });
 
@@ -327,8 +346,10 @@ async function submitBatch() {
         counselingType: 'COURT',
         billingType:    'Court',
         hours,
+        durationHours:  hours,
         caseStatus,
-        courtStatus:    extras.courtStatus || '',
+        courtStatus:    extras.courtStatus  || '',
+        courtOutcome:   extras.courtOutcome || '',
         notes:          extras.notes || '',
         clientName:     c.clientName || '',
         updatedAt:      serverTimestamp(),
@@ -345,9 +366,11 @@ async function submitBatch() {
         counselingType: 'COURT',
         billingType:    'Court',
         hours,
+        durationHours:  hours,
         dollarsFor:     '',
         caseStatus,
-        courtStatus:    extras.courtStatus || '',
+        courtStatus:    extras.courtStatus  || '',
+        courtOutcome:   extras.courtOutcome || '',
         outcome:        '',
         notes:          extras.notes || '',
         clientName:     c.clientName || '',

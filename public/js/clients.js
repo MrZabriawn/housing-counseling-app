@@ -18,6 +18,19 @@ let _user            = null;  // Firebase Auth user
 let _profile         = null;  // Firestore users/{uid} profile
 let _counselorDocs   = [];    // { id, name, staffNumber } from counselors collection
 
+function renderRecentlyViewed() {
+  try {
+    const recent = JSON.parse(sessionStorage.getItem('recentClients') || '[]');
+    if (!recent.length) return;
+    const bar   = document.getElementById('recentlyViewedBar');
+    const links = document.getElementById('recentlyViewedLinks');
+    if (!bar || !links) return;
+    links.innerHTML = recent.map(r =>
+      `<a href="client.html?id=${encodeURIComponent(r.id)}" style="font-size:0.8rem;padding:0.2rem 0.6rem;background:var(--surface,#f8f9fb);border:1px solid var(--border,#dde1e9);border-radius:var(--radius,6px);text-decoration:none;color:var(--text,#1a1a2e);white-space:nowrap;">${r.name || 'Client'}</a>`
+    ).join('');
+    bar.style.display = 'flex';
+  } catch (_) {}
+}
 
 let _metricsRendered   = false; // true after first visit to Metrics tab
 let _rxGuarantorMap    = new Map(); // rxNumber string → guarantor string
@@ -55,6 +68,7 @@ requireAuth(async (user, profile) => {
     document.querySelectorAll('.ed-only').forEach(el => el.classList.remove('hidden'));
   }
 
+  renderRecentlyViewed();
   populateFilters();
   restoreFilters();
   await loadClients();

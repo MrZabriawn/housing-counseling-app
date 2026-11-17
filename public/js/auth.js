@@ -2,6 +2,8 @@ import { auth, db } from './firebase-config.js';
 import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { isDemoMode } from './demo-mode.js';
+import { initLogCallModal } from './log-call-modal.js';
+import { initLogParModal }  from './log-par-modal.js';
 
 export function requireAuth(callback) {
   if (isDemoMode()) {
@@ -67,6 +69,14 @@ export async function logout() {
 
 export function setupNav(profile, activePage) {
   const nav = document.querySelector('nav.nav');
+  // When embedded as an iframe, suppress nav and remove top padding
+  if (window !== window.top) {
+    if (nav) nav.style.display = 'none';
+    const style = document.createElement('style');
+    style.textContent = 'main.page { padding-top: 0.75rem !important; } body { overflow-x: hidden; }';
+    document.head.appendChild(style);
+    return;
+  }
   if (nav) {
     // All office staff see the same menu (Settings is no longer admin-gated)
     nav.innerHTML = `
@@ -80,17 +90,16 @@ export function setupNav(profile, activePage) {
           <div class="nav-dropdown-menu">
             <a href="new-client.html" data-page="new-client">New Client</a>
             <a href="intake.html"     data-page="intake">Intake</a>
-            <a href="duplicates.html" data-page="duplicates">Duplicates</a>
           </div>
         </div>
 
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">Engagement</button>
           <div class="nav-dropdown-menu">
-            <a href="buyer-ready.html"  data-page="buyer-ready">Buyer Ready</a>
-            <a href="rent-ready.html"   data-page="rent-ready">Rent Ready</a>
-            <a href="repair-ready.html" data-page="repair-ready">Repair Ready</a>
-            <a href="outreach.html"     data-page="outreach">Outreach</a>
+            <a href="programs.html?tab=buyer-ready"  data-page="programs">Buyer Ready</a>
+            <a href="programs.html?tab=rent-ready"   data-page="programs">Rent Ready</a>
+            <a href="programs.html?tab=repair-ready" data-page="programs">Repair Ready</a>
+            <a href="outreach.html"       data-page="outreach">Outreach</a>
             <a href="workshop-admin.html" data-page="workshops">Workshops</a>
           </div>
         </div>
@@ -98,23 +107,28 @@ export function setupNav(profile, activePage) {
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">Reports</button>
           <div class="nav-dropdown-menu">
-            <a href="reports.html"     data-page="reports">CDBG / CHCI</a>
-            <a href="hud.html"         data-page="hud">HUD</a>
-            <a href="dashboard.html"   data-page="dashboard">Metrics</a>
-            <a href="operations.html"  data-page="operations">Guidance</a>
+            <a href="reports.html?tab=cdbg"  data-page="reports">CDBG</a>
+            <a href="reports.html?tab=court" data-page="reports">Court</a>
+            <a href="reports.html?tab=chci"  data-page="reports">CHCI</a>
+            <a href="reports.html?tab=hemap" data-page="reports">HEMAP</a>
+            <a href="reports.html?tab=hud"    data-page="reports">HUD</a>
+            <a href="dashboard.html"         data-page="dashboard">Metrics</a>
+            <a href="operations.html"        data-page="operations">Guidance</a>
           </div>
         </div>
 
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">Admin</button>
           <div class="nav-dropdown-menu">
-            <a href="training.html"  data-page="training">Training</a>
-            <a href="settings.html"  data-page="settings">Settings</a>
-            <a href="import.html"    data-page="import">Import</a>
+            <a href="training.html"   data-page="training">Training</a>
+            <a href="settings.html"   data-page="settings">Settings</a>
+            <a href="import.html"     data-page="import">Import</a>
+            <a href="duplicates.html" data-page="duplicates">Duplicates</a>
           </div>
         </div>
 
-        <a href="outreach.html?autoLog=1" style="display:inline-flex;align-items:center;background:var(--primary,#2563eb);color:#fff;padding:0.32rem 0.75rem;border-radius:var(--radius,6px);font-size:0.78rem;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:0.25rem;line-height:1.4;">+ Log Call</a>
+        <button id="navLogParBtn" style="display:inline-flex;align-items:center;background:var(--surface,#f8f9fb);color:var(--text,#1a1a2e);border:1px solid var(--border,#dde1e9);padding:0.32rem 0.75rem;border-radius:var(--radius,6px);font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;margin-left:0.25rem;line-height:1.4;">+ Log PAR</button>
+        <button id="navLogCallBtn" style="display:inline-flex;align-items:center;background:var(--primary,#2563eb);color:#fff;padding:0.32rem 0.75rem;border-radius:var(--radius,6px);font-size:0.78rem;font-weight:600;border:none;cursor:pointer;white-space:nowrap;margin-left:0.25rem;line-height:1.4;">+ Log Call</button>
 
       </div>
       <div class="nav-user">
@@ -123,6 +137,10 @@ export function setupNav(profile, activePage) {
       </div>
       <button id="navToggle" class="nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false">&#9776;</button>`;
   }
+
+  // Wire up global Log PAR and Log Call modals
+  initLogParModal(profile);
+  initLogCallModal();
 
   // Mobile hamburger: toggle the collapsed nav menu, and close it on link tap
   const navToggle = document.getElementById('navToggle');

@@ -21,6 +21,7 @@ requireAuth(async (user, profile) => {
   await loadRemapTable();
   await loadWeights();
   await loadRates();
+  await loadChciCaps();
   await loadDemoPasscode();
   loadDeletedClients();
   loadDeletedSessions();
@@ -47,6 +48,9 @@ requireAuth(async (user, profile) => {
 
   document.getElementById('saveWeights').addEventListener('click', saveWeights);
   document.getElementById('saveRatesBtn').addEventListener('click', saveRates);
+  document.getElementById('saveChciCapsBtn').addEventListener('click', saveChciCaps);
+  await loadAllocations();
+  document.getElementById('addAllocBtn').addEventListener('click', addAllocation);
 
   // Client name remap tool
   document.getElementById('scanClientNamesBtn').addEventListener('click', () => scanClientNames(false));
@@ -173,6 +177,7 @@ async function loadStaff() {
         data-is-counselor="${isCounselor}"
         data-base-salary="${escAttr(c?.baseSalary != null ? String(c.baseSalary) : '')}"
         data-fringe="${escAttr(c?.fringe != null ? String(c.fringe) : '')}"
+        data-rate-effective="${escAttr(c?.rateEffectiveFrom || '')}"
         data-role="${escAttr(u?.role || '')}"`;
 
       const title = hasStaff && c.staffTitle ? escHtml(c.staffTitle) : '<span style="color:var(--text-muted);">—</span>';
@@ -217,7 +222,7 @@ async function loadStaff() {
       btn.addEventListener('click', () => openEditCounselor(
         btn.dataset.cid, btn.dataset.uid, btn.dataset.name, btn.dataset.staffNum,
         btn.dataset.staffTitle, btn.dataset.isCounselor === 'true',
-        btn.dataset.baseSalary, btn.dataset.fringe, btn.dataset.role
+        btn.dataset.baseSalary, btn.dataset.fringe, btn.dataset.rateEffective, btn.dataset.role
       )));
 
     container.querySelectorAll('.staff-toggle-btn').forEach(btn =>
@@ -315,15 +320,16 @@ function closeStaffModal() {
   document.getElementById('editCounselorModal').classList.add('hidden');
 }
 
-function openEditCounselor(cid, uid, name, staffNum, staffTitle, isCounselor, baseSalary, fringe, role) {
-  document.getElementById('editCounselorId').value         = cid || '';
-  document.getElementById('editStaffUserId').value         = uid || '';
-  document.getElementById('editCounselorName').value       = name || '';
-  document.getElementById('editCounselorStaffNum').value   = staffNum || '';
-  document.getElementById('editCounselorTitle').value      = staffTitle || '';
-  document.getElementById('editCounselorIsCounselor').checked = isCounselor !== false && isCounselor !== 'false';
-  document.getElementById('editCounselorBaseSalary').value = baseSalary || '';
-  document.getElementById('editCounselorFringe').value     = fringe || '';
+function openEditCounselor(cid, uid, name, staffNum, staffTitle, isCounselor, baseSalary, fringe, rateEffectiveFrom, role) {
+  document.getElementById('editCounselorId').value              = cid || '';
+  document.getElementById('editStaffUserId').value              = uid || '';
+  document.getElementById('editCounselorName').value            = name || '';
+  document.getElementById('editCounselorStaffNum').value        = staffNum || '';
+  document.getElementById('editCounselorTitle').value           = staffTitle || '';
+  document.getElementById('editCounselorIsCounselor').checked   = isCounselor !== false && isCounselor !== 'false';
+  document.getElementById('editCounselorBaseSalary').value      = baseSalary || '';
+  document.getElementById('editCounselorFringe').value          = fringe || '';
+  document.getElementById('editCounselorEffectiveFrom').value   = rateEffectiveFrom || '';
   document.getElementById('editCounselorError').classList.add('hidden');
   document.getElementById('editCounselorSaveBtn').disabled    = false;
   document.getElementById('editCounselorSaveBtn').textContent = 'Save';
@@ -362,8 +368,9 @@ async function saveEditCounselor() {
   }
 
   const staffNum      = staffNumRaw !== '' ? parseInt(staffNumRaw, 10) : null;
-  const baseSalaryRaw = document.getElementById('editCounselorBaseSalary').value.trim();
-  const fringeRaw     = document.getElementById('editCounselorFringe').value.trim();
+  const baseSalaryRaw     = document.getElementById('editCounselorBaseSalary').value.trim();
+  const fringeRaw         = document.getElementById('editCounselorFringe').value.trim();
+  const rateEffectiveFrom = document.getElementById('editCounselorEffectiveFrom').value || null;
 
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving…';
@@ -377,8 +384,9 @@ async function saveEditCounselor() {
       const update = {
         name, staffTitle: staffTitle || '', isCounselor, updatedAt: serverTimestamp(),
         staffNumber: staffNum !== null ? staffNum : null,
-        baseSalary:  baseSalaryRaw !== '' ? parseFloat(baseSalaryRaw) : null,
-        fringe:      fringeRaw     !== '' ? parseFloat(fringeRaw)     : null,
+        baseSalary:        baseSalaryRaw !== '' ? parseFloat(baseSalaryRaw) : null,
+        fringe:            fringeRaw     !== '' ? parseFloat(fringeRaw)     : null,
+        rateEffectiveFrom: rateEffectiveFrom,
       };
       ops.push(updateDoc(doc(db, 'counselors', cid), update));
     }
@@ -935,6 +943,119 @@ async function saveRates() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save Rates';
+  }
+}
+
+// ── CHCI Hours Caps ───────────────────────────────────────────────────────────
+
+const CHCI_TYPES = ['OUTSTANDING', 'PRE', 'POST', 'COURT', 'Workshop', 'Case Management'];
+
+async function loadChciCaps() {
+  const tbody = document.getElementById('chciCapsBody');
+  if (!tbody) return;
+  let caps = {};
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'chciHoursCaps'));
+    if (snap.exists()) caps = snap.data();
+  } catch (_) {}
+  tbody.innerHTML = CHCI_TYPES.map(t => `
+    <tr>
+      <td style="padding:0.4rem 0.6rem;border-bottom:1px solid var(--border);">${t}</td>
+      <td style="padding:0.4rem 0.6rem;border-bottom:1px solid var(--border);text-align:right;">
+        <input type="number" data-type="${t}" value="${caps[t] ?? ''}" min="0" step="0.5"
+          style="width:80px;text-align:right;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem;">
+      </td>
+    </tr>`).join('');
+}
+
+async function saveChciCaps() {
+  const btn   = document.getElementById('saveChciCapsBtn');
+  const msgEl = document.getElementById('chciCapsMsg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msgEl.classList.add('hidden');
+  try {
+    const caps = {};
+    document.querySelectorAll('#chciCapsBody input[data-type]').forEach(inp => {
+      const val = parseFloat(inp.value);
+      if (!isNaN(val) && val > 0) caps[inp.dataset.type] = val;
+    });
+    await setDoc(doc(db, 'settings', 'chciHoursCaps'), caps);
+    showMsg(msgEl, 'Saved.', true);
+  } catch (err) {
+    showMsg(msgEl, 'Save failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Caps';
+  }
+}
+
+// ── Funding Allocations ───────────────────────────────────────────────────────
+
+const ALLOC_PROGRAMS = ['CHCI', 'HEMAP', 'HUD', 'JTBC', 'TMCRF'];
+
+async function loadAllocations() {
+  const el = document.getElementById('allocHistory');
+  if (!el) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'allocations'), orderBy('effectiveDate', 'desc')));
+    if (snap.empty) { el.textContent = 'No allocations recorded yet.'; return; }
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const groups = {};
+    ALLOC_PROGRAMS.forEach(p => groups[p] = []);
+    rows.forEach(r => { if (groups[r.program]) groups[r.program].push(r); });
+    el.innerHTML = ALLOC_PROGRAMS.filter(p => groups[p].length).map(p => `
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.4rem;">${p}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+          <thead><tr>
+            <th style="text-align:left;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.68rem;text-transform:uppercase;">Date</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.68rem;text-transform:uppercase;">Amount</th>
+            <th style="text-align:left;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.68rem;text-transform:uppercase;">Notes</th>
+          </tr></thead>
+          <tbody>${groups[p].map((r, i) => `
+            <tr style="${i === 0 ? 'font-weight:600;' : ''}">
+              <td style="padding:0.3rem 0.5rem;">${r.effectiveDate || '—'}</td>
+              <td style="padding:0.3rem 0.5rem;text-align:right;">$${Number(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}</td>
+              <td style="padding:0.3rem 0.5rem;color:var(--text-muted);">${r.notes || ''}${i === 0 ? ' <span style="font-size:0.65rem;color:#15803d;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">(current)</span>' : ''}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`).join('') || '<p style="color:var(--text-muted);">No allocations recorded yet.</p>';
+  } catch (err) { el.textContent = 'Load failed: ' + err.message; }
+}
+
+async function addAllocation() {
+  const btn   = document.getElementById('addAllocBtn');
+  const msgEl = document.getElementById('allocMsg');
+  const prog  = document.getElementById('allocProgram').value;
+  const amt   = parseFloat(document.getElementById('allocAmount').value);
+  const date  = document.getElementById('allocDate').value;
+  if (!prog || !amt || !date) {
+    showMsg(msgEl, 'Program, amount, and date are required.', false);
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msgEl.classList.add('hidden');
+  try {
+    await addDoc(collection(db, 'allocations'), {
+      program: prog,
+      amount: amt,
+      effectiveDate: date,
+      notes: document.getElementById('allocNotes').value.trim(),
+      addedAt: serverTimestamp(),
+    });
+    document.getElementById('allocAmount').value = '';
+    document.getElementById('allocDate').value   = '';
+    document.getElementById('allocNotes').value  = '';
+    showMsg(msgEl, 'Allocation added.', true);
+    await loadAllocations();
+  } catch (err) {
+    showMsg(msgEl, 'Save failed: ' + err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add Allocation';
   }
 }
 

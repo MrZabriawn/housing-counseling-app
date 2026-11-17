@@ -15,21 +15,8 @@
     .page-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
     .page-panel { display:none; }
     .page-panel.active { display:block; }
-    /* Metrics collapsible sections */
-    .mx-section { background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
-    .mx-section > summary { padding:0.75rem 1rem; font-weight:600; font-size:0.875rem; cursor:pointer; list-style:none; display:flex; align-items:center; gap:0.5rem; user-select:none; color:var(--text); }
-    .mx-section > summary::-webkit-details-marker { display:none; }
-    .mx-section > summary::before { content:'▶'; font-size:0.62rem; color:var(--text-muted); transition:transform 0.15s; flex-shrink:0; }
-    .mx-section[open] > summary::before { transform:rotate(90deg); }
-    .mx-body { padding:0.9rem 1rem; border-top:1px solid var(--border); }
-    .mx-stat-row { display:flex; gap:0.65rem; flex-wrap:wrap; }
-    .mx-stat { background:#f8f9fb; border-radius:var(--radius); padding:0.55rem 0.9rem; min-width:85px; }
-    .mx-stat-label { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; margin-bottom:0.15rem; }
-    .mx-stat-val { font-size:1.2rem; font-weight:800; color:var(--text); line-height:1.2; }
-    .mx-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
-    .mx-table th { text-align:left; padding:0.3rem 0.5rem; border-bottom:2px solid var(--border); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); font-weight:700; white-space:nowrap; }
-    .mx-table td { padding:0.35rem 0.5rem; border-bottom:1px solid var(--border); }
-    .mx-table tr:last-child td { border-bottom:none; }
+    .page-tab-link { padding:0.6rem 1.5rem; font-size:0.9rem; font-weight:600; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--text-muted); text-decoration:none; display:inline-flex; align-items:center; gap:0.3rem; transition:color 0.12s,border-color 0.12s; }
+    .page-tab-link:hover { color:var(--text); }
     .mx-bar-track { height:7px; background:#f0f1f3; border-radius:4px; min-width:60px; }
     .mx-bar-fill { height:7px; background:var(--primary); border-radius:4px; transition:width 0.3s; }
   </style>
@@ -55,7 +42,7 @@
     <!-- Tab bar -->
     <div class="page-tabs">
       <button class="page-tab active" data-tab="clients-panel">Counseling Log</button>
-      <button class="page-tab"        data-tab="metrics-panel">Log Summary</button>
+      <a href="dashboard.html" class="page-tab-link">Metrics ↗</a>
       <button class="page-tab" data-tab="session-admin-panel">Session Admin</button>
     </div>
 
@@ -85,6 +72,12 @@
         <div class="stat-label">Unique Households</div>
         <div class="stat-value" id="statHouseholds">—</div>
       </div>
+    </div>
+
+    <!-- Recently Viewed -->
+    <div id="recentlyViewedBar" style="display:none;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);white-space:nowrap;">Recent:</span>
+      <div id="recentlyViewedLinks" style="display:flex;gap:0.4rem;flex-wrap:wrap;"></div>
     </div>
 
     <!-- Incomplete files banner -->
@@ -224,88 +217,6 @@
 
     </div><!-- /clients-panel -->
 
-    <!-- ══ Metrics panel ════════════════════════════════════════════════════ -->
-    <div id="metrics-panel" class="page-panel">
-      <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:960px;">
-
-        <!-- Metrics time frame bar -->
-        <div id="metricsFilterBar" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:0.6rem;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:0.65rem 0.85rem;">
-          <div class="form-group" style="margin:0;min-width:90px;">
-            <label style="font-size:0.75rem;">Year</label>
-            <select id="mxYear" style="height:2rem;font-size:0.8125rem;">
-              <option value="">All</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin:0;min-width:110px;">
-            <label style="font-size:0.75rem;">Month</label>
-            <select id="mxMonth" style="height:2rem;font-size:0.8125rem;">
-              <option value="">All</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;">From</label>
-            <input type="date" id="mxDateStart" style="height:2rem;font-size:0.8125rem;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:0.75rem;">To</label>
-            <input type="date" id="mxDateEnd" style="height:2rem;font-size:0.8125rem;">
-          </div>
-          <button type="button" id="mxClearBtn" class="btn btn-secondary btn-sm" style="height:2rem;align-self:flex-end;">Clear</button>
-          <span id="mxRangeLabel" style="align-self:flex-end;font-size:0.75rem;color:var(--text-muted);padding-bottom:0.2rem;"></span>
-        </div>
-
-        <details class="mx-section" id="mxOverview" open>
-          <summary>Overview</summary>
-          <div class="mx-body" id="mxOverviewBody"><p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p></div>
-        </details>
-
-        <details class="mx-section" id="mxClosures" open>
-          <summary>Closures</summary>
-          <div class="mx-body" id="mxClosuresBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxSessions" open>
-          <summary>Sessions &amp; Hours</summary>
-          <div class="mx-body" id="mxSessionsBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxTypes">
-          <summary>By Counseling Type</summary>
-          <div class="mx-body" id="mxTypesBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxAmi">
-          <summary>AMI Distribution</summary>
-          <div class="mx-body" id="mxAmiBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxDemo">
-          <summary>Demographics</summary>
-          <div class="mx-body" id="mxDemoBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxCounselors">
-          <summary>Counselor Breakdown</summary>
-          <div class="mx-body" id="mxCounselorsBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxRe">
-          <summary>R&amp;E Codes</summary>
-          <div class="mx-body" id="mxReBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxCourt">
-          <summary>Court Activity</summary>
-          <div class="mx-body" id="mxCourtBody"></div>
-        </details>
-
-        <details class="mx-section" id="mxComplete">
-          <summary>File Completeness</summary>
-          <div class="mx-body" id="mxCompleteBody"></div>
-        </details>
-
-      </div>
-    </div><!-- /metrics-panel -->
 
   </main>
 

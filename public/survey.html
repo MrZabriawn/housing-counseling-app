@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Survey — Housing Opportunities</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body { background: var(--bg, #f8f9fb); }
+    .sv-wrap { max-width: 640px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+    .sv-logo { text-align: center; margin-bottom: 2rem; }
+    .sv-logo img { height: 44px; }
+    .sv-card {
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #dde1e9);
+      border-radius: 10px;
+      padding: 2rem;
+    }
+    .sv-title { font-size: 1.25rem; font-weight: 800; margin: 0 0 0.35rem; }
+    .sv-intro { font-size: 0.875rem; color: var(--text-muted, #64748b); margin: 0 0 1.75rem; line-height: 1.6; }
+    .sv-section-label {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text-muted, #64748b);
+      border-bottom: 1px solid var(--border, #dde1e9);
+      padding-bottom: 0.4rem; margin: 1.75rem 0 1rem;
+    }
+    .sv-q { margin-bottom: 1.25rem; }
+    .sv-q-label { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; display: block; }
+    .sv-options { display: flex; flex-direction: column; gap: 0.35rem; }
+    .sv-option { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer; }
+    .sv-option input[type="radio"] { accent-color: var(--primary, #2563eb); width: 1rem; height: 1rem; cursor: pointer; }
+    .sv-comments { width: 100%; min-height: 90px; resize: vertical; font-size: 0.875rem; }
+    .sv-submit { margin-top: 1.75rem; }
+    .sv-error { color: var(--danger, #dc2626); font-size: 0.8125rem; margin-top: 0.5rem; display: none; }
+    .sv-state { text-align: center; padding: 3rem 1rem; }
+    .sv-state-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+    .sv-state-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .sv-state-body { font-size: 0.875rem; color: var(--text-muted, #64748b); line-height: 1.6; }
+    .sv-addon-badge {
+      display: inline-block; background: #dbeafe; color: #1e40af;
+      font-size: 0.72rem; font-weight: 700; padding: 0.15em 0.6em;
+      border-radius: 999px; margin-left: 0.4rem; vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="sv-wrap">
+    <div class="sv-logo">
+      <img src="img/logo.png" alt="Housing Opportunities">
+    </div>
+    <div class="sv-card" id="svApp">
+      <div class="sv-state">
+        <div class="sv-state-body">Loading…</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/survey.js"></script>
+</body>
+</html>

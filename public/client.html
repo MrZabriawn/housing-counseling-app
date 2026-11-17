@@ -241,7 +241,14 @@
           <div id="buyerReadySlot"></div>
           <div id="rentReadySlot"></div>
           <div id="homeRepairsSlot"></div>
+          <div id="repairSurveySlot"></div>
         </div>
+      </div>
+
+      <!-- Client Satisfaction Survey response -->
+      <div id="clientSurveySection" class="card hidden" style="margin-top:1.25rem;">
+        <div class="card-title">Client Satisfaction Survey</div>
+        <div id="clientSurveyContent"></div>
       </div>
 
       <!-- HOME-ARP Qualifying Population -->
@@ -497,6 +504,25 @@
           <div class="form-group">
             <label for="intakeDate">Date of Intake / First Contact</label>
             <input type="date" id="intakeDate">
+          </div>
+          <div class="form-group">
+            <label for="referralSource">Referral Source</label>
+            <select id="referralSource">
+              <option value="">— Select —</option>
+              <option value="PHFA">PHFA</option>
+              <option value="Lender">Lender</option>
+              <option value="Court">Court</option>
+              <option value="Self-Referral">Self-Referral</option>
+              <option value="Community Organization">Community Organization</option>
+              <option value="Other Agency">Other Agency</option>
+              <option value="Website">Website</option>
+              <option value="Word of Mouth">Word of Mouth</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="checkbox-row" style="grid-column:1/-1;">
+            <input type="checkbox" id="firstTimeHomebuyer">
+            <label for="firstTimeHomebuyer">First-Time Homebuyer</label>
           </div>
           <div class="form-group full-width">
             <label for="intakeNotes">Phone Call / Meeting Notes</label>
@@ -840,6 +866,16 @@
          SESSIONS TAB
     ══════════════════════════════════════════════════════════ -->
     <div id="tab-sessions" class="client-tab-panel">
+      <div id="chciProgressBar" class="hidden" style="margin-bottom:1rem;padding:0.85rem 1.1rem;background:var(--card-bg,#fff);border:1px solid var(--border);border-radius:var(--radius);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.4rem;">
+          <span style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">CHCI Hours</span>
+          <span id="chciProgressLabel" style="font-size:0.8rem;color:var(--text-muted);"></span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+          <div id="chciProgressFill" style="height:100%;background:var(--primary);border-radius:4px;width:0%;transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="chciCapWarning" class="hidden" style="margin-bottom:1rem;padding:0.75rem 1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius);font-size:0.8125rem;color:#9a3412;"></div>
       <div class="card" style="padding:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
           <span class="card-title" style="margin:0;border:none;padding:0;">Session History</span>
@@ -910,6 +946,20 @@
             <option value="counseling">Counseling</option>
             <option value="case_management">Case Management</option>
           </select>
+        </div>
+        <div class="form-group full-width">
+          <label>Contact Type</label>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.875rem;cursor:pointer;font-weight:400;">
+              <input type="radio" name="sContactType" id="sContactType_inperson" value="In-Person"> In-Person
+            </label>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.875rem;cursor:pointer;font-weight:400;">
+              <input type="radio" name="sContactType" id="sContactType_phone" value="Phone"> Phone
+            </label>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.875rem;cursor:pointer;font-weight:400;">
+              <input type="radio" name="sContactType" id="sContactType_virtual" value="Virtual"> Virtual
+            </label>
+          </div>
         </div>
         <div class="form-group">
           <label for="sHours">Hours</label>
@@ -1036,6 +1086,42 @@
           </div>
         </div>
 
+        <div class="form-group full-width">
+          <label for="closureOutcomeSelect">Closure Outcome</label>
+          <select id="closureOutcomeSelect">
+            <option value="">— Select outcome —</option>
+            <optgroup label="Pre-Purchase">
+              <option value="Purchased Home">Purchased Home</option>
+              <option value="Pre-Purchase Counseling Complete">Counseling Complete — Not Yet Purchased</option>
+              <option value="Pre-Purchase Withdrew">Withdrew / Dropped Out</option>
+            </optgroup>
+            <optgroup label="Post-Purchase / Default">
+              <option value="Retained Housing">Retained Housing</option>
+              <option value="Foreclosure Prevented">Foreclosure Prevented</option>
+              <option value="Loan Modification">Loan Modification</option>
+              <option value="Repayment Plan">Repayment Plan</option>
+              <option value="Forbearance Agreement">Forbearance Agreement</option>
+              <option value="Short Sale">Short Sale</option>
+              <option value="Deed-in-Lieu">Deed-in-Lieu</option>
+              <option value="Foreclosure / Lost Home">Foreclosure / Lost Home</option>
+              <option value="Post-Purchase Counseling Complete">Counseling Complete</option>
+              <option value="Post-Purchase Withdrew">Withdrew / Dropped Out</option>
+            </optgroup>
+            <optgroup label="Other">
+              <option value="Referred to Other Agency">Referred to Other Agency</option>
+              <option value="Deceased">Deceased</option>
+              <option value="Unable to Contact">Unable to Contact</option>
+              <option value="Other">Other</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label>
+            <input type="checkbox" id="referredToAgency" style="margin-right:0.4rem;">
+            Referred to Other Agency at Closure
+          </label>
+          <input type="text" id="referralAgencyName" placeholder="Agency name…" style="margin-top:0.5rem;display:none;">
+        </div>
         <div class="form-group full-width">
           <label for="closureOutcome">Notes</label>
           <textarea id="closureOutcome" rows="3" placeholder="Describe the final outcome…"></textarea>

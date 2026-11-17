@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programs — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .prog-tabs {
+      display: flex; gap: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 0;
+    }
+    .prog-tab {
+      padding: 0.55rem 1.25rem; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; border: none; background: none;
+      color: var(--text-muted); border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color 0.15s;
+    }
+    .prog-tab:hover { color: var(--text); }
+    .prog-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .prog-frame-wrap {
+      display: none;
+      width: 100%; margin: 0 -1.5rem;
+      width: calc(100% + 3rem);
+    }
+    .prog-frame-wrap.active { display: block; }
+
+    .prog-frame {
+      width: 100%; border: none;
+      height: calc(100vh - 120px);
+      min-height: 500px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page" style="padding-bottom:0;">
+    <div class="page-header" style="margin-bottom:1rem;">
+      <div class="page-header-text">
+        <h2>Programs</h2>
+        <p>Buyer Ready, Rent Ready, and Repair Ready client lists.</p>
+      </div>
+    </div>
+
+    <div class="prog-tabs no-print">
+      <button class="prog-tab" data-tab="buyer-ready">Buyer Ready</button>
+      <button class="prog-tab" data-tab="rent-ready">Rent Ready</button>
+      <button class="prog-tab" data-tab="repair-ready">Repair Ready</button>
+    </div>
+
+    <div id="frame-buyer-ready" class="prog-frame-wrap">
+      <iframe class="prog-frame" id="iframe-buyer-ready" title="Buyer Ready"></iframe>
+    </div>
+    <div id="frame-rent-ready" class="prog-frame-wrap">
+      <iframe class="prog-frame" id="iframe-rent-ready" title="Rent Ready"></iframe>
+    </div>
+    <div id="frame-repair-ready" class="prog-frame-wrap">
+      <iframe class="prog-frame" id="iframe-repair-ready" title="Repair Ready"></iframe>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+
+    requireAuth((user, profile) => {
+      setupNav(profile, 'programs');
+    });
+
+    const TABS = ['buyer-ready', 'rent-ready', 'repair-ready'];
+    const loaded = new Set();
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.prog-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.prog-frame-wrap').forEach(p => p.classList.remove('active'));
+
+      const btn = document.querySelector(`.prog-tab[data-tab="${tabId}"]`);
+      if (btn) btn.classList.add('active');
+
+      const wrap = document.getElementById('frame-' + tabId);
+      if (wrap) wrap.classList.add('active');
+
+      if (!loaded.has(tabId)) {
+        loaded.add(tabId);
+        const iframe = document.getElementById('iframe-' + tabId);
+        if (iframe) iframe.src = tabId + '.html';
+      }
+
+      history.replaceState(null, '', '?tab=' + tabId);
+    }
+
+    document.querySelectorAll('.prog-tab').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    const params = new URLSearchParams(location.search);
+    const initial = params.get('tab') && TABS.includes(params.get('tab'))
+      ? params.get('tab')
+      : 'buyer-ready';
+    switchTab(initial);
+  </script>
+</body>
+</html>

@@ -370,9 +370,24 @@ async function generateInvoice() {
     const invoiceId  = `HEMAP-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-${now.getTime()}`;
     const invoicedAt = serverTimestamp();
 
-    await addDoc(collection(db, 'hemapInvoices'), {
+    const hemapInvRef = await addDoc(collection(db, 'hemapInvoices'), {
       monthEnding: monthEnd, generatedAt: invoicedAt,
       generatedBy: _profile?.name || '', totalAmount: total, entryCount: pending.length,
+    });
+
+    // Write billing register entry
+    await addDoc(collection(db, 'billingRegister'), {
+      program:      'HEMAP',
+      billingMonth: monthEnd,
+      amount:       total,
+      status:       'billed',
+      sourceType:   'hemap_invoice',
+      sourceId:     hemapInvRef.id,
+      paidDate:     null,
+      paidAmount:   null,
+      notes:        '',
+      createdAt:    invoicedAt,
+      createdBy:    _profile?.name || '',
     });
 
     await Promise.all(pending.map(s =>

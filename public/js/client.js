@@ -1,4 +1,5 @@
 ﻿import { db } from './firebase-config.js';
+import { EMAIL_SERVICE_URL, GOOGLE_CHAT_CLOSURE_WEBHOOK, QREW_API_KEY } from './app-config.js';
 import { requireAuth, setupNav, isAdmin } from './auth.js?v=2';
 import { isDemoMode, demoClientName } from './demo-mode.js';
 import { COUNSELING_TYPES, RE_CODES, AWARD_TYPES, BILLING_TYPES, RX_GUARANTORS, amiDisplayLabel, amiCategory, computeAmiPercent } from './data.js';
@@ -15,6 +16,7 @@ if (!clientId) window.location.href = 'clients.html';
 let _client           = null;
 let _sessions         = [];
 let _rxDocs           = [];   // clients/{id}/rxNumbers subcollection
+let _chciCap          = null; // max hours for this client's counselingType, null if no cap
 let _profile          = null;
 let _user             = null;
 let _isED             = false;
@@ -96,7 +98,7 @@ requireAuth(async (user, profile) => {
 
   await loadAmiLimits(); // must resolve before loadClient so the AMI tile renders correctly on first paint
   await loadClient();
-  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory()]);
+  await Promise.all([loadSessions(), loadRxNumbers(), loadCmcLink(), loadListMembership(), loadOutreachHistory(), loadClientSurvey()]);
 
   wireClientForm();
   wireSessionModal();
@@ -225,10 +227,49 @@ async function loadSessions() {
     );
     _sessions = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
     renderSessionsTable(_sessions);
+    await renderChciProgress();
   } catch (err) {
     console.error('loadSessions failed:', err.code, err.message);
     _sessions = [];
     renderSessionsTable([]);
+  }
+}
+
+async function renderChciProgress() {
+  const bar     = document.getElementById('chciProgressBar');
+  const fill    = document.getElementById('chciProgressFill');
+  const label   = document.getElementById('chciProgressLabel');
+  const warning = document.getElementById('chciCapWarning');
+  if (!bar || !_client) return;
+
+  if (_chciCap === null) {
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'chciHoursCaps'));
+      const caps = snap.exists() ? snap.data() : {};
+      const ct   = _client.counselingType || '';
+      _chciCap   = caps[ct] ?? 0;
+    } catch (_) { _chciCap = 0; }
+  }
+
+  if (!_chciCap) { bar.classList.add('hidden'); warning.classList.add('hidden'); return; }
+
+  const totalHours = _sessions.reduce((s, sess) => s + (Number(sess.hours) || 0), 0);
+  const pct        = Math.min(100, Math.round((totalHours / _chciCap) * 100));
+  const remaining  = Math.max(0, _chciCap - totalHours);
+
+  bar.classList.remove('hidden');
+  fill.style.width      = pct + '%';
+  fill.style.background = pct >= 100 ? 'var(--danger,#dc2626)' : pct >= 80 ? '#f59e0b' : 'var(--primary)';
+  label.textContent     = `${totalHours.toLocaleString('en-US',{maximumFractionDigits:1})} / ${_chciCap} hrs (${remaining.toLocaleString('en-US',{maximumFractionDigits:1})} remaining)`;
+
+  if (pct >= 100) {
+    warning.classList.remove('hidden');
+    warning.textContent = `This client has reached the CHCI hours cap (${_chciCap} hrs) for ${_client.counselingType || 'this counseling type'}.`;
+  } else if (pct >= 80) {
+    warning.classList.remove('hidden');
+    warning.textContent = `Approaching CHCI hours cap — ${remaining.toLocaleString('en-US',{maximumFractionDigits:1})} hrs remaining of ${_chciCap} hrs cap.`;
+  } else {
+    warning.classList.add('hidden');
   }
 }
 
@@ -531,6 +572,9 @@ function populateClientForm(c) {
 
   // Intake Notes
   setValue('intakeDate', c.intakeDate);
+  setValue('referralSource', c.referralSource || '');
+  const fthEl = document.getElementById('firstTimeHomebuyer');
+  if (fthEl) fthEl.checked = !!c.firstTimeHomebuyer;
   const intakeNotesEl = document.getElementById('intakeNotes');
   if (intakeNotesEl) intakeNotesEl.value = c.intakeNotes || '';
 
@@ -614,8 +658,18 @@ function setValue(id, val) {
 
 // ── Header / banner ───────────────────────────────────────────────────────────
 
+function recordRecentlyViewed(id, name) {
+  try {
+    const key    = 'recentClients';
+    const stored = JSON.parse(sessionStorage.getItem(key) || '[]');
+    const fresh  = [{ id, name }].concat(stored.filter(r => r.id !== id)).slice(0, 5);
+    sessionStorage.setItem(key, JSON.stringify(fresh));
+  } catch (_) {}
+}
+
 function renderHeader(c) {
   document.getElementById('pageTitle').textContent = isDemoMode() ? demoClientName(clientId) : (c.clientName || 'Client Profile');
+  recordRecentlyViewed(clientId, c.clientName || '');
 
   const coAppEl = document.getElementById('coApplicantSubtitle');
   if (coAppEl) {
@@ -858,6 +912,12 @@ function wireClientForm() {
     document.getElementById('closureOutcome').value      = '';
     document.getElementById('closureOutcomeValue').value = '';
     document.getElementById('closureAwardType').value    = '';
+    const closureOutcomeSelectEl = document.getElementById('closureOutcomeSelect');
+    if (closureOutcomeSelectEl) closureOutcomeSelectEl.value = '';
+    const refCheck = document.getElementById('referredToAgency');
+    const refName  = document.getElementById('referralAgencyName');
+    if (refCheck) { refCheck.checked = false; }
+    if (refName)  { refName.value = ''; refName.style.display = 'none'; }
     document.getElementById('closeFileError').classList.add('hidden');
 
     // CCA section — only for PRE clients
@@ -993,6 +1053,8 @@ async function saveClient(msgId = 'clientSaveMsg') {
       bankruptcyFiled:      document.getElementById('bankruptcyFiled').checked,
       bankruptcyAccount:    document.getElementById('bankruptcyAccount').value.trim(),
       conciliationStampDate: document.getElementById('conciliationStampDate').value,
+      referralSource:       document.getElementById('referralSource')?.value || '',
+      firstTimeHomebuyer:   !!(document.getElementById('firstTimeHomebuyer')?.checked),
       // Intake Notes
       intakeDate:           document.getElementById('intakeDate').value,
       intakeNotes:          (document.getElementById('intakeNotes')?.value || '').trim(),
@@ -1165,6 +1227,9 @@ function openEditSession(sessionId) {
   document.getElementById('sCaseStatus').value   = session.caseStatus  || '';
   document.getElementById('sOutcome').value      = session.outcome     || '';
   document.getElementById('sNotes').value        = session.notes       || '';
+  const ctRadio = document.querySelector(`input[name="sContactType"][value="${session.contactType || ''}"]`);
+  document.querySelectorAll('input[name="sContactType"]').forEach(r => r.checked = false);
+  if (ctRadio) ctRadio.checked = true;
 
   _toggleSessionRxVisibility(document.getElementById('sCounselingType').value);
   document.getElementById('sessionModalError').classList.add('hidden');
@@ -1178,6 +1243,7 @@ function clearSessionModal() {
     if (el) el.value = '';
   });
   document.getElementById('sHudType').value = 'counseling';
+  document.querySelectorAll('input[name="sContactType"]').forEach(r => r.checked = false);
   populateRxDropdown('', '');
 }
 
@@ -1248,6 +1314,7 @@ function readSessionForm() {
   const rxGuarantor = isNewRx
     ? (document.getElementById('sNewRxGuarantor')?.value || '')
     : (rxSel?.options[rxSel?.selectedIndex]?.dataset?.guarantor || '');
+  const contactTypeEl = document.querySelector('input[name="sContactType"]:checked');
   return {
     clientName: _client?.clientName || '',   // denormalized so reports don't fall back to the doc id
     counselingType: document.getElementById('sCounselingType').value,
@@ -1256,6 +1323,7 @@ function readSessionForm() {
     rxNumber,
     rxGuarantor,   // guarantor is session-level (per individual session)
     hudType:    document.getElementById('sHudType').value,
+    contactType: contactTypeEl?.value || '',
     hours:          parseFloat(document.getElementById('sHours').value) || 0,
     dollarsAwarded: parseFloat(document.getElementById('sDollarsAwarded').value) || 0,
     awardType:      document.getElementById('sAwardType').value,
@@ -1481,6 +1549,7 @@ async function loadListMembership() {
     renderListSlot('buyerReadySlot',  _ccaListEntry,  'Buyer Ready',  'buyer-ready');
     renderListSlot('rentReadySlot',   _rentListEntry, 'Rent Ready',   'rent-ready');
     renderListSlot('homeRepairsSlot', _higListEntry,  'Home Repairs', 'repair-ready');
+    if (_higListEntry?.qrewJobId) loadRepairSurveyForClient(_higListEntry.qrewJobId).catch(() => {});
 
     // If the client has no QP on their own record but their Rent Ready entry has one,
     // seed the QP fields and in-memory client from the Rent Ready document.
@@ -1561,6 +1630,10 @@ function renderListSlot(slotId, entry, label, page) {
     details = [
       row('Scope',      scope),
       row('Est. Budget', entry.estimatedBudget ? fmtMoney(entry.estimatedBudget) : ''),
+      `<div style="margin-top:0.4rem;padding-top:0.4rem;border-top:1px solid var(--border);">
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.15rem;">Qrew Housing Record ID <span style="font-style:italic;font-weight:400;">(for Qrew integration — no action needed)</span></div>
+        <code style="font-size:0.72rem;color:var(--text-muted);word-break:break-all;">${escHtml(entry.id)}</code>
+      </div>`,
     ].join('');
   }
 
@@ -1574,6 +1647,118 @@ function renderListSlot(slotId, entry, label, page) {
       <a href="${page}.html" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;display:inline-block;">View on ${escHtml(label)}</a>
     </div>
   `;
+}
+
+async function loadClientSurvey() {
+  const section = document.getElementById('clientSurveySection');
+  const content = document.getElementById('clientSurveyContent');
+  if (!section || !content) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'surveyResponses'), where('clientId', '==', clientId))
+    );
+    if (snap.empty) return;
+
+    const all = snap.docs.map(d => d.data());
+    all.sort((a, b) => {
+      const ta = a.submittedAt?.toDate ? a.submittedAt.toDate() : new Date(a.submittedAt || 0);
+      const tb = b.submittedAt?.toDate ? b.submittedAt.toDate() : new Date(b.submittedAt || 0);
+      return tb - ta;
+    });
+    const r   = all[0];
+    const res = r.responses || {};
+
+    const BLOCK_LABELS = { 'buyer-ready': 'Buyer Ready', 'rent-ready': 'Rent Ready' };
+    const ratingStyle = { Excellent: '#dcfce7;color:#15803d', Good: '#dbeafe;color:#1e40af', Fair: '#fef9c3;color:#854d0e', Poor: '#fee2e2;color:#dc2626' };
+    const ratingBadge = v => v
+      ? `<span style="display:inline-block;padding:0.15em 0.65em;border-radius:999px;font-size:0.78rem;font-weight:700;background:${ratingStyle[v] || '#f1f5f9;color:#374151'}">${escHtml(v)}</span>`
+      : '—';
+    const pill = v => v
+      ? `<span style="display:inline-block;padding:0.1em 0.5em;border-radius:999px;font-size:0.72rem;background:#f1f5f9;color:#374151;">${escHtml(v)}</span>`
+      : '—';
+
+    const submittedStr = r.submittedAt
+      ? (r.submittedAt.toDate ? r.submittedAt.toDate() : new Date(r.submittedAt))
+          .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+
+    const programLine = r.programBlock
+      ? `<span style="font-size:0.78rem;color:var(--text-muted);">+ ${BLOCK_LABELS[r.programBlock] || r.programBlock} add-on</span>`
+      : '';
+
+    const addonRows = (() => {
+      const addonKeys = r.programBlock === 'buyer-ready'
+        ? [['purchasedHome','Purchased a Home?'],['receivedDpa','Received DPA?'],['howPrepared','Felt Prepared?']]
+        : r.programBlock === 'rent-ready'
+        ? [['securedHousing','Secured Housing?'],['currentOnRent','Current on Rent?'],['financialImprovement','Financial Improvement?']]
+        : [];
+      return addonKeys.filter(([k]) => res[k])
+        .map(([k, lbl]) => `<div style="display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8125rem;"><span style="color:var(--text-muted);">${escHtml(lbl)}</span>${pill(res[k])}</div>`)
+        .join('');
+    })();
+
+    section.classList.remove('hidden');
+    content.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.4rem;">
+        <div style="display:flex;align-items:center;gap:0.6rem;">${ratingBadge(res.overallRating)} ${programLine}</div>
+        ${submittedStr ? `<span style="font-size:0.78rem;color:var(--text-muted);">Submitted ${submittedStr}</span>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0;margin-bottom:${addonRows || res.additionalComments ? '0.75rem' : '0'};">
+        ${[
+          ['Would Recommend', res.wouldRecommend],
+          ['Housing Change',  res.housingSituationChange],
+          ['Felt Heard',      res.feltHeard],
+          ['Options Explained', res.optionsExplained],
+          ['Took Action',    res.tookAction],
+        ].filter(([,v]) => v).map(([lbl, v]) =>
+          `<div style="display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8125rem;">
+            <span style="color:var(--text-muted);">${escHtml(lbl)}</span>${pill(v)}
+          </div>`
+        ).join('')}
+      </div>
+      ${addonRows ? `<div style="margin-bottom:0.75rem;">${addonRows}</div>` : ''}
+      ${res.additionalComments
+        ? `<div style="margin-top:0.5rem;font-size:0.8125rem;font-style:italic;color:var(--text-muted);border-left:3px solid var(--border);padding-left:0.6rem;">${escHtml(res.additionalComments)}</div>`
+        : ''}`;
+  } catch (_) {}
+}
+
+async function loadRepairSurveyForClient(jobFileId) {
+  const slot = document.getElementById('repairSurveySlot');
+  if (!slot || !QREW_API_KEY) return;
+  try {
+    const resp = await fetch(
+      `https://workforce.housingopps.org/api/survey-results?jobFileId=${encodeURIComponent(jobFileId)}`,
+      { headers: { 'X-Api-Key': QREW_API_KEY } }
+    );
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.found) return;
+
+    const sv = data.survey;
+    const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+    const dateStr = sv.submittedAt
+      ? new Date(sv.submittedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      : '';
+    const addressedMap = { yes: 'Yes', partly: 'Partly', no: 'No' };
+    const flagBadge = sv.flagged
+      ? `<span style="display:inline-block;margin-left:0.5rem;padding:0.1em 0.5em;border-radius:999px;font-size:0.7rem;font-weight:700;background:#fee2e2;color:#dc2626;">Flagged</span>`
+      : '';
+
+    slot.innerHTML = `
+      <div class="program-mini-card" style="background:var(--surface,#f8f9fb);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;">
+        <div class="program-mini-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <span style="font-size:0.8125rem;font-weight:700;">Repair Survey${flagBadge}</span>
+          ${dateStr ? `<span style="font-size:0.78rem;color:var(--text-muted);">${dateStr}</span>` : ''}
+        </div>
+        <div style="font-size:0.95rem;color:#f59e0b;letter-spacing:0.05em;margin-bottom:0.3rem;">${stars(sv.q1_satisfaction || 0)}</div>
+        <div style="font-size:0.8125rem;color:var(--text-muted);display:flex;gap:1rem;flex-wrap:wrap;">
+          <span>Problem addressed: <strong>${addressedMap[sv.q4_addressed] || '—'}</strong></span>
+          <span>Would recommend: <strong>${sv.q6_recommend === 'yes' ? 'Yes' : sv.q6_recommend === 'no' ? 'No' : '—'}</strong></span>
+        </div>
+        ${sv.q7_comments ? `<div style="margin-top:0.4rem;font-size:0.8125rem;font-style:italic;color:var(--text-muted);">"${escHtml(sv.q7_comments)}"</div>` : ''}
+      </div>`;
+  } catch (_) {}
 }
 
 async function addToList(slotId, label, page) {
@@ -2074,6 +2259,12 @@ function wireCloseFileModal() {
       document.getElementById('closeFileModal').classList.add('hidden');
     }
   });
+
+  // Show/hide agency name field based on referred checkbox
+  document.getElementById('referredToAgency').addEventListener('change', (e) => {
+    const nameEl = document.getElementById('referralAgencyName');
+    if (nameEl) nameEl.style.display = e.target.checked ? '' : 'none';
+  });
 }
 
 async function closeFile() {
@@ -2088,6 +2279,9 @@ async function closeFile() {
     const outcome             = document.getElementById('closureOutcome').value.trim();
     const closureOutcomeValue = parseFloat(document.getElementById('closureOutcomeValue').value) || 0;
     const closureAwardType    = document.getElementById('closureAwardType').value;
+    const closureOutcomeCategory = document.getElementById('closureOutcomeSelect')?.value || '';
+    const referredToAgency    = document.getElementById('referredToAgency')?.checked || false;
+    const referralAgencyName  = referredToAgency ? (document.getElementById('referralAgencyName')?.value.trim() || '') : '';
     const isPre               = _client.counselingType === 'PRE';
     const totalDownPayment    = isPre ? (parseFloat(document.getElementById('closureTotalDownPayment').value) || 0) : 0;
     const ccaAmountProvided   = isPre ? (parseFloat(document.getElementById('closureCcaAmount').value)        || 0) : 0;
@@ -2098,6 +2292,9 @@ async function closeFile() {
       closureOutcome:       outcome,
       closureOutcomeValue,
       closureAwardType,
+      closureOutcomeCategory,
+      referredToAgency,
+      referralAgencyName:   referralAgencyName || null,
       totalDownPayment,
       ccaAmountProvided,
       updatedAt:            serverTimestamp(),
@@ -2108,17 +2305,93 @@ async function closeFile() {
     _client.closureOutcome       = outcome;
     _client.closureOutcomeValue  = closureOutcomeValue;
     _client.closureAwardType     = closureAwardType;
+    _client.closureOutcomeCategory = closureOutcomeCategory;
+    _client.referredToAgency     = referredToAgency;
+    _client.referralAgencyName   = referralAgencyName || null;
     _client.totalDownPayment     = totalDownPayment;
     _client.ccaAmountProvided    = ccaAmountProvided;
 
     document.getElementById('closeFileModal').classList.add('hidden');
     renderHeader(_client);
+    triggerSurveyClosure(_client).catch(() => {});
   } catch (err) {
     errorEl.textContent = 'Failed to close file: ' + err.message;
     errorEl.classList.remove('hidden');
   } finally {
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Close File';
+  }
+}
+
+function detectProgramBlock(counselingType) {
+  const t = (counselingType || '').toLowerCase();
+  if (t === 'pre' || t.includes('pre-purchase') || t.includes('pre purchase')) return 'buyer-ready';
+  if (t.includes('rent')) return 'rent-ready';
+  return null;
+}
+
+async function triggerSurveyClosure(client) {
+  const programBlock   = detectProgramBlock(client.counselingType);
+  const clientEmail    = client.email || '';
+  const expiresAt      = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  // Write survey token
+  const tokenRef = await addDoc(collection(db, 'surveyTokens'), {
+    clientId:      clientId,
+    clientName:    client.clientName    || '',
+    email:         clientEmail,
+    counselingType:client.counselingType || '',
+    programBlock:  programBlock,
+    counselor:     client.counselor     || '',
+    expiresAt,
+    used:          false,
+    createdAt:     serverTimestamp(),
+  });
+
+  const surveyUrl = `https://counseling.housingopps.org/survey.html?token=${tokenRef.id}`;
+
+  const blockLabels = { 'buyer-ready': 'Buyer Ready', 'rent-ready': 'Rent Ready' };
+  const addonNote   = programBlock && blockLabels[programBlock]
+    ? ` + ${blockLabels[programBlock]} add-on` : ' (core only)';
+
+  // Send survey email (fire-and-forget; skip if no client email or no service URL)
+  if (clientEmail && EMAIL_SERVICE_URL) {
+    const firstName = (client.clientName || '').split(' ')[0] || 'there';
+    const htmlBody  = `<p>Dear ${firstName},</p>`
+      + `<p>Thank you for working with Housing Opportunities, Inc. As part of our commitment to continuous improvement, we'd like to hear about your experience.</p>`
+      + `<p>Please take a few minutes to complete our brief satisfaction survey:</p>`
+      + `<p><a href="${surveyUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:0.6rem 1.25rem;border-radius:6px;text-decoration:none;font-weight:600;">Complete Your Survey →</a></p>`
+      + `<p style="font-size:0.85em;color:#64748b;">This link will expire in 30 days.</p>`
+      + `<p>Thank you for your time.<br><br>Housing Opportunities, Inc.<br><a href="mailto:office@housingopps.org">office@housingopps.org</a></p>`;
+
+    fetch(EMAIL_SERVICE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        to:       clientEmail,
+        cc:       'office@housingopps.org',
+        subject:  'Housing Opportunities — Your Feedback Matters',
+        htmlBody,
+      }),
+    }).catch(() => {});
+  }
+
+  // Post closure notification to Google Chat
+  if (GOOGLE_CHAT_CLOSURE_WEBHOOK) {
+    const outcome = client.closureOutcomeCategory || client.closureOutcome || '—';
+    const emailNote = clientEmail ? `Survey sent${addonNote}` : `No email on file — survey not sent`;
+    const text = `🔒 *File Closed*\n`
+      + `*Client:* ${client.clientName || '(unknown)'}\n`
+      + `*Type:* ${client.counselingType || '—'}\n`
+      + `*Counselor:* ${client.counselor || '—'}\n`
+      + `*Outcome:* ${outcome}\n`
+      + `*Survey:* ${emailNote}`;
+
+    fetch(GOOGLE_CHAT_CLOSURE_WEBHOOK, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text }),
+    }).catch(() => {});
   }
 }
 
@@ -3080,6 +3353,7 @@ const SNAPSHOT_EXCLUDE = new Set([
   'id', 'updatedAt', 'createdAt', 'sessionCount', 'totalOutcomeValue',
   'firstSessionDate', 'lastSessionDate', 'status', 'closureDate',
   'closureOutcome', 'closureOutcomeValue', 'closureAwardType',
+  'closureOutcomeCategory', 'referredToAgency', 'referralAgencyName',
   'totalDownPayment', 'ccaAmountProvided',
   'driveFolderId', 'driveFolderName', 'driveFolderUrl',
   'rxNumber',  // legacy field — subcollection is authoritative

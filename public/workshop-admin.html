@@ -429,10 +429,18 @@
               <label>Subtitle / description</label>
               <input type="text" id="nwSubtitle" placeholder="e.g. A free educational workshop for homeowners">
             </div>
-            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;">
               <div class="form-group" style="margin:0;">
                 <label>Date <span style="color:var(--danger)">*</span></label>
                 <input type="datetime-local" id="nwDate" required>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Duration (hours)</label>
+                <input type="number" id="nwDuration" min="0.5" step="0.5" value="1" placeholder="1">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Attendee Count</label>
+                <input type="number" id="nwAttendee" min="0" step="1" placeholder="0">
               </div>
             </div>
           </div>

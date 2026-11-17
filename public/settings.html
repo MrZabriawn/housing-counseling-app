@@ -95,6 +95,10 @@
             <label for="editCounselorFringe">Fringe ($/hr)</label>
             <input type="number" id="editCounselorFringe" min="0" step="0.01" placeholder="e.g. 8.00">
           </div>
+          <div class="form-group">
+            <label for="editCounselorEffectiveFrom">Rate Effective From</label>
+            <input type="date" id="editCounselorEffectiveFrom">
+          </div>
         </div>
         <input type="hidden" id="editCounselorId">
         <input type="hidden" id="editStaffUserId">
@@ -299,6 +303,66 @@
       <div class="form-actions" style="margin-top:1rem;">
         <button id="saveRatesBtn" class="btn btn-primary">Save Rates</button>
       </div>
+    </div>
+
+    <!-- CHCI Hours Caps -->
+    <div class="card" style="max-width:640px;margin-top:1.25rem;">
+      <div class="card-title">CHCI Hours Caps</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1.25rem;">
+        Maximum billable hours per counseling type. Clients approaching or exceeding these limits will see a warning when logging sessions.
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:0.875rem;max-width:360px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;">Type</th>
+            <th style="text-align:right;padding:0.4rem 0.6rem;border-bottom:2px solid var(--border);color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;">Max Hours</th>
+          </tr>
+        </thead>
+        <tbody id="chciCapsBody">
+          <tr><td colspan="2" style="padding:0.75rem;text-align:center;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+      <p id="chciCapsMsg" class="hidden" style="font-size:0.8125rem;margin-top:0.75rem;"></p>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button id="saveChciCapsBtn" class="btn btn-primary">Save Caps</button>
+      </div>
+    </div>
+
+    <!-- Funding Allocations -->
+    <div class="card" style="max-width:720px;margin-top:1.25rem;">
+      <div class="card-title">Funding Allocations</div>
+      <p style="color:var(--text-muted);font-size:0.8125rem;margin-bottom:1.25rem;">
+        Track annual funding allocations per program. The most recent entry for each program is used as the current allocation on the billing dashboard.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;margin-bottom:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Program</label>
+          <select id="allocProgram">
+            <option value="CHCI">CHCI</option>
+            <option value="HEMAP">HEMAP</option>
+            <option value="HUD">HUD</option>
+            <option value="JTBC">JTBC</option>
+            <option value="TMCRF">TMCRF</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Amount ($)</label>
+          <input type="number" id="allocAmount" min="0" step="1" placeholder="e.g. 50000">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Effective Date</label>
+          <input type="date" id="allocDate">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Notes</label>
+          <input type="text" id="allocNotes" placeholder="e.g. FY 2026 annual">
+        </div>
+      </div>
+      <div class="form-actions" style="margin-bottom:1.25rem;">
+        <button id="addAllocBtn" class="btn btn-primary btn-sm">Add Allocation</button>
+        <span id="allocMsg" class="hidden" style="font-size:0.8125rem;margin-left:0.75rem;"></span>
+      </div>
+      <div id="allocHistory" style="font-size:0.875rem;color:var(--text-muted);">Loading…</div>
     </div>
 
     <!-- AMI Two-Field Migration -->

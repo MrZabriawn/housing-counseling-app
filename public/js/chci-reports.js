@@ -291,7 +291,7 @@ async function generateAll() {
     const downloadUrl = await getDownloadURL(storageRef);
 
     // Record in Firestore
-    await addDoc(collection(db, 'chciReports'), {
+    const chciRef = await addDoc(collection(db, 'chciReports'), {
       fileName:   zipName,
       month:      `${monthName} ${year}`,
       amounts,
@@ -299,6 +299,26 @@ async function generateAll() {
       createdAt:  serverTimestamp(),
       createdBy:  auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
     });
+
+    // Write billing register entry
+    const totalAmt = (amounts.f2f || 0) + (amounts.md || 0) + (amounts.dd || 0);
+    if (totalAmt > 0) {
+      await addDoc(collection(db, 'billingRegister'), {
+        program:      'CHCI',
+        billingMonth: `${monthName} ${year}`,
+        streams:      amounts,
+        amount:       totalAmt,
+        status:       'billed',
+        sourceType:   'chci_invoice',
+        sourceId:     chciRef.id,
+        backfilled:   false,
+        paidDate:     null,
+        paidAmount:   null,
+        notes:        '',
+        createdAt:    serverTimestamp(),
+        createdBy:    auth.currentUser?.displayName || auth.currentUser?.email || '',
+      });
+    }
 
     statusEl.textContent = '✓ Saved online';
     statusEl.style.color = 'var(--primary)';
@@ -498,7 +518,7 @@ async function saveBackfill() {
     await uploadBytes(storageRef, _backfillZipBlob, { contentType: 'application/zip' });
     const downloadUrl = await getDownloadURL(storageRef);
 
-    await addDoc(collection(db, 'chciReports'), {
+    const backfillRef = await addDoc(collection(db, 'chciReports'), {
       fileName:   zipName,
       month:      `${monthName} ${year}`,
       amounts,
@@ -507,6 +527,26 @@ async function saveBackfill() {
       createdBy:  auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
       backfilled: true,
     });
+
+    // Write billing register entry for backfill
+    const backfillTotal = (amounts.f2f || 0) + (amounts.md || 0) + (amounts.dd || 0);
+    if (backfillTotal > 0) {
+      await addDoc(collection(db, 'billingRegister'), {
+        program:      'CHCI',
+        billingMonth: `${monthName} ${year}`,
+        streams:      amounts,
+        amount:       backfillTotal,
+        status:       'billed',
+        sourceType:   'chci_invoice',
+        sourceId:     backfillRef.id,
+        backfilled:   true,
+        paidDate:     null,
+        paidAmount:   null,
+        notes:        '',
+        createdAt:    serverTimestamp(),
+        createdBy:    auth.currentUser?.displayName || auth.currentUser?.email || '',
+      });
+    }
 
     statusEl.textContent = '✓ Added to history';
     statusEl.style.color = 'var(--primary)';

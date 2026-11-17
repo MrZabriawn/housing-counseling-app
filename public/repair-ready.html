@@ -15,7 +15,10 @@
     .client-selector-item .cs-meta { font-size:0.78rem; color:var(--text-muted); }
   </style>
 </head>
+<script>if (window === window.top) { location.replace('programs.html?tab=repair-ready'); }</script>
+<style>.in-frame .nav,.in-frame .page-header{display:none!important}.in-frame main.page{padding-top:1rem!important}</style>
 <body>
+  <script>if (window !== window.top) document.body.classList.add('in-frame');</script>
   <nav class="nav"></nav>
 
   <main class="page">
@@ -194,7 +197,27 @@
             <button type="button" id="unlinkQrewBtn" class="btn btn-secondary btn-sm">Unlink</button>
           </div>
           <div id="qrewLinkInputs" style="display:flex;flex-direction:column;gap:0.6rem;">
-            <!-- Primary: create a new Qrew job directly -->
+            <!-- Job type selector -->
+            <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+              <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Type</span>
+              <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8125rem;cursor:pointer;"><input type="radio" name="qrewJobType" value="hip" checked> HIP</label>
+              <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8125rem;cursor:pointer;"><input type="radio" name="qrewJobType" value="external"> External</label>
+              <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8125rem;cursor:pointer;"><input type="radio" name="qrewJobType" value="internal"> Internal</label>
+            </div>
+            <!-- External: paying party fields -->
+            <div id="qrewExternalSection" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.65rem 0.75rem;display:none;flex-direction:column;gap:0.4rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.1rem;">Paying Party</div>
+              <input type="text"  id="qrewExtName"    placeholder="Organization or payer name *" style="font-size:0.8125rem;">
+              <input type="text"  id="qrewExtContact" placeholder="Contact person (optional)"    style="font-size:0.8125rem;">
+              <input type="email" id="qrewExtEmail"   placeholder="Email"                        style="font-size:0.8125rem;">
+              <input type="tel"   id="qrewExtPhone"   placeholder="Phone"                        style="font-size:0.8125rem;">
+              <input type="text"  id="qrewExtAddress" placeholder="Address (optional)"           style="font-size:0.8125rem;">
+            </div>
+            <!-- Internal: project name override -->
+            <div id="qrewInternalSection" style="display:none;flex-direction:column;gap:0.4rem;">
+              <input type="text" id="qrewInternalName" placeholder="Project name *" style="font-size:0.8125rem;">
+            </div>
+            <!-- Create button -->
             <div>
               <button type="button" id="createQrewJobBtn" class="btn btn-primary btn-sm">Create Job in Qrew</button>
             </div>

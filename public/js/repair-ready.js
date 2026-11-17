@@ -66,10 +66,37 @@ async function createQrewJob() {
   const btn    = document.getElementById('createQrewJobBtn');
   if (!r) return;
 
+  const jobType = document.querySelector('input[name="qrewJobType"]:checked')?.value || 'hip';
+
+  // Validate type-specific required fields before hitting the API
+  if (jobType === 'external') {
+    const extName = document.getElementById('qrewExtName')?.value.trim();
+    if (!extName) {
+      msgEl.textContent = 'Paying party name is required for External jobs.';
+      msgEl.style.color = 'var(--danger,#dc2626)';
+      return;
+    }
+  }
+  if (jobType === 'internal') {
+    const projName = document.getElementById('qrewInternalName')?.value.trim();
+    if (!projName) {
+      msgEl.textContent = 'Project name is required for Internal jobs.';
+      msgEl.style.color = 'var(--danger,#dc2626)';
+      return;
+    }
+  }
+
   btn.disabled      = true;
   btn.textContent   = 'Creating…';
   msgEl.textContent = '';
   msgEl.style.color = '';
+
+  // Internal jobs only need a name and the housing record id
+  if (jobType === 'internal') {
+    const projName = document.getElementById('qrewInternalName').value.trim();
+    const payload  = { jobType: 'internal', clientName: projName, housingRecordId: editingId, _syncSource: 'housing' };
+    return _submitQrewPayload(payload, btn, msgEl);
+  }
 
   // Capture scope from the form (not yet saved) so the user can type it first
   const scopeOfWork = document.getElementById('editHigScope')?.value.trim() || r.scopeOfWork || '';
@@ -89,9 +116,9 @@ async function createQrewJob() {
   const householdSize = adults + children || null;
 
   // Annual household income = sum of all monthly income sources × 12
-  const empIncome  = (clientProfile.employmentHistory || []).reduce((s, e) => s + (Number(e.monthlyIncome) || 0), 0);
-  const otherInc   = (clientProfile.otherIncome       || []).reduce((s, i) => s + (Number(i.monthlyIncome) || 0), 0);
-  const hhMemberInc = (clientProfile.householdMembers || []).reduce((s, m) => s + (Number(m.monthlyIncome) || 0), 0);
+  const empIncome   = (clientProfile.employmentHistory || []).reduce((s, e) => s + (Number(e.monthlyIncome) || 0), 0);
+  const otherInc    = (clientProfile.otherIncome       || []).reduce((s, i) => s + (Number(i.monthlyIncome) || 0), 0);
+  const hhMemberInc = (clientProfile.householdMembers  || []).reduce((s, m) => s + (Number(m.monthlyIncome) || 0), 0);
   const annualHouseholdIncome = (empIncome + otherInc + hhMemberInc) * 12 || null;
 
   // Best phone: prefer cell, fall back to home
@@ -99,6 +126,7 @@ async function createQrewJob() {
 
   // Strip nulls/empty strings — Qrew treats omitted fields as unset
   const raw = {
+    jobType,
     clientName:             r.clientName        || '',
     streetAddress:          r.streetAddress     || '',
     city:                   r.city              || '',
@@ -114,15 +142,33 @@ async function createQrewJob() {
     scopeOfWork,
     driveFolderUrl:         r.driveFolderUrl    || '',
     housingRecordId:        editingId,
+    _syncSource:            'housing',
   };
-  // Drop null/empty optional fields
+  // Drop null/empty optional fields; always keep required ones
   const payload = Object.fromEntries(
-    Object.entries(raw).filter(([, v]) => v !== null && v !== '' && v !== 0 || ['clientName','housingRecordId'].includes(_))
+    Object.entries(raw).filter(([k, v]) => v !== null && v !== '' && v !== 0 || ['clientName','housingRecordId','jobType'].includes(k))
   );
-  // Always keep required fields even if falsy
-  payload.clientName     = raw.clientName;
+  payload.clientName      = raw.clientName;
   payload.housingRecordId = raw.housingRecordId;
+  payload.jobType         = raw.jobType;
 
+  // External jobs: attach paying party block
+  if (jobType === 'external') {
+    const extName    = document.getElementById('qrewExtName')?.value.trim()    || '';
+    const extContact = document.getElementById('qrewExtContact')?.value.trim() || '';
+    const extEmail   = document.getElementById('qrewExtEmail')?.value.trim()   || '';
+    const extPhone   = document.getElementById('qrewExtPhone')?.value.trim()   || '';
+    const extAddress = document.getElementById('qrewExtAddress')?.value.trim() || '';
+    payload.externalClient = Object.fromEntries(
+      Object.entries({ name: extName, contact: extContact, email: extEmail, phone: extPhone, address: extAddress })
+        .filter(([, v]) => v)
+    );
+  }
+
+  return _submitQrewPayload(payload, btn, msgEl);
+}
+
+async function _submitQrewPayload(payload, btn, msgEl) {
   try {
     const res = await fetch(QREW_CREATE_URL, {
       method:  'POST',
@@ -336,6 +382,17 @@ requireAuth(async (user, profile) => {
   document.getElementById('unlinkHigFolderBtn').addEventListener('click', () => {
     _editFolder = null;
     renderFolderUI();
+  });
+
+  // Qrew job type picker — show/hide conditional sections
+  document.querySelectorAll('input[name="qrewJobType"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const val = radio.value;
+      const extSec  = document.getElementById('qrewExternalSection');
+      const intSec  = document.getElementById('qrewInternalSection');
+      if (extSec) extSec.style.display = val === 'external' ? 'flex' : 'none';
+      if (intSec) intSec.style.display = val === 'internal' ? 'flex' : 'none';
+    });
   });
 
   // Qrew job link / unlink

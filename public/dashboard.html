@@ -80,6 +80,18 @@
         <div class="stat-label">Hispanic HH</div>
         <div class="stat-value" id="statHispanic">—</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">First-Time Buyers</div>
+        <div class="stat-value" id="statFTHB">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Group Ed Clients</div>
+        <div class="stat-value" id="statGroupEd">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Workshop Headcount</div>
+        <div class="stat-value" id="statWorkshopHC">—</div>
+      </div>
     </div>
 
     <!-- Breakdown tables -->
@@ -108,6 +120,47 @@
           <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
         </table>
       </div>
+      <div class="breakdown-card">
+        <h4>Households by County</h4>
+        <table id="countyTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Households by Referral Source</h4>
+        <table id="referralTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="breakdown-card">
+        <h4>Sessions by Contact Type</h4>
+        <table id="contactTypeTable">
+          <tbody><tr><td colspan="2" class="text-muted" style="padding:1rem;text-align:center;">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Buyer Ready section -->
+    <div style="margin-top:1.75rem;" id="buyerReadySection">
+      <div style="color:var(--text-muted);font-size:0.875rem;text-align:center;padding:1rem;">Loading…</div>
+    </div>
+
+    <!-- Repair Ready survey rollup -->
+    <div style="margin-top:1.75rem;" id="repairSurveySection"></div>
+
+    <!-- Billing Summary section -->
+    <div style="margin-top:1.75rem;" id="billingSummarySection">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0;">Billing Summary</h3>
+        <a href="reports.html?tab=billing" style="font-size:0.8125rem;color:var(--primary);text-decoration:none;">View Full Register →</a>
+      </div>
+      <div id="billingAllocGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.75rem;margin-bottom:1rem;">
+        <div style="color:var(--text-muted);font-size:0.875rem;padding:1rem;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);grid-column:1/-1;text-align:center;">Loading…</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.5rem;">Recent Entries</div>
+        <div id="billingRecentRows" style="font-size:0.875rem;color:var(--text-muted);">Loading…</div>
+      </div>
     </div>
 
     <!-- Closures section -->
@@ -119,12 +172,20 @@
           <div class="stat-value" id="statClosures">—</div>
         </div>
         <div class="stat-card">
+          <div class="stat-label">Avg Days to Close</div>
+          <div class="stat-value" id="statAvgDays">—</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-label">Direct Assistance</div>
           <div class="stat-value" id="statDirectAmt">—</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Total Outcome Value</div>
           <div class="stat-value" id="statOutcomeAmt">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Referred to Agency</div>
+          <div class="stat-value" id="statReferredOut">—</div>
         </div>
       </div>
       <div class="breakdown-grid">

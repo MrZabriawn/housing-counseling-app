@@ -105,6 +105,7 @@
   <!-- CDN libraries for HUD report generation (globals required before ES module) -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
   <nav class="nav"></nav>
@@ -125,6 +126,9 @@
       <button class="reports-tab" id="incompleteTabBtn" data-tab="tab-incomplete">Incomplete Files</button>
       <button class="reports-tab" data-tab="tab-nocontact">No Contact</button>
       <button class="reports-tab" data-tab="tab-hemap">HEMAP</button>
+      <button class="reports-tab" data-tab="tab-billing">Billing Register</button>
+      <button class="reports-tab" data-tab="tab-hud">HUD</button>
+      <button class="reports-tab" data-tab="tab-closeouts">Closeouts</button>
     </div>
 
     <!-- ══ CDBG panel ════════════════════════════════════════════════════════════ -->
@@ -497,6 +501,255 @@
       </details>
     </div>
 
+    <!-- ══ Billing Register panel ══════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-billing">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0;">Billing Register</h3>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <select id="brProgramFilter" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">All Programs</option>
+            <option value="CHCI">CHCI</option>
+            <option value="HEMAP">HEMAP</option>
+            <option value="HUD">HUD</option>
+            <option value="JTBC">JTBC</option>
+            <option value="TMCRF">TMCRF</option>
+          </select>
+          <button id="brRefreshBtn" class="btn btn-secondary btn-sm">↺ Refresh</button>
+          <button id="brAddBtn" class="btn btn-primary btn-sm">+ Manual Entry</button>
+        </div>
+      </div>
+
+      <!-- Totals bar -->
+      <div style="display:flex;gap:2rem;margin-bottom:1rem;padding:0.65rem 1rem;background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem;">
+        <div>Total Billed: <strong id="brTotalBilled">—</strong></div>
+        <div>Total Paid: <strong id="brTotalPaid">—</strong></div>
+      </div>
+
+      <!-- Manual entry form (hidden by default) -->
+      <div id="brManualForm" style="display:none;margin-bottom:1rem;" class="card">
+        <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">Add Manual Entry</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;margin-bottom:0.75rem;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Program *</label>
+            <select id="brManualProgram" style="font-size:0.875rem;width:100%;">
+              <option value="">— Select —</option>
+              <option value="HUD">HUD</option>
+              <option value="JTBC">JTBC</option>
+              <option value="TMCRF">TMCRF</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Billing Month *</label>
+            <input type="text" id="brManualMonth" placeholder="e.g. October 2026" style="font-size:0.875rem;width:100%;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Amount ($) *</label>
+            <input type="number" id="brManualAmount" min="0" step="0.01" placeholder="0.00" style="font-size:0.875rem;width:100%;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Notes</label>
+            <input type="text" id="brManualNotes" placeholder="Optional" style="font-size:0.875rem;width:100%;">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <button id="brManualSaveBtn" class="btn btn-primary btn-sm">Save Entry</button>
+          <button id="brManualCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+          <span id="brManualMsg" style="font-size:0.8125rem;"></span>
+        </div>
+      </div>
+
+      <!-- Register table -->
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.875rem;min-width:700px;">
+          <thead>
+            <tr style="background:#f8f9fb;">
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Program</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:right;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Amount</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Status</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:right;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Paid Amt</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Paid Date</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Notes</th>
+              <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="brRegisterBody">
+            <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ HUD Reports panel ═══════════════════════════════════════════════════ -->
+    <div class="reports-panel" id="tab-hud">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+        <div>
+          <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0 0 0.25rem;">HUD Submission Reports</h3>
+          <p style="font-size:0.8125rem;color:var(--text-muted);margin:0;">Generate monthly HUD files. Executive Director only. <a href="hud.html" style="color:var(--primary);font-size:0.8125rem;">→ My HUD Time</a></p>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <div class="form-group" style="margin:0;">
+            <label for="hudMonthPicker" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</label>
+            <input type="month" id="hudMonthPicker" style="font-size:0.875rem;">
+          </div>
+          <button id="refreshBtn" class="btn btn-secondary btn-sm" style="margin-top:18px;">Refresh</button>
+        </div>
+      </div>
+
+      <!-- Counselor status -->
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;">
+        <div class="card-title">Counselor Status</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Entry counts for selected month. ⚠ = missing Staff # or Title — blocks export for that counselor.
+        </p>
+        <div id="statusTableWrap">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Select a month and click Refresh.</p>
+        </div>
+      </div>
+
+      <!-- Generate buttons -->
+      <div class="card" id="exportArea" style="max-width:860px;margin-bottom:1.25rem;">
+        <div class="card-title">Generate Reports</div>
+        <p id="statusMsg" class="hidden"></p>
+
+        <div class="report-section">
+          <div class="report-section-title">Client Activity Log · Training Activity Log · Invoice</div>
+          <div class="btn-group">
+            <button id="genCalBtn" class="btn btn-primary">Generate CAL</button>
+            <button id="genTalBtn" class="btn btn-primary">Generate TAL</button>
+            <button id="genInvBtn" class="btn btn-primary">Generate INV</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Personnel Activity Report (PAR) — per counselor</div>
+          <div class="btn-group" id="parButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllParsBtn" class="btn btn-secondary btn-sm">Generate All PARs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Case Management Log (CML) — per counselor</div>
+          <div class="btn-group" id="cmlButtons">
+            <span style="font-size:0.8125rem;color:var(--text-muted);">Load status first.</span>
+          </div>
+          <div style="margin-top:0.5rem;">
+            <button id="genAllCmlsBtn" class="btn btn-secondary btn-sm">Generate All CMLs</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- TMCRF -->
+        <div class="report-section">
+          <div class="report-section-title">Credit Report Reimbursement (TMCRF)</div>
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+            <label class="btn btn-secondary btn-sm" for="tmcrfFileInput" style="cursor:pointer;white-space:nowrap;">
+              Upload CoreLogic Bill (PDF)
+            </label>
+            <input type="file" id="tmcrfFileInput" accept=".pdf" class="hidden">
+            <span id="tmcrfFileName" style="font-size:0.875rem;color:var(--text-muted);">No file selected</span>
+          </div>
+          <p id="tmcrfError" class="error-msg hidden"></p>
+          <div id="tmcrfPreview" class="hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.5rem;">
+              <div>
+                <strong id="tmcrfMonthLabel"></strong>
+                <span id="tmcrfCountLabel" style="color:var(--text-muted);font-size:0.875rem;margin-left:0.6rem;"></span>
+              </div>
+              <button id="tmcrfGenerateBtn" class="btn btn-primary btn-sm">Generate Invoice</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Rx #</th><th>Date</th><th>First Name</th><th>Last Name</th>
+                    <th>Type of Report</th><th style="text-align:right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="tmcrfPreviewBody"></tbody>
+              </table>
+            </div>
+            <div style="text-align:right;font-weight:600;margin-top:0.6rem;font-size:0.95rem;">
+              Total: <span id="tmcrfTotal"></span>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="report-section-title">Full Submission Package</div>
+          <div class="btn-group">
+            <button id="genAllBtn" class="btn btn-primary" style="background:var(--accent,#2563eb);">Generate All → ZIP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Past HUD Submissions -->
+      <div class="card" style="margin-bottom:1.25rem;max-width:860px;">
+        <div class="card-title">Upload Past HUD Submission</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Upload a past <code>HOI_HUD_Submission_*.zip</code> file to add it to the submission history.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <label class="btn btn-secondary btn-sm" for="hudBackfillZip" style="cursor:pointer;white-space:nowrap;">Choose ZIP</label>
+          <input type="file" id="hudBackfillZip" accept=".zip" style="display:none;">
+          <span id="hudBackfillFileName" style="font-size:0.8125rem;color:var(--text-muted);">No file selected</span>
+        </div>
+        <div id="hudBackfillForm" style="display:none;">
+          <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:0.75rem;">
+            <div>
+              <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Reporting Month</label>
+              <input type="month" id="hudBackfillMonth" style="font-size:0.875rem;">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <button id="hudBackfillSaveBtn" class="btn btn-primary btn-sm">Save to History</button>
+            <span id="hudBackfillStatus" style="font-size:0.8125rem;"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.25rem;max-width:860px;">
+        <div class="card-title">Past HUD Submissions</div>
+        <div id="hudHistory">
+          <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+        </div>
+      </div>
+
+      <!-- Session import + missing Rx scanner -->
+      <div class="card" style="margin-bottom:1.25rem;max-width:860px;">
+        <div class="card-title">Session Import</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Scans sessions from Jan 2026 onward and creates HUD entries for NOFA qualifying ones. Safe to re-run.
+        </p>
+        <button id="importSessionsBtn" class="btn btn-secondary">Import from Sessions</button>
+        <p id="importMsg" class="hidden" style="margin-top:0.75rem;font-size:0.8125rem;"></p>
+      </div>
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Sessions Missing Rx / Guarantor</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          Finds In-Person, Case Management, and Court sessions from Jan 2026 onward with no Rx number.
+        </p>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <button id="scanMissingRxBtn" class="btn btn-secondary">Scan Sessions</button>
+          <select id="missingRxCounselor" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+            <option value="">All Counselors</option>
+          </select>
+        </div>
+        <div id="missingRxResult" style="font-size:0.8125rem;color:var(--text-muted);">Click Scan to begin.</div>
+      </div>
+    </div>
+
   </main>
 
   <!-- HEMAP Modal -->
@@ -594,6 +847,17 @@
     </div>
   </div>
 
+  <!-- ══ Closeouts panel ══════════════════════════════════════════════════════ -->
+  <div class="reports-panel" id="tab-closeouts" style="padding:0 0.25rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+      <h3 style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin:0;">Closeout Surveys — POST Counseling Satisfaction</h3>
+    </div>
+    <div id="closeoutStats" style="margin-bottom:1.5rem;">
+      <p style="color:var(--text-muted);font-size:0.875rem;">Loading…</p>
+    </div>
+    <div id="closeoutTable"></div>
+  </div>
+
   <script type="module">
     import { requireAuth, setupNav } from './js/auth.js';
     import { initCdbgReports, initCourtReport } from './js/reports.js?v=11';
@@ -601,6 +865,9 @@
     import { initIncompleteReport } from './js/incomplete-report.js';
     import { initNoContactReport } from './js/no-contact-report.js';
     import { initHemapLog } from './js/hemap-reports.js';
+    import { initBillingRegister } from './js/billing-register.js';
+    import { initHudReports }     from './js/hud-reports.js';
+    import { initCloseoutSurveys } from './js/closeout-surveys.js';
 
     function switchReportsTab(tabId) {
       document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
@@ -630,20 +897,49 @@
       await initIncompleteReport(user, profile);
       await initNoContactReport(user, profile);
       await initHemapLog(user, profile);
+      await initBillingRegister(user, profile);
 
-      // Auto-switch tabs if linked from a banner
+      // HUD reports tab — lazy init on first activation
+      let _hudLoaded = false;
+      document.querySelector('.reports-tab[data-tab="tab-hud"]')?.addEventListener('click', async () => {
+        if (!_hudLoaded) {
+          _hudLoaded = true;
+          await initHudReports(user, profile);
+        }
+      });
+
+      // Closeouts tab — lazy init on first activation
+      let _closeoutsLoaded = false;
+      document.querySelector('.reports-tab[data-tab="tab-closeouts"]')?.addEventListener('click', async () => {
+        if (!_closeoutsLoaded) {
+          _closeoutsLoaded = true;
+          await initCloseoutSurveys();
+        }
+      });
+
+      // Auto-switch to the requested tab on deep-link
       const params = new URLSearchParams(window.location.search);
-      if (params.get('tab') === 'incomplete') {
-        switchReportsTab('tab-incomplete');
+      const tabParam = params.get('tab');
+      if (tabParam === 'chci')       switchReportsTab('tab-chci');
+      if (tabParam === 'hemap')      switchReportsTab('tab-hemap');
+      if (tabParam === 'billing')    switchReportsTab('tab-billing');
+      if (tabParam === 'hud') {
+        switchReportsTab('tab-hud');
+        if (!_hudLoaded) { _hudLoaded = true; await initHudReports(user, profile); }
       }
-      if (params.get('tab') === 'nocontact') {
+      if (tabParam === 'incomplete') switchReportsTab('tab-incomplete');
+      if (tabParam === 'closeouts') {
+        switchReportsTab('tab-closeouts');
+        if (!_closeoutsLoaded) { _closeoutsLoaded = true; await initCloseoutSurveys(); }
+      }
+      if (tabParam === 'nocontact') {
         switchReportsTab('tab-nocontact');
         document.getElementById('loadNoContactBtn')?.click();
       }
-      // If deep-linked directly to court tab, load it now
-      if (params.get('tab') === 'court') {
+      if (tabParam === 'court') {
         _courtLoaded = true;
         initCourtReport();
+        switchReportsTab('tab-court');
       }
     });
   </script>

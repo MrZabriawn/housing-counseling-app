@@ -241,11 +241,14 @@ function buildDayRow(dateStr) {
       const sColor     = SECTION_COLORS[e.parSection] || '#6b7280';
       const secBadge   = `<span style="font-size:0.68rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:20px;background:${sColor};color:#fff;margin-left:0.4rem;vertical-align:middle;">${esc(e.parSection)}</span>`;
       const isFromSession = e.source === 'session';
-      const typeLabel  = isFromSession             ? 'Session (auto)'
-                       : e.type === 'counseling_session' ? 'Session'
-                       : e.type === 'case_management'    ? 'Case Mgmt'
-                       : e.costType === 'T'              ? 'Training'
-                       : 'Marketing';
+      const typeLabel  = isFromSession                   ? 'Session (auto)'
+                       : e.type === 'counseling_session'  ? 'Session'
+                       : e.type === 'case_management'     ? 'Case Mgmt'
+                       : e.type === 'admin_cml'           ? 'Case Mgmt'
+                       : e.type === 'admin_direct'        ? (e.parRow || 'Direct Service')
+                       : e.costType === 'T'               ? 'Training'
+                       : e.costType === 'M'               ? 'Marketing'
+                       : e.parRow || 'Entry';
       const clientLabel = e.clientId
         ? `<a href="client.html?id=${esc(e.clientId)}" style="color:inherit;font-weight:600;text-decoration:underline;">${esc(e.clientName)}</a>`
         : esc(e.clientName);
@@ -369,6 +372,15 @@ function buildAddForm(dateStr) {
         <label><input type="radio" name="evType_${dateStr}" class="ev-type-radio" value="counseling_session" checked> Counseling Session</label>
         <label><input type="radio" name="evType_${dateStr}" class="ev-type-radio" value="case_management"> Case Management</label>
         <label><input type="radio" name="evType_${dateStr}" class="ev-type-radio" value="training_marketing"> Training / Marketing</label>
+        <label><input type="radio" name="evType_${dateStr}" class="ev-type-radio" value="admin_cml"> Admin CML (no client)</label>
+      </div>
+
+      <!-- Admin CML fields (no client required) -->
+      <div class="ev-admin-cml-section" style="display:none;">
+        <div class="form-group" style="margin:0 0 0.5rem;">
+          <label style="font-size:0.75rem;">Description *</label>
+          <input type="text" class="ev-admin-cml-desc" placeholder="Case management activity…">
+        </div>
       </div>
 
       <!-- Rx lookup (session + case_management) -->
@@ -441,10 +453,12 @@ function toggleDay(dateStr) {
 
 // ── Add form: type toggle ─────────────────────────────────────────────────────
 function updateAddFormType(form) {
-  const type = form.querySelector('.ev-type-radio:checked')?.value || 'counseling_session';
-  const isTM = type === 'training_marketing';
-  form.querySelector('.ev-rx-section').style.display  = isTM ? 'none'  : '';
-  form.querySelector('.ev-tm-section').style.display  = isTM ? ''      : 'none';
+  const type    = form.querySelector('.ev-type-radio:checked')?.value || 'counseling_session';
+  const isTM    = type === 'training_marketing';
+  const isCML   = type === 'admin_cml';
+  form.querySelector('.ev-rx-section').style.display        = (isTM || isCML) ? 'none' : '';
+  form.querySelector('.ev-tm-section').style.display        = isTM  ? ''     : 'none';
+  form.querySelector('.ev-admin-cml-section').style.display = isCML ? ''     : 'none';
   const deliveryRow = form.querySelector('.ev-delivery-row');
   if (deliveryRow) deliveryRow.style.display = type === 'counseling_session' ? '' : 'none';
 }
@@ -534,7 +548,11 @@ async function saveEntry(dateStr) {
     enteredBy: _user.uid, createdAt: serverTimestamp(),
   };
 
-  if (type === 'training_marketing') {
+  if (type === 'admin_cml') {
+    const desc = form.querySelector('.ev-admin-cml-desc')?.value.trim() || '';
+    if (!desc) { showFormErr(errEl, 'Description is required.'); return; }
+    Object.assign(payload, { description: desc, parSection: 'S4', parRow: 'Case Management' });
+  } else if (type === 'training_marketing') {
     const costType  = form.querySelector('.ev-cost-type')?.value || 'T';
     const tmDesc    = form.querySelector('.ev-tm-desc')?.value.trim() || '';
     const startTime = form.querySelector('.ev-start-time')?.value || '';

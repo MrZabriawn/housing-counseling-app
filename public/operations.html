@@ -86,6 +86,7 @@
       <button class="ops-tab" data-panel="post">Post-Purchase</button>
       <button class="ops-tab" data-panel="outstanding">Outstanding</button>
       <button class="ops-tab" data-panel="corrections">Corrections Log</button>
+      <button class="ops-tab" data-panel="billing">Billing</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -421,6 +422,86 @@
       </div>
 
     </div><!-- /panel-corrections -->
+
+    <!-- BILLING GUIDANCE -->
+    <div id="panel-billing" class="ops-panel">
+
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;">
+        <div class="card-title">Monthly Billing Workflow</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Complete billing steps each month in this order. All billing history is tracked in <a href="reports.html?tab=billing" style="color:var(--primary);">Reports → Billing Register</a>.</p>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.5rem;">CHCI (PHFA)</div>
+        <div class="ops-step">
+          <span class="step-badge">1</span>
+          <div class="step-text"><strong>Generate CHCI invoice.</strong> Go to <a href="reports.html?tab=chci" style="color:var(--primary);">Reports → CHCI</a>. Upload the three Rx Office exports (F2F, M&amp;D, D&amp;D) and click "Generate &amp; Save Zip." The system auto-creates a Billed entry in the Billing Register.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">2</span>
+          <div class="step-text"><strong>Monitor CHCI hours caps per client.</strong> Each client's Session tab shows a progress bar against their counseling type cap. Caps are configured in <a href="settings.html" style="color:var(--primary);">Settings → CHCI Hours Caps</a>. When a client hits 80% capacity an amber warning appears; at 100% it turns red. Do not log additional billable hours for a capped client without supervisor approval.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">3</span>
+          <div class="step-text"><strong>Mark CHCI invoice paid.</strong> When the PHFA payment arrives, go to <a href="reports.html?tab=billing" style="color:var(--primary);">Billing Register</a>, find the CHCI entry, click "Mark Paid", and enter the payment amount and date.</div>
+        </div>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:1.25rem 0 0.5rem;">HEMAP (PHFA)</div>
+        <div class="ops-step">
+          <span class="step-badge">4</span>
+          <div class="step-text"><strong>Add HEMAP entries throughout the month.</strong> When a HEMAP application is sent to PHFA, go to <a href="reports.html?tab=hemap" style="color:var(--primary);">Reports → HEMAP</a> and click "+ Add Entry." Fill in the client name (as it appears on the application), property address, date sent, and hours.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">5</span>
+          <div class="step-text"><strong>Generate HEMAP invoice.</strong> At month end, select all pending entries and click "Generate Invoice." A Billed entry is auto-created in the Billing Register with the total amount.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">6</span>
+          <div class="step-text"><strong>Mark HEMAP invoice paid</strong> in the Billing Register when payment is received.</div>
+        </div>
+
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:1.25rem 0 0.5rem;">HUD</div>
+        <div class="ops-step">
+          <span class="step-badge">7</span>
+          <div class="step-text"><strong>Keep My HUD Time current throughout the month.</strong> Go to <a href="hud.html" style="color:var(--primary);">HUD → My HUD Time</a> and log all non-session time (processing, billing, supervision, training, marketing) day by day. NOFA In-Person sessions import automatically — you only need to add non-session time manually.</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">8</span>
+          <div class="step-text"><strong>Generate HUD submission package.</strong> At month end, go to <a href="reports.html?tab=hud" style="color:var(--primary);">Reports → HUD</a>. Click Refresh to verify PAR completeness for all counselors, then click "Generate All → ZIP" to produce the full submission package (CAL, PAR, CML, TAL, INV).</div>
+        </div>
+        <div class="ops-step">
+          <span class="step-badge">9</span>
+          <div class="step-text"><strong>Add HUD, JTBC, and TMCRF manual entries.</strong> When you receive the billing amounts for programs not auto-generated (HUD, JTBC, TMCRF), go to <a href="reports.html?tab=billing" style="color:var(--primary);">Billing Register → Manual Entry</a> and log each one.</div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;margin-bottom:1.25rem;border-left:4px solid var(--primary);">
+        <div class="card-title">CHCI Hours Caps Reference</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1rem;">Per-counseling-type maximum billable hours per client, set in <a href="settings.html" style="color:var(--primary);">Settings → CHCI Hours Caps</a>. The cap values can be updated there when PHFA revises the schedule.</p>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
+            <thead>
+              <tr style="background:#f8f9fb;">
+                <th style="padding:0.4rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Counseling Type</th>
+                <th style="padding:0.4rem 0.75rem;border-bottom:2px solid var(--border);text-align:center;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Typical Max Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);">OUTSTANDING (D&amp;D, Pre-foreclosure)</td><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;font-weight:600;">4–8</td></tr>
+              <tr><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);">PRE-PURCHASE (One-on-one)</td><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;font-weight:600;">4</td></tr>
+              <tr><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);">POST-PURCHASE (Non-D&amp;D)</td><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;font-weight:600;">4</td></tr>
+              <tr><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);">COURT (Mediation &amp; Diversion)</td><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;font-weight:600;">4</td></tr>
+              <tr><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);">Workshop</td><td style="padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);text-align:center;font-weight:600;">1.5–6</td></tr>
+              <tr><td style="padding:0.4rem 0.75rem;">Case Management</td><td style="padding:0.4rem 0.75rem;text-align:center;font-weight:600;">Per approval</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:860px;">
+        <div class="card-title">Allocation Tracking</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);">Current and historical funding allocations per program are managed in <a href="settings.html" style="color:var(--primary);">Settings → Funding Allocations</a>. The <a href="dashboard.html" style="color:var(--primary);">Metrics dashboard</a> shows billed-vs-allocated progress bars for each program so you can see where you stand against your funding ceiling at a glance.</p>
+      </div>
+
+    </div><!-- /panel-billing -->
 
   </main>
 
