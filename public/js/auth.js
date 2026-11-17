@@ -120,10 +120,11 @@ export function setupNav(profile, activePage) {
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">Admin</button>
           <div class="nav-dropdown-menu">
-            <a href="training.html"   data-page="training">Training</a>
-            <a href="settings.html"   data-page="settings">Settings</a>
-            <a href="import.html"     data-page="import">Import</a>
-            <a href="duplicates.html" data-page="duplicates">Duplicates</a>
+            <a href="training.html"          data-page="training">Training</a>
+            <a href="settings.html"          data-page="settings">Settings</a>
+            <a href="import.html"            data-page="import">Import</a>
+            <a href="duplicates.html"        data-page="duplicates">Duplicates</a>
+            <a href="billing-register.html" data-page="billing-register">Billing Register</a>
           </div>
         </div>
 

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Billing Register — Home Stabilization Program</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <nav class="nav"></nav>
+
+  <main class="page">
+    <div class="page-header">
+      <div class="page-header-text">
+        <h2>Billing Register</h2>
+        <p>Program billing history — amounts billed and payments received.</p>
+      </div>
+    </div>
+
+    <!-- Aggregates -->
+    <div id="brAggregates" style="margin-bottom:1.25rem;"></div>
+
+    <!-- Toolbar -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <select id="brProgramFilter" style="font-size:0.8125rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:var(--radius);">
+          <option value="">All Programs</option>
+          <option value="CHCI">CHCI</option>
+          <option value="HEMAP">HEMAP</option>
+          <option value="HUD">HUD</option>
+          <option value="JTBC">JTBC</option>
+        </select>
+        <button id="brRefreshBtn" class="btn btn-secondary btn-sm">↺ Refresh</button>
+      </div>
+      <button id="brAddBtn" class="btn btn-primary btn-sm">+ Manual Entry</button>
+    </div>
+
+    <!-- Manual entry form (hidden by default) -->
+    <div id="brManualForm" style="display:none;margin-bottom:1rem;" class="card">
+      <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 0.75rem;">Add Manual Entry</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;margin-bottom:0.75rem;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Program *</label>
+          <select id="brManualProgram" style="font-size:0.875rem;width:100%;">
+            <option value="">— Select —</option>
+            <option value="CHCI">CHCI</option>
+            <option value="HEMAP">HEMAP</option>
+            <option value="HUD">HUD</option>
+            <option value="JTBC">JTBC</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Billing Month *</label>
+          <input type="text" id="brManualMonth" placeholder="e.g. Oct 2026" style="font-size:0.875rem;width:100%;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Amount ($) *</label>
+          <input type="number" id="brManualAmount" min="0" step="0.01" placeholder="0.00" style="font-size:0.875rem;width:100%;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Notes / Stream</label>
+          <input type="text" id="brManualNotes" placeholder="e.g. D&D, F2F, HUD" style="font-size:0.875rem;width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <button id="brManualSaveBtn" class="btn btn-primary btn-sm">Save Entry</button>
+        <button id="brManualCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
+        <span id="brManualMsg" style="font-size:0.8125rem;"></span>
+      </div>
+    </div>
+
+    <!-- Register table -->
+    <div class="card" style="padding:0;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.875rem;min-width:700px;">
+        <thead>
+          <tr style="background:#f8f9fb;">
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Program</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Month</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:right;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Amount</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Status</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:right;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Paid Amt</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Paid Date</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Notes</th>
+            <th style="padding:0.45rem 0.75rem;border-bottom:2px solid var(--border);"></th>
+          </tr>
+        </thead>
+        <tbody id="brRegisterBody">
+          <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireAuth, setupNav } from './js/auth.js';
+    import { initBillingRegister }  from './js/billing-register.js';
+
+    requireAuth(async (user, profile) => {
+      setupNav(profile, 'billing-register');
+      await initBillingRegister(user, profile);
+    });
+  </script>
+</body>
+</html>

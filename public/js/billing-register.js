@@ -68,18 +68,55 @@ async function load(force = false) {
   render();
 }
 
+function renderAggregates() {
+  const el = document.getElementById('brAggregates');
+  if (!el) return;
+
+  const active = _entries.filter(e => e.status !== 'void');
+  const totalPaid   = active.filter(e => e.status === 'paid').reduce((s, e) => s + (Number(e.paidAmount ?? e.amount) || 0), 0);
+  const totalBilled = active.filter(e => e.status === 'billed').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+  const PROGRAMS = ['CHCI', 'HUD', 'HEMAP', 'JTBC'];
+  const PROGRAM_COLORS = {
+    CHCI:  '#1e40af', HUD: '#6d28d9', HEMAP: '#c2410c', JTBC: '#0f766e',
+  };
+
+  const progRows = PROGRAMS.map(prog => {
+    const progEntries = active.filter(e => e.program === prog);
+    const paid   = progEntries.filter(e => e.status === 'paid').reduce((s, e) => s + (Number(e.paidAmount ?? e.amount) || 0), 0);
+    const billed = progEntries.filter(e => e.status === 'billed').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    if (!paid && !billed) return '';
+    const color = PROGRAM_COLORS[prog] || '#374151';
+    return `<div style="display:flex;align-items:center;gap:1.25rem;padding:0.4rem 0;border-bottom:1px solid #f0f1f3;">
+      <span style="font-size:0.72rem;font-weight:700;padding:0.1em 0.55em;border-radius:4px;background:${color}1a;color:${color};min-width:48px;text-align:center;">${prog}</span>
+      <span style="font-size:0.8125rem;min-width:120px;"><span style="color:var(--text-muted);">Paid</span> <strong>${fmtMoney(paid)}</strong></span>
+      ${billed ? `<span style="font-size:0.8125rem;"><span style="color:var(--text-muted);">Billed</span> <strong style="color:#d97706;">${fmtMoney(billed)}</strong></span>` : ''}
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+      <div style="padding:0.65rem 1.1rem;background:#dcfce7;border-radius:var(--radius);min-width:170px;">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#15803d;margin-bottom:0.2rem;">Paid to Date</div>
+        <div style="font-size:1.25rem;font-weight:700;color:#15803d;">${fmtMoney(totalPaid)}</div>
+      </div>
+      <div style="padding:0.65rem 1.1rem;background:#fef9c3;border-radius:var(--radius);min-width:170px;">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#854d0e;margin-bottom:0.2rem;">Billed — Awaiting Payment</div>
+        <div style="font-size:1.25rem;font-weight:700;color:#854d0e;">${fmtMoney(totalBilled)}</div>
+      </div>
+    </div>
+    <div style="background:#f8f9fb;border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 1rem;">
+      ${progRows || '<span style="font-size:0.8125rem;color:var(--text-muted);">No entries.</span>'}
+    </div>`;
+}
+
 function render() {
+  renderAggregates();
+
   const filter = document.getElementById('brProgramFilter')?.value || '';
   const rows   = filter ? _entries.filter(e => e.program === filter) : _entries;
   const tbody  = document.getElementById('brRegisterBody');
   if (!tbody) return;
-
-  const totalBilled = rows.filter(e => e.status !== 'void').reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const totalPaid   = rows.filter(e => e.status === 'paid').reduce((s, e) => s + (Number(e.paidAmount ?? e.amount) || 0), 0);
-  const billedEl = document.getElementById('brTotalBilled');
-  const paidEl   = document.getElementById('brTotalPaid');
-  if (billedEl) billedEl.textContent = fmtMoney(totalBilled);
-  if (paidEl)   paidEl.textContent   = fmtMoney(totalPaid);
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">No entries${filter ? ' for ' + filter : ''}.</td></tr>`;
